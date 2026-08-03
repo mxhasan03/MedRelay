@@ -279,3 +279,346 @@ Commit history for this session (oldest first):
 A doc file can never contain the hash of the commit that introduces its own final content, so
 there is an inherent one-commit lag here: this paragraph, added in a fourth small commit, is the
 account of that. Run `git log --oneline` in the repository for the definitive, current history.
+
+# Current Status — Phase 1 (Identity, Tenancy, Facilities, and Roles)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 1 on top of the
+Phase 0 foundation (starting point: commit `fcb6494`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 1 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 1 - Identity, tenancy, facilities,
+and roles": a custom user model, organizations and memberships, a customer/internal role system,
+facilities and service zones, tenant-scoped query/service helpers, deterministic synthetic seed
+data, Django admin registrations, and a minimal tenant-scoped CRUD UI. All new models have
+migrations, all quality gates pass (see below), and every acceptance criterion in the roadmap
+(cross-tenant isolation tests, role-permission matrix tests, organization/facility CRUD) is met.
+
+This was a clean point to introduce the custom user model: Phase 0 shipped zero migrations for any
+app, so `AUTH_USER_MODEL` was set before the first `makemigrations` ever ran for this project —
+never a mid-project swap.
+
+## Two key design decisions
+
+### 1. Geo storage: plain decimal lat/lng, not PostGIS (yet)
+
+`apps.facilities.models.Facility.latitude`/`longitude` are plain `DecimalField`s
+(`max_digits=9, decimal_places=6`), **not** a PostGIS `PointField`, even though
+`docs/ARCHITECTURE_AND_DATA_MODEL.md`'s architecture diagram calls out
+"PostgreSQL + PostGIS" and Phase 1 is the first phase with a genuine geographic need (facility
+coordinates, service zones).
+
+Reasoning:
+
+- Phase 0 deliberately kept the Django `DATABASES["default"]` `ENGINE` as plain
+  `django.db.backends.postgresql` (not `django.contrib.gis.db.backends.postgis`) specifically
+  because it had zero spatial models — see `config/settings/base.py`'s comment and
+  `docs/CURRENT_STATUS.md`'s Phase 0 deviation #1.
+- Phase 1 still has no geo-distance *queries* — facilities just need a stored coordinate, not
+  spatial indexing, `ST_Distance`, or radius lookups. Those start in **Phase 4** (dispatch and
+  operations console — matching/eligibility, per `docs/IMPLEMENTATION_ROADMAP.md`).
+- `config.settings.test` (used for CI and all local quality gates) runs on plain SQLite, which
+  cannot execute PostGIS spatial queries at all. Introducing GeoDjango now, with no spatial
+  queries to justify it, would force an immediate CI redesign (either a real Postgres/PostGIS
+  service container in CI, or SpatiaLite for SQLite) to test a capability nothing uses yet — pure
+  added complexity for zero present benefit, contrary to the zero-cost/no-drama precedent Phase 0
+  set.
+- Plain decimal fields round-trip through SQLite fine today, store exact coordinates losslessly,
+  and are a straightforward migration to a PostGIS `PointField` later, once Phase 4 actually needs
+  geo-distance dispatch logic.
+
+This is a conscious, documented deviation from the letter of the architecture doc, not a silent
+one — it's also called out inline in `apps/facilities/models.py`'s module docstring and covered by
+a regression-guard test,
+`apps/facilities/tests/test_models.py::test_facility_lat_lng_are_plain_decimal_fields_not_postgis`.
+GDAL/GEOS were **not** added to the `Dockerfile`, `compose.yaml`, or `pyproject.toml` this phase.
+
+### 2. Role modeling: two explicit models, not one polymorphic membership table
+
+`docs/PRODUCT_REQUIREMENTS.md` section 4 enumerates two disjoint role families: **customer
+organization roles** (organization owner, administrator, requester/dispatcher, billing manager,
+compliance reviewer, read-only auditor) and **internal operations roles** (dispatcher, operations
+manager, courier onboarding reviewer, compliance reviewer, customer support, finance, system
+administrator).
+
+These are modeled as two separate models rather than one `membership_type`-discriminated table:
+
+- `apps.organizations.models.OrganizationMembership` — `user` FK + `organization` FK + `role`
+  (`CustomerRole` choices), unique per `(user, organization)`. This *is* the tenant-scoping
+  membership.
+- `apps.accounts.models.InternalRoleAssignment` — `user` one-to-one + `role` (`InternalRole`
+  choices). Not scoped to any organization at all.
+
+A single polymorphic table (`membership_type` discriminator + nullable `organization` FK) was
+considered and rejected: it would make it too easy for a future query to treat an internal
+staffer's row as if it were scoped to one organization (e.g. by forgetting to check
+`membership_type` first), which directly risks the cross-tenant isolation guarantee this project
+must hold (`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 2: "Central operations users may access
+multiple organizations through explicit permission checks"). Two small, explicit models make the
+"internal staff are never org-scoped by default" invariant structurally obvious rather than
+convention-dependent. The full write-up lives in `apps/accounts/models.py`'s module docstring.
+
+Cross-org access for internal roles is implemented as **explicit, per-role allowlists** in
+`apps/organizations/services.py` (`CROSS_ORG_READ_ROLES`, `CROSS_ORG_MANAGE_ROLES`) — being
+`user.is_internal_staff` grants nothing by itself; a user needs a matching `InternalRoleAssignment`
+role in one of those sets. Concretely:
+
+| Internal role                   | Cross-org read | Cross-org manage |
+|----------------------------------|:---:|:---:|
+| `operations_manager`             | yes | yes |
+| `system_administrator`           | yes | yes |
+| `customer_support`               | yes | no  |
+| `compliance_reviewer`            | yes | no  |
+| `finance`                        | yes | no  |
+| `dispatcher`                     | yes | no  |
+| `courier_onboarding_reviewer`    | no  | no  |
+
+(`courier_onboarding_reviewer` gets no organization/facility grant at all — that role's work,
+reviewing courier applications, has no need to see customer org data.)
+
+## Exact files created/changed
+
+`git diff fcb6494 --stat` (Phase 0's final commit → this phase's pre-commit working tree):
+
+```
+44 files changed, 2837 insertions(+), 5 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/accounts/`**: `models.py` (custom `User(AbstractUser)` + `InternalRole` choices +
+  `InternalRoleAssignment`), `admin.py`, `apps.py` (docstring update),
+  `migrations/0001_initial.py`, `tests/factories.py`, `tests/test_models.py`.
+- **`apps/organizations/`**: `models.py` (`Organization`, `OrganizationType`, `CustomerRole`,
+  `OrganizationMembership`, `ORG_MANAGING_ROLES`), `services.py` (tenant-scoped query/permission
+  helpers — the single source of truth for "which organizations can this user see/manage"),
+  `admin.py`, `forms.py`, `views.py`, `urls.py`, `apps.py` (docstring update),
+  `migrations/0001_initial.py`,
+  `management/commands/seed_demo_data.py` (+ `management/__init__.py`,
+  `management/commands/__init__.py`), `tests/factories.py`, `tests/test_models.py`,
+  `tests/test_services.py` (cross-tenant isolation + role-permission matrix tests),
+  `tests/test_views.py` (HTTP-level tenant isolation), `tests/test_seed_demo_data.py`.
+- **`apps/facilities/`**: `models.py` (`FacilityType`, `Borough`, `ServiceZone`, `Facility`,
+  `FacilityContact`, `DayOfWeek`, `FacilityReceivingRule`), `admin.py`, `forms.py`, `views.py`,
+  `urls.py`, `apps.py` (docstring update), `migrations/0001_initial.py`, `tests/factories.py`,
+  `tests/test_models.py`, `tests/test_views.py`.
+- **`config/settings/base.py`**: added `AUTH_USER_MODEL = "accounts.User"`, `LOGIN_URL`,
+  `LOGIN_REDIRECT_URL`, `LOGOUT_REDIRECT_URL`.
+- **`config/urls.py`**: added `django.contrib.auth.urls` (login/logout — no self-service signup in
+  this prototype), `apps.organizations.urls`, `apps.facilities.urls`, and a `/` → `/organizations/`
+  redirect.
+- **`templates/registration/login.html`**, **`templates/organizations/*.html`** (list/detail/form),
+  **`templates/facilities/*.html`** (list/detail/form/confirm-delete) — minimal plain-HTML CRUD
+  templates, no Tailwind/HTMX (see "CRUD UI built vs. deferred" below).
+- **`pyproject.toml`**: added a `[[tool.mypy.overrides]]` entry ignoring `*.tests.*` modules (see
+  "mypy and factory_boy" below) — **no new runtime or dev dependency was added**; `factory-boy` was
+  already an allowed Phase 0 dev dependency, just unused until now.
+- **`docs/COST_AUDIT.md`**: regenerated (timestamp only; dependency set unchanged).
+
+## Tenant-scoped query/service helpers
+
+`apps/organizations/services.py` is the single place that decides "which organizations/facilities
+can this user see or manage," per `docs/ARCHITECTURE_AND_DATA_MODEL.md` section 2's required
+protections (queryset scoping by tenant, object-level permission tests, no organization ID
+accepted blindly from clients). Key functions: `get_member_organization_ids`,
+`get_org_role`, `can_view_organization`, `can_manage_organization`, `can_manage_facilities`,
+`has_cross_org_read_access`, `has_cross_org_manage_access`, `scope_queryset_to_user_orgs` (generic
+queryset filter, parameterized by an `org_field` ORM lookup path), `organizations_for_user`.
+
+Every organization-owned model gets a thin `for_user(user)` QuerySet method that delegates to
+these helpers (never re-implementing tenant scoping itself):
+`Organization.objects.for_user(user)`, `OrganizationMembership.objects.for_user(user)`,
+`Facility.objects.for_user(user)`. Every customer-owned model (`Facility`) carries a direct
+`organization` FK, as required.
+
+## Synthetic seed data
+
+`python manage.py seed_demo_data` (`apps/organizations/management/commands/seed_demo_data.py`)
+creates deterministic synthetic NYC data: **3 organizations, 8 facilities across Manhattan/
+Brooklyn**, plus the Phase 1 subset of users/memberships/roles needed to exercise them —
+couriers/deliveries/cargo are explicitly out of scope until their own phases.
+
+- Organizations: `NorthStar Diagnostics (Demo)` (diagnostic lab, 3 facilities: Midtown processing
+  center, SoHo draw site, Park Slope draw site), `Riverside Urgent Care Group (Demo)` (urgent care,
+  3 facilities: Chelsea, SoHo, Williamsburg), `Brooklyn Family Pharmacy Network (Demo)` (pharmacy,
+  2 facilities: Park Slope, Dumbo counters). 4 facilities in Manhattan, 4 in Brooklyn.
+- Every facility name, address, and contact is obviously synthetic (`(Demo)` suffixes, fictional
+  street names like "148 Fictional Ave" / "212 Demo Broome St"; neighborhood-level coordinates are
+  public geography, not sensitive data). No diagnosis/lab-result/clinical/SSN/insurance field
+  exists anywhere in these models — enforced by
+  `test_seed_demo_data_users_have_no_clinical_fields`.
+- Users: one per customer role per organization (6 roles × 3 orgs = 18) plus one per internal role
+  (7) = 25 total seeded users, all sharing one synthetic demo password
+  (`MedRelayDemo!2026`, marked `# pragma: allowlist secret` — a shared demo-only login, not a
+  real credential, documented here exactly as required by CLAUDE.md's secret-scan policy).
+- `ServiceZone` reference rows: `Manhattan Core (Demo)`, `Brooklyn North (Demo)`.
+- `FacilityReceivingRule`: Monday-Friday 08:00-18:00 with a 16:00 same-day cutoff; Saturday/Sunday
+  marked closed (a simplified default, not per-facility variation — noted as a gap below).
+- Idempotent: every write uses `get_or_create`; no randomness anywhere, so re-running produces
+  identical data instead of duplicates (verified by `test_seed_demo_data_is_idempotent`).
+
+## CRUD UI built vs. deferred
+
+Built: minimal server-rendered Django CBV CRUD (list/detail/create/edit, plus delete for
+facilities) for both `Organization` and `Facility`, scoped end-to-end through
+`apps.organizations.services` — every view either filters its queryset with `.for_user(...)` or
+explicitly checks `can_view_organization`/`can_manage_organization`/`can_manage_facilities` before
+returning a response, raising `django.core.exceptions.PermissionDenied` (→ HTTP 403) otherwise.
+Login is Django's built-in `django.contrib.auth.urls` (session auth, matching
+`REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"]`); there is no self-service signup — accounts
+are provisioned via the admin or `seed_demo_data` only, which is a deliberate simplification for a
+B2B enterprise-portal prototype where account provisioning is inherently an admin/sales-onboarding
+action, not a public signup flow.
+
+Deferred (deliberately, documented here rather than silently skipped):
+
+- **No HTMX, no Tailwind CDN.** Templates are plain HTML with the same minimal inline-style
+  convention `templates/base.html` already used in Phase 0. The roadmap suggested HTMX/Tailwind as
+  "a reasonable, conservative choice," but framed it as a judgment call; given Phase 1's hard
+  requirement is proving tenant-scoping works through real HTTP requests (which plain forms +
+  full-page POSTs already demonstrate end-to-end, per the view tests), adding a JS dependency
+  (even CDN-hosted) here would be pure UI polish with no bearing on the acceptance criteria, and
+  Phase 8 is explicitly the real design/accessibility pass. Kept to the smallest surface that
+  proves the mechanism.
+- **No DRF viewset / JSON API for organizations/facilities.** The roadmap explicitly says a
+  DRF viewset is a "great, but not required" bonus for Phase 1, with "a thorough service-layer/
+  queryset test suite" being the hard requirement. Given the size of the rest of Phase 1's scope,
+  this was consciously left out — `apps/organizations/services.py` and its ~30 tests are the real
+  deliverable here; a REST layer over the same permission functions is straightforward
+  future work (Phase 2+ will need DRF endpoints for delivery requests regardless).
+- **No password reset / self-service signup UI.** Only login/logout are wired up and templated;
+  Django's built-in password-reset views are registered (via `include("django.contrib.auth.urls")`)
+  but have no custom template, so visiting them directly would 500 without a template override.
+  Nothing in the UI links to them, so this is inert dead surface, not a broken visible feature —
+  flagged here for transparency, to be either templated or removed before any real pilot review.
+- **`Organization` create is internal-ops-only; no self-service org signup.** Matches how a real
+  B2B courier onboarding flow would work (sales/ops provisions the account), and keeps the "no
+  organization ID accepted blindly from clients" rule trivially true for creation too.
+- **Facility delete is a hard delete, not a soft-delete/archive.** `Facility.is_active` exists and
+  is editable, so soft-disable is possible via the edit form; the dedicated delete view removes the
+  row entirely. Later phases that reference facilities from deliveries will likely want to migrate
+  this to a guarded/soft delete once deletion could orphan real referencing data.
+- **`FacilityReceivingRule` seed data is a uniform weekday/weekend default**, not tailored per
+  facility type (e.g. a 24-hour hospital dock vs. a pharmacy counter) — acceptable for Phase 1
+  reference data; later phases needing SLA-accurate cutoff behavior should revisit this.
+
+## mypy and factory_boy
+
+`factory_boy` (already an allowed Phase 0 dev dependency, unused until this phase) ships no type
+stubs, and `django-stubs` does not special-case it — `SomeFactory(...)` type-checks as returning
+`SomeFactory` instead of the Django model it returns at runtime. This is a well-known, currently
+unresolved gap in the factory_boy/mypy ecosystem, not a MedRelay-specific workaround. Rather than
+littering every test with `# type: ignore` or hand-rolling non-factory fixtures throughout (losing
+the whole benefit of `factory_boy`), `pyproject.toml` gained one more `[[tool.mypy.overrides]]`
+entry — `module = "*.tests.*"`, `ignore_errors = true` — the same treatment already given to
+`*.migrations.*`. **Production code (models/services/views/admin/management commands) still gets
+full mypy coverage**; only test modules using these factories are exempted. This was verified by
+running `mypy` against every new production file individually before adding the override, to
+confirm the override wasn't hiding a real production-code type error (see the gate output below —
+0 errors in `apps/organizations/services.py`, `apps/facilities/views.py`, etc. even without the
+override).
+
+Two real production-code type findings were fixed rather than suppressed:
+
+- Django admin/CBV base classes (`ModelAdmin`, `TabularInline`, `StackedInline`, `ListView`,
+  `DetailView`, `CreateView`, `UpdateView`, `DeleteView`) are declared `Generic` in the
+  `django-stubs` `.pyi` files but are **not** subscriptable at runtime — `ModelAdmin[Facility]`
+  raises `TypeError: type 'ModelAdmin' is not subscriptable` the moment Django imports the admin
+  module. All such subscripts were removed; the project's `mypy` config has no
+  `disallow_any_generics`/strict-generics setting, so this costs nothing in practice.
+- `apps/organizations/services.py`'s permission functions now accept `User | AnonymousUser`
+  (matching `HttpRequest.user`'s real type) instead of just `User`, with
+  `isinstance(user, AnonymousUser)` checks that double as real mypy type-narrowing — this caught
+  and fixed what would otherwise have been an implicit "trust the caller passed an authenticated
+  user" assumption baked into the type signature.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test` (same `uv`-managed virtualenv Phase 0 set up; no
+`uv lock`/`uv sync` re-run was needed since no new runtime or dev dependency was added).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+108 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 108 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run *after* committing the three new `0001_initial.py` migrations for `accounts`,
+`organizations`, and `facilities`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+106 passed in 2.08s
+```
+Coverage: 93% overall (818 statements, 58 missed) for the whole project including Phase 0 code.
+Every new Phase 1 module is at or near 100% (`services.py` 98%, `views.py` 91-100%, `models.py`
+96-98%); the remaining misses are a handful of defensive branches (e.g. an admin `get_queryset`
+override line, an `OrganizationMembershipQuerySet.for_user` call path not separately exercised
+since it's covered transitively) plus the pre-existing Phase 0 gaps in `config/asgi.py`,
+`config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py` (environment entrypoints, not
+exercised by the SQLite test suite by design). No coverage threshold is a hard gate per Phase 0's
+precedent; this is reported for transparency, not as a failure.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 19 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is unchanged from Phase 0 (19) — Phase 1 added zero new packages.
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, **baseline unchanged** (`.secrets.baseline` has the same empty `results:
+{}` as Phase 0 left it). The one string that plausibly looks secret-shaped — `DEMO_PASSWORD =
+"MedRelayDemo!2026"` in `seed_demo_data.py` — is marked `# pragma: allowlist secret` inline (same
+convention as Phase 0's `medrelay:medrelay` placeholder), confirmed not to require a baseline entry
+by running the hook after `git add -A` (so all new files were actually scanned, not just
+previously-tracked ones — an easy mistake, since `git ls-files` silently omits untracked files).
+
+### End-to-end manual verification (beyond the automated suite)
+Ran `seed_demo_data` against a real (in-process) SQLite-backed test environment with
+`django.test.utils.setup_test_environment()` + Django's test `Client`, then: logged in as
+`northstar_owner` / `MedRelayDemo!2026` via the real `/accounts/login/` view, followed the redirect
+to `/organizations/`, and confirmed the page renders 200 with "NorthStar Diagnostics (Demo)"
+visible and "Riverside Urgent Care Group (Demo)" (a different tenant) absent — the full stack,
+not just the test suite, demonstrates tenant isolation.
+
+## Known gaps / deviations (honest list)
+
+- No DRF/JSON API for organizations or facilities yet (see "CRUD UI built vs. deferred").
+- No HTMX/Tailwind — plain HTML forms only (see "CRUD UI built vs. deferred").
+- Django's password-reset views are routed but have no templates (dead surface, nothing links to
+  them — see "CRUD UI built vs. deferred").
+- Facility delete is a hard delete.
+- `FacilityReceivingRule` seed defaults are uniform, not per-facility-type tailored.
+- PostGIS/GeoDjango is deferred to Phase 4 (see design decision #1 above) — `latitude`/`longitude`
+  are plain decimals for now.
+- Coverage is 93%, not 100% (see gate output above) — no hard threshold was specified as a gate.
+- `*.tests.*` modules are excluded from `mypy` checking due to a factory_boy stub gap (see "mypy
+  and factory_boy" above); all production code still has full mypy coverage.
+- Not yet built (correctly out of scope for Phase 1, per the roadmap): couriers, cargo, deliveries,
+  dispatch, custody, tracking, temperature, incidents, notifications, billing, reporting — all
+  later phases.
+
+## Commit history for this phase
+
+(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)
