@@ -1,6 +1,7 @@
 """AppConfig for the accounts app.
 
-Users, authentication, and privileged-role support (MFA-ready). No domain models yet in Phase 0.
+Custom `User` model (`AUTH_USER_MODEL = "accounts.User"`) and internal
+operations role assignments (Phase 1). See apps/accounts/models.py.
 """
 
 from django.apps import AppConfig

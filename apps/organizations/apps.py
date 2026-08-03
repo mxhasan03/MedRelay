@@ -1,6 +1,8 @@
 """AppConfig for the organizations app.
 
-Customer organizations and memberships (multi-tenant boundary). No domain models yet in Phase 0.
+Customer organizations and memberships (multi-tenant boundary), plus the
+tenant-scoped query/permission helpers in apps/organizations/services.py.
+Phase 1.
 """
 
 from django.apps import AppConfig

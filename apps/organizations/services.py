@@ -1,0 +1,166 @@
+"""Tenant-scoped query and permission helpers — the single source of truth
+for "which organizations can this user see/manage."
+
+Per docs/ARCHITECTURE_AND_DATA_MODEL.md section 2 and CLAUDE.md's
+multi-tenancy rules:
+
+- shared database, explicit `organization_id` scoping on every
+  customer-owned entity
+- no organization ID accepted blindly from a client without a permission
+  check
+- internal operations staff access multiple organizations only through
+  *explicit* permission checks — `User.is_internal_staff` alone never grants
+  implicit access to everything
+
+Every app that owns organization-scoped data should filter its querysets
+through `scope_queryset_to_user_orgs` (or a thin per-model `for_user()"
+QuerySet method that delegates to it, as `Organization` and
+`OrganizationMembership` do in `apps.organizations.models`, and as
+`apps.facilities.models.Facility` does) rather than re-implementing tenant
+scoping ad hoc.
+"""
+
+from __future__ import annotations
+
+from typing import TypeVar
+
+from django.contrib.auth.models import AnonymousUser
+from django.db.models import Model, QuerySet
+
+from apps.accounts.models import InternalRole, User
+from apps.organizations.models import ORG_MANAGING_ROLES, Organization, OrganizationMembership
+
+_T = TypeVar("_T", bound=Model)
+
+# `request.user` is always one of these two types (authenticated custom
+# `User`, or `AnonymousUser` when not logged in) — every function below
+# accepts both and treats "not authenticated" as "no access", never raising
+# on an anonymous caller. `isinstance(user, AnonymousUser)` checks below
+# double as mypy type-narrowing to plain `User` for the rest of each
+# function body (not just a runtime check).
+type AnyUser = User | AnonymousUser
+
+# Internal ops roles explicitly granted cross-organization *read* access.
+# Being `user.is_internal_staff` grants nothing by itself — access always
+# goes through one of these named checks.
+CROSS_ORG_READ_ROLES = frozenset(
+    {
+        InternalRole.OPERATIONS_MANAGER,
+        InternalRole.SYSTEM_ADMINISTRATOR,
+        InternalRole.CUSTOMER_SUPPORT,
+        InternalRole.COMPLIANCE_REVIEWER,
+        InternalRole.FINANCE,
+        InternalRole.DISPATCHER,
+    }
+)
+# Deliberately excluded: `courier_onboarding_reviewer` — that role's work
+# (reviewing courier applications/credentials) has no need to view customer
+# organizations or facilities, so it gets no cross-org grant here at all,
+# per the "explicit checks, not by default" rule.
+
+# Internal ops roles explicitly granted cross-organization *manage*
+# (create/edit membership, create/edit facilities) access. Deliberately a
+# much smaller set than the read set.
+CROSS_ORG_MANAGE_ROLES = frozenset(
+    {
+        InternalRole.OPERATIONS_MANAGER,
+        InternalRole.SYSTEM_ADMINISTRATOR,
+    }
+)
+
+
+def get_member_organization_ids(user: AnyUser) -> set[int]:
+    """Organization IDs the user belongs to as a customer-org member."""
+    if isinstance(user, AnonymousUser) or not user.is_authenticated:
+        return set()
+    return set(
+        OrganizationMembership.objects.filter(user=user, is_active=True).values_list(
+            "organization_id", flat=True
+        )
+    )
+
+
+def get_internal_role(user: AnyUser) -> str | None:
+    """The user's internal-ops role, if any (`None` for customer-org users)."""
+    is_authenticated = getattr(user, "is_authenticated", False)
+    is_internal_staff = getattr(user, "is_internal_staff", False)
+    if not is_authenticated or not is_internal_staff:
+        return None
+    assignment = getattr(user, "internal_role_assignment", None)
+    return assignment.role if assignment is not None else None
+
+
+def has_cross_org_read_access(user: AnyUser) -> bool:
+    """True if the user's internal role is explicitly allow-listed for cross-org reads."""
+    return get_internal_role(user) in CROSS_ORG_READ_ROLES
+
+
+def has_cross_org_manage_access(user: AnyUser) -> bool:
+    """True if the user's internal role is explicitly allow-listed for cross-org management."""
+    return get_internal_role(user) in CROSS_ORG_MANAGE_ROLES
+
+
+def get_org_role(user: AnyUser, organization_id: int) -> str | None:
+    """The user's `CustomerRole` within a specific organization, if a member."""
+    if isinstance(user, AnonymousUser) or not user.is_authenticated:
+        return None
+    membership = (
+        OrganizationMembership.objects.filter(
+            user=user, organization_id=organization_id, is_active=True
+        )
+        .only("role")
+        .first()
+    )
+    return membership.role if membership else None
+
+
+def can_view_organization(user: AnyUser, organization_id: int) -> bool:
+    """Can the user view this organization and its facilities?"""
+    if get_org_role(user, organization_id) is not None:
+        return True
+    return has_cross_org_read_access(user)
+
+
+def can_manage_organization(user: AnyUser, organization_id: int) -> bool:
+    """Can the user manage (edit profile, manage memberships/facilities for) this organization?"""
+    if get_org_role(user, organization_id) in ORG_MANAGING_ROLES:
+        return True
+    return has_cross_org_manage_access(user)
+
+
+# Facility management currently uses the same rule as organization
+# management. Kept as a distinct name (rather than an alias used directly)
+# so a later phase can give facility management its own rule — e.g. letting
+# `requester_dispatcher` manage facilities without full org-admin rights —
+# without touching call sites that already say "facilities".
+can_manage_facilities = can_manage_organization
+
+
+def scope_queryset_to_user_orgs(
+    queryset: QuerySet[_T], user: AnyUser, *, org_field: str = "organization_id"
+) -> QuerySet[_T]:
+    """Generic tenant-scoping filter for any organization-owned queryset.
+
+    `org_field` is the ORM lookup path from the queryset's model to an
+    organization ID — `"organization_id"` for models with a direct FK (e.g.
+    `Facility`), or a traversal like `"facility__organization_id"` for
+    models owned one level down (e.g. `FacilityContact`).
+    """
+    if not getattr(user, "is_authenticated", False):
+        return queryset.none()
+    if has_cross_org_read_access(user):
+        return queryset
+    member_org_ids = get_member_organization_ids(user)
+    return queryset.filter(**{f"{org_field}__in": member_org_ids})
+
+
+def scope_organizations_to_user(
+    queryset: QuerySet[Organization], user: AnyUser
+) -> QuerySet[Organization]:
+    """Tenant-scoping filter for the `Organization` model itself (`org_field="id"`)."""
+    return scope_queryset_to_user_orgs(queryset, user, org_field="id")
+
+
+def organizations_for_user(user: AnyUser) -> QuerySet[Organization]:
+    """Convenience wrapper: `Organization.objects.for_user(user)`."""
+    return Organization.objects.for_user(user)

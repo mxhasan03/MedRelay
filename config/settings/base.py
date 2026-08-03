@@ -143,6 +143,15 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Custom user model, introduced in Phase 1 (docs/IMPLEMENTATION_ROADMAP.md) at the first point any
+# app has migrations — the standard, low-risk time to do this per Django's own recommendation to
+# never swap AUTH_USER_MODEL mid-project. See apps/accounts/models.py.
+AUTH_USER_MODEL = "accounts.User"
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "organization-list"
+LOGOUT_REDIRECT_URL = "login"
+
 # Cache / Celery broker (Valkey, Redis-protocol-compatible).
 REDIS_URL = env.str("REDIS_URL", default="redis://localhost:6379/0")
 CACHES = {
