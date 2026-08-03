@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Dispatch {{ delivery_request.pk|truncatechars:8 }} — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:70rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <p><a href="{% url 'dispatch-board' %}">&larr; Dispatch Board</a></p>
+    <h1>Dispatch {{ delivery_request.pk|truncatechars:8 }}</h1>
+    <p>Organization: {{ delivery_request.organization.name }} &middot; Service level:
+        {{ delivery_request.get_service_level_display }} &middot; Status:
+        <strong>{{ delivery_request.get_status_display }}</strong></p>
+    <p>Required delivery by: {{ delivery_request.required_delivery_by }}</p>
+
+    {% if messages %}
+    <ul>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if active_assignment %}
+    <div style="border:1px solid #1f6f3f;background:#eafaf0;padding:0.75rem;margin:1rem 0;">
+        <strong>Currently assigned:</strong> {{ active_assignment.courier }}
+        (since {{ active_assignment.assigned_at }})
+    </div>
+
+    <h2>Reassign</h2>
+    <form method="post" action="{% url 'dispatch-reassign' delivery_request.pk %}">
+        {% csrf_token %}
+        <label>Courier:
+            <select name="courier_id" required>
+                {% for candidate in candidates %}
+                {% if candidate.eligible %}
+                <option value="{{ candidate.courier.pk }}">{{ candidate.courier }} (score {{ candidate.total_score }})</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </label>
+        <label>Reason (required): <input type="text" name="reason" required></label>
+        <button type="submit">Reassign</button>
+    </form>
+    {% endif %}
+
+    <h2>Ranked candidates</h2>
+    {# The "offer" form has no visible fields of its own — every checkbox/input
+       that belongs to it lives inside the table below and points back at it
+       via the HTML5 form="offer-form" attribute, so the <form> element itself
+       does not need to (invalidly) wrap table rows. #}
+    <form method="post" action="{% url 'dispatch-offer' delivery_request.pk %}" id="offer-form">{% csrf_token %}</form>
+    <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th>Offer</th>
+                <th>Courier</th>
+                <th>Eligible?</th>
+                <th>Score</th>
+                <th>ETA to pickup (min)</th>
+                <th>SLA slack (min)</th>
+                <th>SLA feasibility</th>
+                <th>Reasons</th>
+                <th>Assign</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for candidate in candidates %}
+            <tr{% if not candidate.eligible %} style="color:#888;"{% endif %}>
+                <td>{% if candidate.eligible %}<input type="checkbox" name="courier_ids" value="{{ candidate.courier.pk }}" form="offer-form">{% endif %}</td>
+                <td>{{ candidate.courier }}</td>
+                <td>{{ candidate.eligible }}</td>
+                <td>{{ candidate.total_score|default:"—" }}</td>
+                <td>{{ candidate.eta_to_pickup_minutes }}</td>
+                <td>{{ candidate.sla_slack_minutes }}</td>
+                <td>{{ candidate.sla_feasibility }}</td>
+                <td>
+                    <ul>
+                        {% for reason in candidate.reasons %}
+                        <li>{{ reason }}</li>
+                        {% endfor %}
+                    </ul>
+                </td>
+                <td>
+                    {% if candidate.eligible and not active_assignment %}
+                    <form method="post" action="{% url 'dispatch-assign' delivery_request.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="courier_id" value="{{ candidate.courier.pk }}">
+                        <input type="text" name="reason" placeholder="Reason (required if not top-ranked)">
+                        <button type="submit">Assign</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if not active_assignment %}
+    <p>
+        <label>Offer expires in (minutes): <input type="number" name="expires_in_minutes" value="30" min="1" form="offer-form"></label>
+        <button type="submit" form="offer-form">Offer to checked couriers</button>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

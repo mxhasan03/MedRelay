@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Dispatch Board — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:70rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <h1>Dispatch Board</h1>
+    <p>Minimal control-tower dashboard (docs/PRODUCT_REQUIREMENTS.md section 7) — no live map this
+        phase; see docs/CURRENT_STATUS.md "Phase 4" for the scoping note.</p>
+
+    {% if messages %}
+    <ul>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h2>Unassigned / offered deliveries</h2>
+    <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th>Delivery</th>
+                <th>Organization</th>
+                <th>Service level</th>
+                <th>Status</th>
+                <th>Required by</th>
+                <th>At risk?</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for delivery_request in unassigned_deliveries %}
+            <tr{% if delivery_request.pk in at_risk_ids %} style="background:#fdecea;"{% endif %}>
+                <td>{{ delivery_request.pk|truncatechars:8 }}</td>
+                <td>{{ delivery_request.organization.name }}</td>
+                <td>{{ delivery_request.get_service_level_display }}</td>
+                <td>{{ delivery_request.get_status_display }}</td>
+                <td>{{ delivery_request.required_delivery_by }}</td>
+                <td>{% if delivery_request.pk in at_risk_ids %}<strong>AT RISK</strong>{% else %}—{% endif %}</td>
+                <td><a href="{% url 'dispatch-board-detail' delivery_request.pk %}">Dispatch &rarr;</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7">No unassigned or offered deliveries.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Assigned deliveries</h2>
+    <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th>Delivery</th>
+                <th>Organization</th>
+                <th>Courier</th>
+                <th>Assigned at</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for delivery_request in assigned_deliveries %}
+            <tr>
+                <td>{{ delivery_request.pk|truncatechars:8 }}</td>
+                <td>{{ delivery_request.organization.name }}</td>
+                <td>
+                    {% with assignment=delivery_request.assignments.all|first %}
+                    {{ assignment.courier }}
+                    {% endwith %}
+                </td>
+                <td>
+                    {% with assignment=delivery_request.assignments.all|first %}
+                    {{ assignment.assigned_at }}
+                    {% endwith %}
+                </td>
+                <td><a href="{% url 'dispatch-board-detail' delivery_request.pk %}">Details &rarr;</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No assigned deliveries.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

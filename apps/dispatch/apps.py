@@ -1,6 +1,10 @@
 """AppConfig for the dispatch app.
 
-Assignment recommendations, job offers, and dispatcher overrides. No domain models yet in Phase 0.
+Phase 4 (docs/IMPLEMENTATION_ROADMAP.md "Phase 4 — Dispatch and operations
+console"): dispatch recommendations/scoring, job offers, courier assignments,
+dispatcher overrides, synthetic route plans, and SLA target profiles. See
+`apps.dispatch.models`/`apps.dispatch.services` and docs/CURRENT_STATUS.md
+"Phase 4" section.
 """
 
 from django.apps import AppConfig

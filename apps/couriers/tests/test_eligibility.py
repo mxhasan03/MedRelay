@@ -146,7 +146,10 @@ def test_fully_qualified_courier_is_eligible_with_no_reasons() -> None:
 
     assert result.eligible is True
     assert result.hard_failure_reasons == ()
-    assert result.sla_feasibility == SLA_FEASIBILITY_NOT_EVALUATED
+    # Phase 4: sla_feasibility is now a real (if synthetic) verdict, never
+    # the Phase 3 "not_evaluated" placeholder, for a fully-built
+    # READY_FOR_DISPATCH request (which always has both stops).
+    assert result.sla_feasibility in {"feasible", "at_risk", "infeasible"}
 
 
 # --- Per-filter negative tests -------------------------------------------------
@@ -396,7 +399,7 @@ def test_facility_restriction_met_by_identity_verified_courier() -> None:
     assert result.eligible is True
 
 
-# --- SLA feasibility is documented as "not evaluated", never a hard failure ---
+# --- SLA feasibility is real (Phase 4) but never a hard failure -------------
 
 
 def test_sla_feasibility_is_never_a_hard_failure_reason() -> None:
@@ -404,13 +407,15 @@ def test_sla_feasibility_is_never_a_hard_failure_reason() -> None:
     delivery_request, cargo_class = _make_ready_for_dispatch_delivery(pickup_service_zone=zone)
     courier = _make_fully_eligible_courier(cargo_class, zone)
     # Even a courier failing every other filter should never get an SLA-related
-    # hard-failure code — Phase 3 does not evaluate it at all.
+    # hard-failure code — a poor (or, in Phase 3, an unevaluated) SLA verdict
+    # is informational only and must never itself make a courier ineligible.
     courier.status = CourierStatus.SUSPENDED
     courier.save()
 
     result = check_courier_eligibility(courier, delivery_request)
 
-    assert result.sla_feasibility == SLA_FEASIBILITY_NOT_EVALUATED
+    valid_values = {"feasible", "at_risk", "infeasible", SLA_FEASIBILITY_NOT_EVALUATED}
+    assert result.sla_feasibility in valid_values
     assert all("sla" not in r.code for r in result.hard_failure_reasons)
 
 
@@ -561,4 +566,6 @@ def test_eligible_iff_every_hard_filter_passes(flags: dict[str, bool]) -> None:
 
     assert actual_codes == expected
     assert result.eligible == (len(expected) == 0)
-    assert result.sla_feasibility == SLA_FEASIBILITY_NOT_EVALUATED
+    # Phase 4: sla_feasibility is a real verdict now, but must still never
+    # influence eligibility (see test_sla_feasibility_is_never_a_hard_failure_reason).
+    assert result.sla_feasibility in {"feasible", "at_risk", "infeasible"}

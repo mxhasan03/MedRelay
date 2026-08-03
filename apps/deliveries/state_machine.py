@@ -1,20 +1,30 @@
-"""The delivery status state machine — Phase 2's load-bearing subset only.
+"""The delivery status state machine — extended through Phase 4's dispatch
+transitions.
 
 docs/PRODUCT_REQUIREMENTS.md section 9 defines the full state machine
-(`DRAFT` through `DELIVERED`, plus exception/terminal states). Per
-docs/IMPLEMENTATION_ROADMAP.md, Phase 2 only needs the early-lifecycle
-transitions to actually be implemented and enforced:
+(`DRAFT` through `DELIVERED`, plus exception/terminal states). Phase 2
+implemented the early-lifecycle transitions:
 
     DRAFT -> SUBMITTED -> VALIDATION_REQUIRED -> READY_FOR_DISPATCH
 
-plus `CANCELLED` from any of those four states. `ALLOWED_TRANSITIONS` below
-is therefore intentionally a *partial* map — it does not include
-`READY_FOR_DISPATCH -> OFFERED` or anything from `OFFERED` onward, because
-no code in this phase drives a delivery into those states, and pretending
-this map already "allows" them would overclaim enforcement of a pipeline
-Phase 4/5/6 haven't built yet. Later phases should extend this dict (and
-its tests) as they implement each subsequent transition — not build a
-parallel transition map elsewhere.
+plus `CANCELLED` from any of those four states. Phase 4
+(`apps.dispatch.services`) extends this same dict — per Phase 2's own
+instruction to do so here rather than build a parallel transition map
+elsewhere — with the dispatch transitions it actually implements:
+
+    READY_FOR_DISPATCH -> OFFERED -> ASSIGNED
+    READY_FOR_DISPATCH -> ASSIGNED   (direct assignment, skipping a broadcast offer)
+    OFFERED -> READY_FOR_DISPATCH    (an offer round with no acceptance reverts to the open pool)
+
+plus `CANCELLED` reachable from `OFFERED`/`ASSIGNED` too. `ALLOWED_TRANSITIONS`
+below is still intentionally a *partial* map — it does not include anything
+from `ASSIGNED` onward toward `PICKED_UP`/`IN_TRANSIT`/`DELIVERED`, because no
+code through Phase 4 drives a delivery into those states (that is Phase 5/6
+work: courier PWA pickup/transit/delivery events, custody). A reassignment
+(`apps.dispatch.services.reassign_delivery`) does not change
+`DeliveryRequest.status` at all — it stays `ASSIGNED` while the underlying
+`apps.dispatch.models.DeliveryAssignment` row is swapped — so no
+`ASSIGNED -> ASSIGNED` self-transition entry is needed here.
 """
 
 from __future__ import annotations
@@ -43,7 +53,13 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DeliveryStatus.VALIDATION_REQUIRED: frozenset(
         {DeliveryStatus.READY_FOR_DISPATCH, DeliveryStatus.CANCELLED}
     ),
-    DeliveryStatus.READY_FOR_DISPATCH: frozenset({DeliveryStatus.CANCELLED}),
+    DeliveryStatus.READY_FOR_DISPATCH: frozenset(
+        {DeliveryStatus.CANCELLED, DeliveryStatus.OFFERED, DeliveryStatus.ASSIGNED}
+    ),
+    DeliveryStatus.OFFERED: frozenset(
+        {DeliveryStatus.ASSIGNED, DeliveryStatus.READY_FOR_DISPATCH, DeliveryStatus.CANCELLED}
+    ),
+    DeliveryStatus.ASSIGNED: frozenset({DeliveryStatus.CANCELLED}),
 }
 
 

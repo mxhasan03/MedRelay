@@ -1398,3 +1398,456 @@ eligibility; there is no courier-facing UI yet (Phase 5); `eligible_couriers_for
 A doc file can never contain the hash of the commit that introduces its own final content (the
 same inherent one-commit lag Phase 0 called out), so this line was added in a small follow-up
 commit after commit (1) landed — see `git log --oneline` for the definitive, current history.
+
+# Current Status — Phase 4 (Dispatch and Operations Console)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 4 on top of the
+Phase 3 foundation (starting point: commit `d6f5c2a`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 4 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 4 — Dispatch and operations
+console": dispatch recommendations with an explainable weighted score, job offers with
+expiration, courier assignment/reassignment, dispatcher overrides with a mandatory reason,
+synthetic route plans, per-service-level SLA profiles (finally giving
+`EligibilityResult.sla_feasibility` a real value instead of Phase 3's `"not_evaluated"`
+placeholder), a minimal dispatch board/dashboard, and simple SLA-risk flagging. All new models
+have migrations, all quality gates pass (see below), and all three Phase 4 acceptance criteria
+are covered by real, passing tests:
+
+1. **One delivery assigned atomically** — `apps.dispatch.services.assign_delivery` runs inside
+   `transaction.atomic()`, takes a `select_for_update()` row lock on the `DeliveryRequest`, and is
+   additionally backed by a real, backend-independent partial `UniqueConstraint` on
+   `DeliveryAssignment` (only one `ACTIVE` row per delivery request can ever exist at the database
+   level).
+2. **Concurrent assignment race tests** — a genuine multi-threaded test
+   (`apps/dispatch/tests/test_concurrency.py`) spawns two real OS threads with two real, separate
+   database connections, both calling `assign_delivery` for the same delivery request with
+   different couriers, and asserts exactly one wins and the other gets a clean
+   `AssignmentConflictError` — never a silent double-assignment, never an unhandled crash. Run 15+
+   times against SQLite and 15+ times against a real, throwaway PostgreSQL container in this
+   session with 100% pass rate in both cases (full honesty discussion below).
+3. **Hard gates cannot be overridden** — a dedicated test suite
+   (`test_hard_eligibility_gate_cannot_be_overridden_via_{assign,offer,reassign}_delivery` in
+   `apps/dispatch/tests/test_services.py`) tries to force an ineligible courier through every
+   entry point this phase built, with a dispatcher-supplied override reason supplied every time,
+   and confirms every one of them raises `IneligibleCourierError` and writes nothing to the
+   database.
+
+## Exact files created/changed
+
+`git diff --cached d6f5c2a --stat` (Phase 3's final commit → this phase's staged working tree):
+
+```
+27 files changed, 3748 insertions(+), 52 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/dispatch/`** (all new this phase): `models.py` (`AssignmentStatus`/`DeliveryAssignment`,
+  `JobOfferStatus`/`JobOffer`, `DispatchOverrideType`/`DispatchOverride`,
+  `DispatchRecommendation`/`DispatchRecommendationCandidate`, `RouteLegType`/`RoutePlan`/`RouteLeg`,
+  `SLAProfile`), `sla.py` (synthetic ETA-to-pickup/transit-time/SLA-feasibility calculation),
+  `scoring.py` (`ScoreFactor`/`DispatchCandidate`, `score_candidate`/`rank_candidates` — the
+  explainable weighted score), `services.py` (the four required entry points:
+  `recommend_couriers`/`assign_delivery`/`offer_delivery`/`reassign_delivery`, plus
+  `at_risk_delivery_ids`), `exceptions.py` (`IneligibleCourierError`, `AssignmentConflictError`),
+  `admin.py`, `views.py`/`urls.py` (the dispatch board), `apps.py` (docstring update),
+  `migrations/0001_initial.py`, `migrations/0002_seed_sla_profiles.py` (data migration: 3
+  `SLAProfile` rows, one per `ServiceLevel`), `tests/factories.py`, `tests/test_models.py`,
+  `tests/test_sla.py`, `tests/test_scoring.py`, `tests/test_services.py`,
+  `tests/test_concurrency.py`, `tests/test_views.py`.
+- **`apps/couriers/eligibility.py`**: `_current_workload` now counts real, active
+  `apps.dispatch.models.DeliveryAssignment` rows (Phase 3's honest "always 0" placeholder is gone);
+  `check_courier_eligibility` gained an optional `as_of_datetime` keyword and now computes a real
+  `sla_feasibility` value (`"feasible"`/`"at_risk"`/`"infeasible"`, via a lazy import of
+  `apps.dispatch.sla.compute_sla_estimate`) instead of always returning `"not_evaluated"`. See
+  "Design decisions" below for why these imports are lazy (inside function bodies), not at module
+  scope.
+- **`apps/couriers/tests/test_eligibility.py`**: the three Phase 3 assertions hard-coded to
+  `SLA_FEASIBILITY_NOT_EVALUATED` were updated to accept the new real feasibility values (a
+  fully-built `READY_FOR_DISPATCH` request always has both stops, so `sla_feasibility` is now
+  genuinely evaluated for it) — `test_sla_feasibility_is_never_a_hard_failure_reason` still proves
+  the one invariant that must never change: a poor (or unevaluated) SLA verdict never makes
+  `eligible` false.
+- **`apps/deliveries/state_machine.py`**: `ALLOWED_TRANSITIONS` extended with
+  `READY_FOR_DISPATCH -> OFFERED`, `READY_FOR_DISPATCH -> ASSIGNED` (direct assignment),
+  `OFFERED -> ASSIGNED`, `OFFERED -> READY_FOR_DISPATCH` (an offer round reverting to the open
+  pool), and `CANCELLED` reachable from `OFFERED`/`ASSIGNED` too — exactly the extension Phase 2's
+  own docstring asked later phases to make to this same dict, not a parallel transition map.
+  `ASSIGNED` onward (courier en route, pickup, transit, delivery) remains unimplemented — that is
+  Phase 5/6 work.
+- **`apps/deliveries/tests/test_state_machine.py`**: the old
+  `test_offered_onward_transitions_are_not_implemented_in_phase_2` (asserting
+  `READY_FOR_DISPATCH -> OFFERED` raises) was replaced with tests proving the *new* transitions
+  succeed (`test_ready_for_dispatch_to_offered_succeeds`,
+  `test_ready_for_dispatch_and_offered_can_both_reach_assigned`,
+  `test_offered_can_revert_to_ready_for_dispatch`) plus a renamed test proving the next unimplemented
+  boundary (`test_courier_en_route_onward_transitions_are_not_implemented_in_phase_4`); the
+  cancellation-coverage test was extended to also cover cancelling from `OFFERED`/`ASSIGNED`.
+- **`apps/organizations/services.py`**: added `DISPATCH_ROLES` (`dispatcher`,
+  `operations_manager`, `system_administrator`) and `can_dispatch` — the dispatch board's
+  permission gate, following the exact same allowlist-function pattern as
+  `can_create_delivery_requests`/`can_manage_organization`.
+- **`config/urls.py`**: added `path("dispatch/", include("apps.dispatch.urls"))`.
+- **`templates/dispatch/board_list.html`** / **`board_detail.html`**: minimal plain-HTML dashboard
+  templates, same convention as every prior phase's CRUD UI.
+- **`docs/COST_AUDIT.md`**: regenerated (timestamp only — **no new dependency was added this
+  phase**, still 21).
+
+## Design decisions
+
+### 1. Every Phase 4 model lives in `apps.dispatch`, not split across apps
+
+`DeliveryAssignment`, `JobOffer`, `DispatchRecommendation`/`DispatchRecommendationCandidate`,
+`DispatchOverride`, `RoutePlan`/`RouteLeg`, and `SLAProfile` all live in `apps/dispatch/models.py`,
+matching the task's own instruction and `docs/ARCHITECTURE_AND_DATA_MODEL.md` section 3's "Delivery
+and dispatch" entity grouping (which already lists `DeliveryRequest`/`DeliveryStop`/
+`DeliveryStatusTransition` in `apps.deliveries` alongside these — the entity *group* is not a strict
+1:1 map to a Django *app*, and Phase 2 already established that precedent). All cross-app FKs into
+`couriers.CourierProfile`/`deliveries.DeliveryRequest`/`facilities.Facility` use Django's lazy
+string app-label reference (`"couriers.CourierProfile"`, etc.) — the exact pattern
+`apps.cargo.models` already uses for its FKs into `apps.deliveries` — so there is no Python import
+cycle at model-definition time.
+
+The one place a real bidirectional *runtime* dependency exists is `apps.couriers.eligibility`
+needing `apps.dispatch.models.DeliveryAssignment` (for real workload counting) and
+`apps.dispatch.sla` (for real SLA feasibility), while `apps.dispatch.services` needs
+`apps.couriers.eligibility` (for the hard-eligibility gate) at module scope. This is resolved
+exactly the way this codebase already resolves every other such case: the import inside
+`apps.couriers.eligibility` is **lazy** (inside the function body, not at module top), matching the
+pre-existing convention in the very same file (`eligible_couriers_for`'s lazy import of
+`CourierProfile`) and elsewhere (`DeliveryRequest.clean()`'s lazy import of
+`apps.cargo.validation`). `apps.dispatch.sla` itself never imports anything from `apps.couriers`, so
+there is no actual import-time cycle, only a deliberate, documented one-directional-at-a-time lazy
+resolution — written out in full in both `apps/couriers/eligibility.py`'s and
+`apps/dispatch/models.py`'s module docstrings.
+
+### 2. `DispatchRecommendation` is persisted by default, not purely ephemeral
+
+The roadmap explicitly allows recommendations to be "computed on-demand and optionally persisted
+for audit/explainability." Phase 4 chose **persist by default**: every real
+`apps.dispatch.services.recommend_couriers` call writes one `DispatchRecommendation` row plus one
+`DispatchRecommendationCandidate` row per candidate (full factor breakdown, reasons, eligibility,
+SLA numbers — Decimal values converted to `float`/plain dicts for `JSONField` storage). This is a
+deliberate choice, not an oversight: dispatch decisions are exactly the class of safety/audit-
+relevant record this prototype should keep an explainable trail of, and it costs nothing meaningful
+at this prototype's demo data volumes. `persist=False` is available for cheap, no-audit-trail
+what-if computation, and is what `assign_delivery`/`reassign_delivery` use internally (via
+`rank_candidates` directly, not `recommend_couriers`) to determine the current top-ranked candidate
+without flooding the recommendation table on every assignment decision.
+
+### 3. The explainable score: what's real vs. what's an honest placeholder
+
+`apps/dispatch/scoring.py` implements all eight suggested factors from
+`docs/PRODUCT_REQUIREMENTS.md` section 11, weighted to sum to 1.00 (`total_score` on a 0-100
+scale):
+
+| Factor | Weight | Real, or documented placeholder |
+|---|---|---|
+| ETA to pickup | 0.25 | Real computation, synthetic input — service-zone-match tiers (15/25/40 min), since no courier-location model exists yet (`CourierLocationPing` remains Phase 5 work) |
+| SLA slack | 0.25 | Real computation over the synthetic ETA/transit estimate plus the real `required_delivery_by` |
+| Reliability / on-time history | 0.10 | **Placeholder — always a neutral 0.5.** No delivery has ever reached `DELIVERED` in this codebase (Phase 4 does not implement transitions past `ASSIGNED`), so there is no real on-time history anywhere to compute from. A neutral constant is used and clearly labeled as such — nothing fabricated |
+| Route compatibility | 0.10 | Real computation (service-zone match against *both* pickup and destination facility) |
+| Active workload | 0.15 | Real computation — counts real `DeliveryAssignment` rows (this is Phase 3's own "always 0" workload proxy, now real) |
+| Facility familiarity | 0.10 | Real computation — counts real past `DeliveryAssignment` rows to the pickup facility (honestly usually 0 in a fresh demo with no completed-delivery history, but the query itself is real, not fabricated) |
+| Toll/parking burden | 0.05 | Real computation reusing Phase 2's `inter_borough_toll_estimate` `PricingRule` — a route property (same for every candidate on one delivery), not courier-differentiating, but genuinely computed and shown |
+| Customer preference (non-binding) | 0.00 | **Explicitly deferred, not built** (judged out of scope this phase — see "Known gaps"). Present in the breakdown for transparency; zero weight, never affects ranking |
+
+`CourierPerformanceSnapshot` (deferred from Phase 3 as "dispatch scoring history") was
+**deliberately not built** this phase, for the same honesty reason as the reliability factor above:
+there is no real completed-delivery outcome data anywhere in this codebase yet to populate it with,
+and building an always-empty (or worse, seeded-with-invented-numbers) history table would either be
+dead weight or a fabrication — neither is acceptable per this project's data-honesty conventions.
+The reliability factor's neutral-default approach with a clear `TODO` comment (pointing at Phase
+5/6, once completed deliveries exist) was judged the more honest choice, and is called out again in
+`apps/dispatch/scoring.py`'s own module docstring.
+
+Every `DispatchCandidate` — eligible or not — gets a full factor breakdown with human-readable
+`reason` strings (`candidate.reasons` concatenates hard-failure messages, if any, with every scoring
+factor's explanation) — the score is never just an opaque float, per the explicit acceptance
+criterion in `docs/PRODUCT_REQUIREMENTS.md` section 11.
+
+### 4. SLA-feasibility calculation: real math over a synthetic ETA, anchored on the pickup window
+
+`apps.dispatch.sla.compute_sla_estimate` is a genuinely new calculation, not a relabeled constant:
+`sla_slack_minutes = required_delivery_by - (reference_instant + eta_to_pickup + transit_minutes)`,
+classified via a per-`ServiceLevel` `SLAProfile.min_slack_minutes` threshold (seeded via
+`apps/dispatch/migrations/0002_seed_sla_profiles.py`: 90 min for `scheduled`, 45 for `same_day`, 15
+for `stat`) into `"feasible"` / `"at_risk"` / `"infeasible"`. Two honest limitations, stated in the
+module's own docstring:
+
+- **`eta_to_pickup`** cannot be a distance calculation at all — there is still no real
+  courier-location model (`CourierLocationPing` is Phase 5 work), so the only real signal available
+  is service-zone match, mapped to three fixed synthetic minute tiers. This is weaker than transit
+  time, which has two real facility coordinates to work with.
+- **`transit_minutes`** reuses Phase 2's exact haversine-distance + `average_speed_kmh` `PricingRule`
+  approach (`apps.deliveries.pricing.estimate_distance_km`) — not a real OSRM/routing call, per the
+  zero-cost policy, exactly as instructed.
+
+`reference_instant` defaults to `delivery_request.pickup_window_start`, **not** wall-clock "now" —
+the same determinism-over-realism choice Phase 2's quote engine made for its after-hours surcharge.
+This is what makes `compute_sla_estimate` (and therefore every dispatch score and
+`EligibilityResult.sla_feasibility`) deterministic for a fixed delivery request/courier pair
+regardless of when the calculation actually runs — verified directly by
+`test_compute_sla_estimate_anchors_on_pickup_window_start_not_wall_clock`. A caller may override the
+anchor explicitly (`reference_instant=...`) for a genuinely "as of right now" calculation if a later
+phase needs one.
+
+### 5. The override-vs-hard-gate boundary
+
+Per `docs/PRODUCT_REQUIREMENTS.md` section 11 ("Dispatchers can override recommendations but must
+record a reason. Overrides never bypass hard safety/authorization rules."), the boundary is
+enforced structurally, not just by convention:
+
+- `apps.couriers.eligibility.check_courier_eligibility` (the Phase 3 hard-eligibility engine) is
+  called **unconditionally**, before anything is written, by every one of
+  `assign_delivery`/`offer_delivery`/`reassign_delivery` — there is no code path, anywhere in
+  `apps.dispatch.services`, that inspects a dispatcher-supplied `reason` string to decide whether to
+  skip that call. A failure raises `IneligibleCourierError` and the function returns immediately;
+  no `DeliveryAssignment`/`JobOffer`/`DispatchOverride` row is ever created for the rejected
+  attempt.
+- `DispatchOverride` rows are written **only after** eligibility has already passed, and only
+  record *soft* choices: picking a courier other than the current top-ranked eligible candidate
+  (`assign_delivery`, `reason` required only in that specific case — a top-ranked pick needs no
+  reason at all) or reassigning an already-assigned delivery (`reassign_delivery`, `reason` is
+  always required — every reassignment is itself treated as an override of a prior decision).
+  `DispatchOverride.save()` additionally refuses to persist a blank/whitespace-only `reason` at the
+  model level, as a second, independent backstop below the service-layer check.
+- `apps/dispatch/tests/test_services.py` has one dedicated test per entry point
+  (`test_hard_eligibility_gate_cannot_be_overridden_via_assign_delivery`/`..._via_offer_delivery`/
+  `..._via_reassign_delivery`) that supplies a plausible-sounding override reason ("I really want
+  this one.", "Dispatcher insists on this courier.") alongside a courier who fails a hard filter,
+  and asserts the call is rejected and the database is untouched in every case. `offer_delivery`'s
+  version additionally proves that mixing one ineligible candidate into an otherwise-eligible batch
+  rejects the *entire* offer call — no partial offers are ever created.
+
+### 6. Concurrency design, and a real discovery made by actually running the test
+
+`assign_delivery` (and `reassign_delivery`) run inside `transaction.atomic()` and take
+`DeliveryRequest.objects.select_for_update()` before checking or changing anything.
+**`select_for_update()` is a documented no-op under SQLite** — confirmed by reading Django's own
+`django/db/models/sql/compiler.py` in this environment: the `FOR UPDATE` SQL clause is only emitted
+when `self.query.select_for_update and features.has_select_for_update`, and SQLite's backend never
+sets `has_select_for_update = True` (it inherits the base class's `False`), so the clause is
+silently omitted rather than raising. This means the actual, backend-independent correctness
+guarantee this project relies on is the **partial database `UniqueConstraint`** on
+`DeliveryAssignment` (`unique_active_assignment_per_delivery_request`, condition
+`status="active"`) — a real database-level constraint enforced identically by SQLite and
+PostgreSQL, verified directly by `apps/dispatch/tests/test_models.py::
+test_only_one_active_assignment_per_delivery_request_at_db_level`.
+
+**A genuine, empirically-found discovery while developing the concurrency test** (not merely
+theorized): on SQLite, a concurrent writer sometimes cannot even acquire SQLite's coarse,
+whole-database write lock within its default timeout, which surfaces as
+`django.db.OperationalError` ("database is locked") — a *different* exception type than the
+unique-constraint `IntegrityError`, but the exact same *kind* of event (a genuine write conflict,
+not a bug). The first version of `assign_delivery`/`reassign_delivery` only caught `IntegrityError`
+and this was caught as a real, reproducible test failure (`OperationalError('database table is
+locked: dispatch_deliveryassignment')` surfacing as an unhandled crash) the very first time the
+concurrency test was run — both functions now catch `(IntegrityError, OperationalError)` and
+convert either into a clean `AssignmentConflictError`. This is exactly the kind of thing a
+"simulated" (sequential, single-connection) concurrency test could never have caught.
+
+### 7. Dashboard scoping: a plain list/table view, no live map
+
+Per the task's own explicit scoping allowance: `apps/dispatch/views.py`/`templates/dispatch/*.html`
+are a minimal, server-rendered dashboard in the exact same plain-HTML, no-Tailwind/no-HTMX
+convention every prior phase's CRUD UI used — a literal live map (MapLibre) was **not** built
+(explicitly deferred to Phase 8/9 polish, per the roadmap's own framing of it as a "nice-to-have").
+The dashboard shows: unassigned/offered deliveries with an at-risk flag
+(`apps.dispatch.services.at_risk_delivery_ids`, a simple query-time rule — not a background
+job/notification, matching this phase's own scope), assigned deliveries with their current courier,
+and (on the per-delivery detail page) the full ranked, explainable candidate list with an
+assign/reassign/offer action form. Courier locations, incidents, and temperature alerts from
+`docs/PRODUCT_REQUIREMENTS.md` section 7's full "control tower" wishlist are **not** shown — those
+need `apps.tracking`/`apps.incidents`/`apps.temperature`, none of which have any models yet
+(later phases).
+
+## Concurrency test — full honesty on SQLite vs. PostgreSQL confidence
+
+`apps/dispatch/tests/test_concurrency.py::test_concurrent_assign_delivery_exactly_one_wins` is a
+genuine multi-threaded test: two real `threading.Thread`s, each with its own real database
+connection (Django opens a fresh connection per thread automatically), synchronized to start via a
+`threading.Barrier` and both calling `assign_delivery` for the *same* delivery request with
+*different* couriers. `@pytest.mark.django_db(transaction=True)` is pytest-django's equivalent of
+subclassing `django.test.TransactionTestCase` directly — real commits happen and the test database
+is reset by truncation between tests, **not** wrapped in one wrapping, never-committed transaction
+the way plain `@pytest.mark.django_db()` (`TestCase`-style) works — which matters enormously here,
+since under a wrapped transaction two "concurrent" threads would both be inside the *same*
+uncommitted transaction and could never actually contend for a lock at all.
+
+**What was actually run, and how many times:**
+
+- Against **SQLite** (`config.settings.test`, this project's only CI/local database): the full
+  `apps/dispatch` suite (48 tests) passes; the concurrency test specifically was additionally run
+  15 times in a standalone loop with a 100% pass rate.
+- Against a **real, throwaway PostgreSQL container** (`postgis/postgis:17-3.5`, run via plain
+  `docker run` on a non-default host port so as not to disturb this shared machine's other running
+  containers, migrated with a temporary, not-committed settings module identical to
+  `config.settings.test` except for `DATABASES`): the full `apps/dispatch` suite (48 tests) passes,
+  the **entire** project test suite (278 tests) passes, and the concurrency test specifically was
+  additionally run 15 times in a standalone loop with a 100% pass rate. The throwaway container and
+  temporary settings module were both torn down/deleted at the end of this session — nothing from
+  this verification step is committed, exactly like Phase 0's own "temporary port-remapping
+  override... not committed" precedent.
+
+**Honest confidence assessment:**
+
+- The **outcome guarantee** this test proves ("exactly one assignment attempt succeeds, the other
+  gets a clean `AssignmentConflictError`, exactly one `ACTIVE` `DeliveryAssignment` row survives,
+  no crash, no silent double-assignment") was verified to hold, repeatedly, against both SQLite and
+  a real PostgreSQL container in this exact environment. This is a real, not merely theoretical,
+  confidence gain from actually running it — the task's own suggested next step.
+- What the real PostgreSQL run does **not**, by itself, prove: this run happened against a fresh,
+  otherwise-idle throwaway container with exactly one pair of concurrent requests. It does not
+  establish behavior under real production-level concurrent load (many simultaneous dispatchers,
+  connection-pool exhaustion, longer-held transactions racing with this one, deadlock scenarios
+  across *multiple* rows locked in different orders, etc.) — that class of confidence would need a
+  dedicated load/soak test, which is out of scope for this phase's acceptance criteria.
+- On SQLite specifically, `select_for_update()` contributes nothing (confirmed no-op, see Design
+  Decision 6) — the guarantee there rests entirely on the unique constraint and SQLite's own coarse
+  whole-database write serialization (which is real concurrency control, just far coarser-grained
+  than PostgreSQL row locks, and prone to surfacing as `OperationalError` rather than waiting
+  gracefully, as documented above). On PostgreSQL, `select_for_update()` is a real row lock in
+  addition to the same unique-constraint backstop — a materially different, additionally-protected
+  interleaving that this project's test suite now has real, repeated, passing evidence for, not
+  just an assumption.
+
+## Data minimization checked
+
+Every field added this phase was reviewed against `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section
+2. `DeliveryAssignment`/`JobOffer`/`DispatchOverride`/`DispatchRecommendationCandidate` store only
+operational dispatch metadata (status enums, timestamps, a synthetic score, human-readable reason
+text, FK references) — never a diagnosis, lab result, clinical note, medication indication, SSN, or
+insurance identifier. `DispatchOverride.reason` and `RouteLeg`/`RoutePlan` fields are explicitly
+operational/logistics text and numbers; nothing here stores patient-identifying information. No new
+field anywhere in `apps.dispatch` stores anything beyond what the eligibility/scoring/assignment
+mechanics genuinely need.
+
+## Quality gate results (all run from a clean, already-`uv sync`'d virtualenv, `config.settings.test`)
+
+All commands below were run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. **No new dependency was added this phase** — `uv
+lock`/`uv sync` were not re-run (nothing changed in `pyproject.toml`).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+160 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 160 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/dispatch/migrations/{0001_initial,0002_seed_sla_profiles}.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+278 passed in 10.13s
+```
+Coverage: 95% overall (2641 statements, 133 missed) for the whole project including Phase 0-3 code
+— all 232 pre-Phase-4 tests still pass, plus 46 new Phase 4 tests across `apps/dispatch` (48 tests
+total collected there, 2 of which — `test_apps.py`'s smoke tests — predate this phase). New-app
+coverage: `apps/dispatch/exceptions.py` 100%, `apps/dispatch/apps.py` 100%, `apps/dispatch/urls.py`
+100%, `apps/dispatch/admin.py` 97%, `apps/dispatch/sla.py` 97%, `apps/dispatch/scoring.py` 97%,
+`apps/dispatch/services.py` 96%, `apps/dispatch/models.py` 94%, `apps/dispatch/views.py` 88%. The
+uncovered lines are concentrated in `__str__`/admin-display methods and a handful of defensive
+branches (e.g. the offer-view's exception-message rendering, already covered behaviorally by the
+service-layer tests for the same exceptions) — none of it load-bearing dispatch logic. The
+remaining project-wide misses are the pre-existing Phase 0 environment-entrypoint gaps
+(`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`).
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 21 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is unchanged from Phase 3 (21) — Phase 4 added zero new packages.
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged (`.secrets.baseline` still has empty `results: {}`). Run
+after `git add -A` so every new Phase 4 file was actually scanned. The temporary, not-committed
+`_tmp_pg_verify.py` settings module used for the Postgres verification run below configured the
+throwaway container's credential using the same synthetic placeholder value already established in
+`.env.example`/`config/settings/base.py`'s `DATABASE_URL` default (documented there since Phase 0
+with its own `pragma: allowlist secret` annotation) — that module was deleted before the final
+commit, so it was never part of the tracked file set at all and never needed its own annotation or
+baseline entry.
+
+### Real Postgres verification run (beyond the SQLite-based suite — see "Concurrency test" section above for the full write-up)
+```
+$ python -m pytest -q --no-cov --ds=config.settings._tmp_pg_verify   # against a throwaway postgis/postgis:17-3.5 container
+278 passed in 9.73s
+$ python -m pytest apps/dispatch/tests/test_concurrency.py -q --no-cov --ds=config.settings._tmp_pg_verify   # x15 in a loop
+1 passed (x15, 100%)
+```
+
+## Known gaps / deviations (honest list)
+
+- **`CourierPerformanceSnapshot` was not built** — no real completed-delivery outcome data exists
+  anywhere in this codebase yet (Phase 4 does not implement transitions past `ASSIGNED`), so
+  building it now would mean either an always-empty table or fabricated history data, neither of
+  which is acceptable. The scoring engine's "reliability" factor is instead a documented, clearly
+  labeled neutral-default placeholder (see Design Decision 3) with a `TODO` pointing at Phase 5/6.
+- **"Customer preference (non-binding)" is explicitly deferred, not built** — judged out of scope
+  for this phase's time budget; present in the score breakdown with zero weight so it is visible
+  but never affects ranking (see Design Decision 3).
+- **`JobOffer` acceptance/decline is not implemented** — `apps.dispatch.services.offer_delivery`
+  creates real `JobOffer` rows (possibly several per delivery, broadcast-style), but no code
+  anywhere transitions one to `ACCEPTED`/`DECLINED`; that is Phase 5's courier-facing PWA work.
+  `JobOffer.is_expired` is a plain computed property for display — nothing automatically flips
+  `status` to `EXPIRED` in the background (that would need a scheduled job, explicitly Phase 7
+  territory per this phase's own "SLA-risk rules... not a background job/notification yet" scope).
+- **`RoutePlan`/`RouteLeg` are synthetic placeholders, not real routing** — reusing Phase 2's exact
+  haversine + average-speed approach; no OSRM/real routing-engine call exists or is planned before
+  a much later phase, per the zero-cost policy.
+- **`eta_to_pickup` has no real distance signal at all** — there is still no courier-location model
+  (`CourierLocationPing` remains Phase 5 work), so it is a small set of synthetic zone-match tiers,
+  weaker than the haversine-based transit-time estimate.
+- **`rank_candidates`/`at_risk_delivery_ids` are O(n) (and O(n×m) respectively) Python-level scans**,
+  not optimized database queries — the same documented, deliberate scope limit Phase 3 accepted for
+  `eligible_couriers_for`/`eligible_deliveries_for` at this prototype's demo data volumes.
+- **The dispatch dashboard has no live map, no courier-location display, no incident/temperature
+  alerts** — those need `apps.tracking`/`apps.incidents`/`apps.temperature`, none of which have
+  models yet (later phases); this is a deliberate, documented scoping choice, not an oversight (see
+  Design Decision 7).
+- **The concurrency test's PostgreSQL confidence is real but bounded** — verified repeatedly against
+  a single throwaway container with one pair of concurrent requests in this session (see the
+  dedicated "Concurrency test" section above); it does not establish behavior under sustained
+  production-level concurrent load, connection-pool exhaustion, or multi-row deadlock scenarios,
+  which would need a dedicated load/soak test outside this phase's acceptance criteria.
+- **No demo/seed dispatch data was added to `seed_demo_data`** — Phase 4 introduces one data
+  migration (`SLAProfile` reference rows, always present including in CI), but no sample
+  assignments/offers were added to the optional `seed_demo_data` command; the automated test suite's
+  factories exercise the identical model/service layer a real dispatcher would use.
+- Coverage is 95%, not 100% (see gate output above) — no hard coverage threshold was specified as a
+  gate; the uncovered lines are concentrated in `__str__`/admin-display methods and defensive
+  branches already covered behaviorally by sibling tests, plus the pre-existing Phase 0
+  environment-entrypoint gaps.
+- `*.tests.*` modules remain excluded from `mypy` checking (factory_boy stub gap, unchanged since
+  Phase 1) — all production code in `apps.dispatch` has full mypy coverage, verified by the `mypy .`
+  run above (160 source files, 0 errors).
+- Not yet built (correctly out of scope for Phase 4, per the roadmap): courier PWA/job-offer
+  accept-decline UI, tracking, custody/proof, temperature workflow, incidents, notifications,
+  billing/invoicing, reporting — all later phases.
+
+## Commit history for this phase
+
+(Recorded after the commit lands — see `git log --oneline` for the definitive, current history.)

@@ -157,6 +157,28 @@ def can_create_delivery_requests(user: AnyUser, organization_id: int) -> bool:
     return has_cross_org_manage_access(user)
 
 
+# Internal ops roles allowed to use the dispatch board (apps.dispatch, Phase
+# 4): recommend/assign/reassign/offer deliveries. This is cross-organization
+# by nature (a dispatcher works across every customer organization's open
+# deliveries), so it is its own explicit allowlist rather than reusing
+# CROSS_ORG_MANAGE_ROLES — `customer_support`/`compliance_reviewer`/`finance`
+# have cross-org *read* access for their own reasons but no business
+# assigning couriers to deliveries.
+DISPATCH_ROLES = frozenset(
+    {
+        InternalRole.DISPATCHER,
+        InternalRole.OPERATIONS_MANAGER,
+        InternalRole.SYSTEM_ADMINISTRATOR,
+    }
+)
+
+
+def can_dispatch(user: AnyUser) -> bool:
+    """Can the user view/act on the dispatch board (recommend, assign, offer,
+    reassign)?"""
+    return get_internal_role(user) in DISPATCH_ROLES
+
+
 def scope_queryset_to_user_orgs(
     queryset: QuerySet[_T], user: AnyUser, *, org_field: str = "organization_id"
 ) -> QuerySet[_T]:

@@ -15,22 +15,47 @@ Phase 3 implements every hard filter its data model can honestly support:
 - current capacity exceeded
 - facility restriction not met
 
-One filter — **SLA mathematically infeasible** — is explicitly *not*
-evaluated in Phase 3: it needs a real ETA/routing estimate, which does not
+One filter — **SLA mathematically infeasible** — was explicitly *not*
+evaluated in Phase 3: it needed a real ETA/routing estimate, which did not
 exist until Phase 4's dispatch scoring (`docs/IMPLEMENTATION_ROADMAP.md`
-Phase 4). Rather than silently omitting it, `EligibilityResult.sla_feasibility`
-always carries the literal string `"not_evaluated"` — a documented "not yet
-evaluated," not a hidden gap — so Phase 4 can add a real feasibility check by
-changing that one field's value, without changing this function's signature
-or breaking any caller.
+Phase 4). **As of Phase 4, `EligibilityResult.sla_feasibility` carries a
+real (if synthetic) value** — `"feasible"`, `"at_risk"`, or `"infeasible"` —
+computed by `apps.dispatch.sla.compute_sla_estimate` via a lazy, in-function
+import (see below for why this is lazy rather than a module-level import).
+It still always falls back to the literal string `"not_evaluated"`
+(`SLA_FEASIBILITY_NOT_EVALUATED`, kept below) only in the defensive case
+where no `apps.dispatch.models.SLAProfile` row matches the delivery's
+service level at all (should not happen once Phase 4's seed migration has
+run). As Phase 3 promised, this needed no change to this function's
+signature (only a new optional `as_of_datetime` keyword) and broke no
+caller — see docs/CURRENT_STATUS.md "Phase 4" section for the full write-up.
+As always, an unevaluated or poor SLA feasibility verdict is informational
+only and **never** makes `eligible` false on its own (still enforced by
+`test_sla_feasibility_is_never_a_hard_failure_reason`).
 
-Honest workload/capacity proxy: there is no `DeliveryAssignment` model yet
-(Phase 4), so there is nothing to count a courier's live in-flight
-deliveries against. `_current_workload` below always returns `0` — this is
-stated as fact, not estimated, and is exactly what
-`CourierAvailability.max_concurrent_deliveries` is checked against. Once
-Phase 4 introduces `DeliveryAssignment`, `_current_workload` is the one
-function that needs to change to count real active assignments.
+Real workload/capacity proxy, wired up in Phase 4: `_current_workload` below
+now counts real `apps.dispatch.models.DeliveryAssignment` rows with
+`status="active"` for the courier (via the same lazy in-function import
+pattern), checked against `CourierAvailability.max_concurrent_deliveries` as
+before. Phase 3's "always 0" placeholder is gone — this is Phase 4's own
+`DeliveryAssignment` model doing real work.
+
+**Why the imports below are lazy (inside function bodies), not at module
+scope**: `apps.dispatch.services` imports this module (`apps.couriers.
+eligibility`) at module scope to run the hard-eligibility gate before every
+assignment/offer — a normal one-directional dependency. This module, in
+turn, needs `apps.dispatch.sla`/`apps.dispatch.models` for the two features
+above, which would make the dependency bidirectional *at Python
+import time* if done at module scope (a real circular import, since
+`apps.dispatch.sla`/`apps.dispatch.models` do not themselves import
+anything from `apps.couriers.eligibility`, but Django's app-loading order is
+not guaranteed to tolerate two apps eagerly importing each other's top-level
+modules). Every call site below imports `apps.dispatch.sla`/`apps.dispatch.
+models` inside the function that needs them, exactly the same convention
+already used throughout this codebase (e.g. `DeliveryRequest.clean()`'s lazy
+import of `apps.cargo.validation`, or this module's own pre-existing lazy
+imports of `apps.couriers.models.CourierProfile`/`apps.deliveries.models.
+DeliveryRequest` in `eligible_couriers_for`/`eligible_deliveries_for`).
 
 Service-zone matching is a simple zone-equality check (courier's current, or
 failing that home, `ServiceZone` vs. the delivery's pickup facility's
@@ -132,13 +157,15 @@ class EligibilityResult:
 
 
 def _current_workload(courier: CourierProfile) -> int:
-    """Honest Phase 3 proxy: always 0. See module docstring — there is no
-    `DeliveryAssignment` model yet (Phase 4) to count real active/in-flight
-    deliveries against, so this is not an estimate, it is a documented fact
-    about what this phase can and cannot measure.
+    """Real Phase 4 workload count: active `DeliveryAssignment` rows for
+    `courier`. See module docstring — Phase 3's "always 0" placeholder is
+    gone now that `apps.dispatch.models.DeliveryAssignment` exists.
     """
-    del courier  # Unused in Phase 3; kept as a parameter for a stable Phase 4 signature.
-    return 0
+    from apps.dispatch.models import ACTIVE_ASSIGNMENT_STATUSES, DeliveryAssignment
+
+    return DeliveryAssignment.objects.filter(
+        courier=courier, status__in=ACTIVE_ASSIGNMENT_STATUSES
+    ).count()
 
 
 def _check_account_active(courier: CourierProfile) -> EligibilityFailureReason | None:
@@ -342,12 +369,18 @@ def check_courier_eligibility(
     delivery_request: DeliveryRequest,
     *,
     as_of: datetime.date | None = None,
+    as_of_datetime: datetime.datetime | None = None,
 ) -> EligibilityResult:
-    """Check every Phase-3-supported hard eligibility filter for `courier`
-    against `delivery_request`. Returns an `EligibilityResult` with the full
-    list of hard-failure reasons (not just the first one found), so a caller
-    (or a future UI) can show a courier or dispatcher everything wrong at
-    once rather than one error per retry.
+    """Check every hard eligibility filter for `courier` against
+    `delivery_request`. Returns an `EligibilityResult` with the full list of
+    hard-failure reasons (not just the first one found), so a caller (or a
+    future UI) can show a courier or dispatcher everything wrong at once
+    rather than one error per retry.
+
+    `as_of` anchors the credential-expiry check (a date); `as_of_datetime`
+    (new in Phase 4) anchors the SLA-feasibility estimate (a datetime) — see
+    `apps.dispatch.sla.compute_sla_estimate` for its own default anchor
+    (`delivery_request.pickup_window_start`) when this is left `None`.
     """
     reference_date = as_of or timezone.localdate()
     reasons: list[EligibilityFailureReason] = []
@@ -382,7 +415,35 @@ def check_courier_eligibility(
     if facility_reason is not None:
         reasons.append(facility_reason)
 
-    return EligibilityResult(eligible=not reasons, hard_failure_reasons=tuple(reasons))
+    sla_feasibility = _evaluate_sla_feasibility(
+        courier, delivery_request, as_of_datetime=as_of_datetime
+    )
+
+    return EligibilityResult(
+        eligible=not reasons, hard_failure_reasons=tuple(reasons), sla_feasibility=sla_feasibility
+    )
+
+
+def _evaluate_sla_feasibility(
+    courier: CourierProfile,
+    delivery_request: DeliveryRequest,
+    *,
+    as_of_datetime: datetime.datetime | None,
+) -> str:
+    """Real (if synthetic) SLA-feasibility verdict — see module docstring for
+    why this import is lazy, and `apps.dispatch.sla` for the calculation
+    itself. Never allowed to raise: any missing data (e.g. no pickup/
+    destination stop yet, which should not happen for a `READY_FOR_DISPATCH`
+    request — see `eligible_deliveries_for`) falls back to
+    `SLA_FEASIBILITY_NOT_EVALUATED` rather than crashing eligibility checks.
+    """
+    if delivery_request.pickup_stop is None or delivery_request.destination_stop is None:
+        return SLA_FEASIBILITY_NOT_EVALUATED
+
+    from apps.dispatch.sla import compute_sla_estimate
+
+    estimate = compute_sla_estimate(courier, delivery_request, reference_instant=as_of_datetime)
+    return estimate.feasibility
 
 
 def eligible_couriers_for(

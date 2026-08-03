@@ -70,18 +70,33 @@ def test_cancellation_allowed_from_draft_submitted_validation_required_and_ready
         DeliveryStatus.SUBMITTED,
         DeliveryStatus.VALIDATION_REQUIRED,
         DeliveryStatus.READY_FOR_DISPATCH,
+        DeliveryStatus.OFFERED,
+        DeliveryStatus.ASSIGNED,
     ):
         delivery_request = _fully_valid_delivery_request()
         if target_status != DeliveryStatus.DRAFT:
             transition_delivery_request(delivery_request, DeliveryStatus.SUBMITTED, actor=None)
-        if target_status in (DeliveryStatus.VALIDATION_REQUIRED, DeliveryStatus.READY_FOR_DISPATCH):
+        if target_status in (
+            DeliveryStatus.VALIDATION_REQUIRED,
+            DeliveryStatus.READY_FOR_DISPATCH,
+            DeliveryStatus.OFFERED,
+            DeliveryStatus.ASSIGNED,
+        ):
             transition_delivery_request(
                 delivery_request, DeliveryStatus.VALIDATION_REQUIRED, actor=None
             )
-        if target_status == DeliveryStatus.READY_FOR_DISPATCH:
+        if target_status in (
+            DeliveryStatus.READY_FOR_DISPATCH,
+            DeliveryStatus.OFFERED,
+            DeliveryStatus.ASSIGNED,
+        ):
             transition_delivery_request(
                 delivery_request, DeliveryStatus.READY_FOR_DISPATCH, actor=None
             )
+        if target_status in (DeliveryStatus.OFFERED, DeliveryStatus.ASSIGNED):
+            transition_delivery_request(delivery_request, DeliveryStatus.OFFERED, actor=None)
+        if target_status == DeliveryStatus.ASSIGNED:
+            transition_delivery_request(delivery_request, DeliveryStatus.ASSIGNED, actor=None)
         assert delivery_request.status == target_status
 
         transition_delivery_request(delivery_request, DeliveryStatus.CANCELLED, actor=None)
@@ -104,16 +119,61 @@ def test_transition_from_cancelled_raises_invalid_transition() -> None:
         transition_delivery_request(delivery_request, DeliveryStatus.SUBMITTED, actor=None)
 
 
-def test_offered_onward_transitions_are_not_implemented_in_phase_2() -> None:
-    """OFFERED onward is explicitly out of scope this phase — see
+def test_ready_for_dispatch_to_offered_succeeds() -> None:
+    """Phase 4 extends the state machine: READY_FOR_DISPATCH -> OFFERED is now
+    implemented (apps.dispatch.services.offer_delivery)."""
+    delivery_request = _fully_valid_delivery_request()
+    transition_delivery_request(delivery_request, DeliveryStatus.SUBMITTED, actor=None)
+    transition_delivery_request(delivery_request, DeliveryStatus.VALIDATION_REQUIRED, actor=None)
+    transition_delivery_request(delivery_request, DeliveryStatus.READY_FOR_DISPATCH, actor=None)
+    transition_delivery_request(delivery_request, DeliveryStatus.OFFERED, actor=None)
+    assert delivery_request.status == DeliveryStatus.OFFERED
+
+
+def test_ready_for_dispatch_and_offered_can_both_reach_assigned() -> None:
+    """Phase 4: a delivery may be assigned directly from READY_FOR_DISPATCH
+    (apps.dispatch.services.assign_delivery), or after an OFFERED round."""
+    direct = _fully_valid_delivery_request()
+    transition_delivery_request(direct, DeliveryStatus.SUBMITTED, actor=None)
+    transition_delivery_request(direct, DeliveryStatus.VALIDATION_REQUIRED, actor=None)
+    transition_delivery_request(direct, DeliveryStatus.READY_FOR_DISPATCH, actor=None)
+    transition_delivery_request(direct, DeliveryStatus.ASSIGNED, actor=None)
+    assert direct.status == DeliveryStatus.ASSIGNED
+
+    via_offer = _fully_valid_delivery_request()
+    transition_delivery_request(via_offer, DeliveryStatus.SUBMITTED, actor=None)
+    transition_delivery_request(via_offer, DeliveryStatus.VALIDATION_REQUIRED, actor=None)
+    transition_delivery_request(via_offer, DeliveryStatus.READY_FOR_DISPATCH, actor=None)
+    transition_delivery_request(via_offer, DeliveryStatus.OFFERED, actor=None)
+    transition_delivery_request(via_offer, DeliveryStatus.ASSIGNED, actor=None)
+    assert via_offer.status == DeliveryStatus.ASSIGNED
+
+
+def test_offered_can_revert_to_ready_for_dispatch() -> None:
+    """An offer round with no acceptance reverts the delivery to the open pool."""
+    delivery_request = _fully_valid_delivery_request()
+    transition_delivery_request(delivery_request, DeliveryStatus.SUBMITTED, actor=None)
+    transition_delivery_request(delivery_request, DeliveryStatus.VALIDATION_REQUIRED, actor=None)
+    transition_delivery_request(delivery_request, DeliveryStatus.READY_FOR_DISPATCH, actor=None)
+    transition_delivery_request(delivery_request, DeliveryStatus.OFFERED, actor=None)
+    transition_delivery_request(delivery_request, DeliveryStatus.READY_FOR_DISPATCH, actor=None)
+    assert delivery_request.status == DeliveryStatus.READY_FOR_DISPATCH
+
+
+def test_courier_en_route_onward_transitions_are_not_implemented_in_phase_4() -> None:
+    """ASSIGNED onward (courier en route, pickup, transit, delivery) is
+    explicitly out of scope through Phase 4 — see
     apps/deliveries/state_machine.py's module docstring. Attempting it must
     raise, not silently succeed."""
     delivery_request = _fully_valid_delivery_request()
     transition_delivery_request(delivery_request, DeliveryStatus.SUBMITTED, actor=None)
     transition_delivery_request(delivery_request, DeliveryStatus.VALIDATION_REQUIRED, actor=None)
     transition_delivery_request(delivery_request, DeliveryStatus.READY_FOR_DISPATCH, actor=None)
+    transition_delivery_request(delivery_request, DeliveryStatus.ASSIGNED, actor=None)
     with pytest.raises(InvalidTransitionError):
-        transition_delivery_request(delivery_request, DeliveryStatus.OFFERED, actor=None)
+        transition_delivery_request(
+            delivery_request, DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP, actor=None
+        )
 
 
 # --- Validation gate: missing cargo classification / packaging attestation ---
