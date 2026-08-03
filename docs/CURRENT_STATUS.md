@@ -266,10 +266,16 @@ $ git diff --cached --stat | tail -1
 121 files changed, 3886 insertions(+)
 ```
 
-Phase 0 foundation commit hash: `1ffa79b4f0199afdd0ab00d8f11b935336dc4620`
-("Phase 0: repository foundation for MedRelay prototype", 122 files, 4140 insertions).
+Commit history for this session (oldest first):
 
-This file was necessarily written *before* that commit was created (a doc can't contain its own
-future commit's hash), so this line was added in a small follow-up commit that touches only this
-file. That follow-up commit's own hash is reported in the final human-facing report for this
-session, alongside this hash, so both are available without needing to inspect `git log` by hand.
+1. `1ffa79b4f0199afdd0ab00d8f11b935336dc4620` — "Phase 0: repository foundation for MedRelay
+   prototype" (122 files, 4140 insertions) — the main foundation commit.
+2. `1261212e1a1fa87888476e04abc98d519a19083a` — "docs: record Phase 0 foundation commit hash in
+   CURRENT_STATUS.md" — recorded commit (1)'s hash in this file.
+3. `8a905ea0f6601d18adac4e8021aae385a9d202b7` — "fix: regenerate detect-secrets baseline against
+   real tracked files" — fixed a vacuously-empty secret-scan baseline caught during final
+   verification (see the "Deviations" section above, item 7).
+
+A doc file can never contain the hash of the commit that introduces its own final content, so
+there is an inherent one-commit lag here: this paragraph, added in a fourth small commit, is the
+account of that. Run `git log --oneline` in the repository for the definitive, current history.
