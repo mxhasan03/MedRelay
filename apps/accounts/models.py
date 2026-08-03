@@ -25,6 +25,15 @@ by forgetting to check `membership_type`), which directly risks the
 cross-tenant isolation guarantee this project must hold per
 docs/ARCHITECTURE_AND_DATA_MODEL.md section 2. Two small, explicit models are
 safer than one implicit one.
+
+Phase 3 (docs/CURRENT_STATUS.md "Phase 3" section) adds a third such flag,
+`User.is_courier`, following the exact same pattern as `is_internal_staff`
+above: couriers are `User` rows too (they need to log into a future courier
+PWA, per docs/PRODUCT_REQUIREMENTS.md section 6), distinguished by a cheap,
+index-friendly boolean kept in sync by `apps.couriers.models.CourierProfile.save()`,
+with the real onboarding/eligibility data living in `apps.couriers` — never a
+third parallel "membership" table. `is_courier` alone grants no access,
+exactly like `is_internal_staff`.
 """
 
 from __future__ import annotations
@@ -53,6 +62,14 @@ class User(AbstractUser):
             "False for customer-organization users, whose roles live in "
             "apps.organizations.OrganizationMembership. This flag alone grants no access — "
             "see apps.organizations.services for the explicit permission checks."
+        ),
+    )
+    is_courier = models.BooleanField(
+        default=False,
+        help_text=(
+            "True for MedRelay couriers (see apps.couriers.CourierProfile). This flag alone "
+            "grants no access and carries no onboarding/eligibility data itself — see "
+            "apps.couriers.models and apps.couriers.eligibility."
         ),
     )
 

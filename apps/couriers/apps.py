@@ -1,6 +1,8 @@
 """AppConfig for the couriers app.
 
-Courier profiles, credentials, vehicles, and eligibility data. No domain models yet in Phase 0.
+Courier profiles, credentials, training, vehicles, equipment, cargo
+authorizations, availability, and the hard-eligibility engine (Phase 3 —
+see docs/CURRENT_STATUS.md "Phase 3" section).
 """
 
 from django.apps import AppConfig

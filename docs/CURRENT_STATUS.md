@@ -997,3 +997,398 @@ image, not just PNG-magic-byte-shaped output.
 ## Commit history for this phase
 
 (Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)
+
+# Current Status — Phase 3 (Courier Onboarding and Eligibility)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 3 on top of the
+Phase 2 foundation (starting point: commit `4204e85`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 3 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 3 — Courier onboarding and
+eligibility": courier profiles/status, credentials/training/vehicle/equipment records, cargo
+authorization levels (including a temperature-capability flag), current availability, a real
+hard-eligibility engine (`apps.couriers.eligibility`), and credential-expiration query/flagging
+logic. All new models have a migration, all quality gates pass (see below), and every Phase 3
+acceptance criterion — a positive/negative test per implemented hard filter, a property test that
+`eligible` is true iff every implemented hard filter passes, and a "no unauthorized job appears to
+courier" test via `eligible_deliveries_for` — is covered by real, passing tests.
+
+## Exact files created/changed
+
+`git diff --stat 4204e85` (Phase 2's final commit → this phase's staged working tree):
+
+```
+apps/accounts/migrations/0002_user_is_courier.py   |  18 +
+apps/accounts/models.py                            |  17 +
+apps/audit/management/commands/audit_cost.py       |   1 +
+apps/couriers/admin.py                             | 134 +++++
+apps/couriers/apps.py                              |   4 +-
+apps/couriers/eligibility.py                       | 429 ++++++++++++++++
+apps/couriers/management/__init__.py               |   0
+apps/couriers/management/commands/__init__.py      |   0
+apps/couriers/management/commands/flag_expiring_credentials.py |  74 +++
+apps/couriers/migrations/0001_initial.py           | 144 ++++++
+apps/couriers/models.py                            | 494 ++++++++++++++++++
+apps/couriers/tests/factories.py                   | 101 ++++
+apps/couriers/tests/test_eligibility.py            | 564 +++++++++++++++++++++
+apps/couriers/tests/test_flag_expiring_credentials_command.py |  54 ++
+apps/couriers/tests/test_models.py                 | 128 +++++
+apps/facilities/tests/factories.py                 |  11 +-
+docs/COST_AUDIT.md                                 |   6 +-
+pyproject.toml                                     |   1 +
+uv.lock                                             |  42 ++
+19 files changed, 2218 insertions(+), 4 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/accounts/models.py`**: added `User.is_courier` (mirrors `is_internal_staff`'s pattern
+  exactly — see "Design decision 1" below) + `migrations/0002_user_is_courier.py`.
+- **`apps/couriers/`**: `models.py` (`CourierStatus`, `IdentityReviewStatus`,
+  `DriverLicenseStatus`, `InsuranceStatus`, `CourierProfile`, `CourierCredentialType`,
+  `CourierCredentialStatus`, `CourierCredential` (+ its `expiring_within`/`expired` queryset
+  methods), `TrainingRecordType`, `TrainingRecord`, `VehicleType`, `Vehicle`, `EquipmentType`,
+  `Equipment`, `CargoAuthorization`, `CourierAvailability`), `eligibility.py` (the hard-eligibility
+  engine — see below), `admin.py` (every new model registered, with inlines off `CourierProfile`),
+  `apps.py` (docstring update), `migrations/0001_initial.py`,
+  `management/commands/flag_expiring_credentials.py` (+ `management/__init__.py`,
+  `management/commands/__init__.py`), `tests/factories.py`, `tests/test_models.py`,
+  `tests/test_eligibility.py`, `tests/test_flag_expiring_credentials_command.py`.
+- **`apps/facilities/tests/factories.py`**: added `ServiceZoneFactory` (additive; Phase 1/2 had no
+  factory for `ServiceZone`, and the eligibility tests need one to build zone-match/mismatch
+  scenarios).
+- **`apps/audit/management/commands/audit_cost.py`**: added `"hypothesis"` to `ALLOWED_PACKAGES`.
+- **`pyproject.toml`** / **`uv.lock`**: added `hypothesis>=6.115,<7.0` (dev-only; resolved to
+  6.165.0, pulling in `sortedcontainers` as its one transitive dependency — a pure-Python, free,
+  locally-installed package, not itself declared in `pyproject.toml` so it needs no allowlist
+  entry, consistent with how `audit_cost` already treats other packages' transitive dependencies).
+  Hypothesis is explicitly named as an approved zero-cost dependency in
+  `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` ("Hypothesis for state-machine/property tests where
+  useful").
+- **`docs/COST_AUDIT.md`**: regenerated (21 dependencies now, was 20).
+
+## Design decisions
+
+### 1. Couriers are `User` rows, distinguished exactly like internal staff — no third parallel pattern
+
+`apps.accounts.models.User.is_courier` is a plain `BooleanField`, added the same way
+`is_internal_staff` was added in Phase 1: a cheap, index-friendly flag kept in sync by
+`CourierProfile.save()` (mirroring `InternalRoleAssignment.save()`'s
+`if not self.user.is_internal_staff: ...` pattern exactly). `is_courier` alone grants no access —
+same rule as `is_internal_staff`. There is no third "membership"-style table; `CourierProfile`
+(this phase) holds the actual onboarding/eligibility data, exactly as `OrganizationMembership` and
+`InternalRoleAssignment` hold theirs for their respective user kinds. This was an explicit
+instruction for this phase (reuse the existing distinguishing pattern rather than inventing a new
+one) and is documented again in both `apps/accounts/models.py`'s module docstring and
+`apps/couriers/models.py`'s module docstring.
+
+### 2. `CourierStatus` is a plain field, not an append-only history model — deferred to Phase 8
+
+Phase 2's `DeliveryStatusTransition` is a real append-only audit log because delivery-status
+history is operationally load-bearing today (SLA/incident analysis consumes it). A courier's
+coarse applicant/approved/suspended/inactive status changes far less often in this prototype and
+has no Phase 3 consumer that needs a full history of every transition — building one bespoke
+audit-log model per entity that might someday want history is the wrong level of investment here.
+`docs/IMPLEMENTATION_ROADMAP.md` Phase 8 ("audit viewer") is explicitly where a *general* history/
+audit mechanism belongs, covering courier status changes alongside everything else that phase
+audits, rather than Phase 3 building a narrow one-off. `CourierProfile.updated_at` at least records
+*when* the row last changed. This is a real, honest scope decision, not an oversight — restated in
+`apps/couriers/models.py`'s module docstring.
+
+### 3. `CourierCredential.evidence_reference` is a placeholder text reference, never a real document
+
+Per `docs/PRODUCT_REQUIREMENTS.md` section 6 ("No real background-check provider is integrated in
+the zero-cost prototype") and the architecture doc's "never store real sensitive documents in the
+demo repository": `evidence_reference` is a plain `CharField` (max 255 chars) intended to hold a
+short label or synthetic filename (e.g. `synthetic-drivers-license-demo.pdf`), never a real
+uploaded document. **No `FileField`/`ImageField` exists anywhere in `apps.couriers`** — there is no
+file-upload code path in this phase at all, so there was nothing to restrict to synthetic-only
+fixtures; the simplest way to guarantee "never a real document" was to not build upload at all.
+This is stated in the model's own docstring and help text, not just here.
+
+### 4. `CargoAuthorization` answers both "cargo authorization missing" and "temperature capability
+missing" from one row
+
+Rather than a many-to-many join between courier authorizations and `cargo.TemperatureProfile`,
+`CargoAuthorization` is one row per `(courier, cargo_class)` with a single
+`supports_refrigeration` boolean. Existence of an active row answers "is this courier authorized
+for this cargo class at all"; the boolean answers "is this courier also authorized to handle it
+under refrigerated conditions." Since Phase 2 only has two temperature profiles (ambient,
+refrigerated — frozen is deferred, see Phase 2's design decisions), a single boolean captures the
+full temperature-capability question without an extra join table. `Vehicle`/`Equipment` each carry
+their *own* `supports_refrigeration` flag too, deliberately kept as a **separate** concept from
+`CargoAuthorization.supports_refrigeration`: the former is a physical-capability fact (does this
+courier currently have refrigerated equipment on hand), the latter is an authorization/
+certification fact (is this courier *approved* to handle refrigerated cargo of this class at all).
+The eligibility engine checks both, as two independent hard filters
+(`TEMPERATURE_CAPABILITY_MISSING` vs. `VEHICLE_EQUIPMENT_INCOMPATIBLE`), matching
+`docs/PRODUCT_REQUIREMENTS.md` section 11's two separate list entries.
+
+### 5. Honest capacity/workload proxy — current workload is always 0 in Phase 3, by fact not estimate
+
+There is no `DeliveryAssignment` model yet (that's Phase 4), so there is nothing in this phase's
+data model to count a courier's live in-flight deliveries against.
+`apps.couriers.eligibility._current_workload` always returns `0` — this is stated as a documented
+fact about what Phase 3 can and cannot measure, not an estimate or a placeholder pretending to be
+real. It is checked against `CourierAvailability.max_concurrent_deliveries` (a *configured capacity
+limit*, e.g. "this courier can carry at most N concurrent deliveries" — a real, admin-editable
+setting), so the `CAPACITY_EXCEEDED` hard filter is still genuinely testable today (set
+`max_concurrent_deliveries=0` to simulate "at capacity") even though the real-world trigger for it
+(an actual live assignment count) doesn't exist until Phase 4. `_current_workload` takes a
+`courier` parameter it does not yet use, specifically so Phase 4 can implement real counting
+there without changing any caller's signature.
+
+### 6. Service-zone matching: simple zone-equality, not geofencing
+
+`apps.couriers.eligibility._check_service_zone` compares the courier's current
+`CourierAvailability.current_service_zone` (falling back to `CourierProfile.home_service_zone` if
+the courier has no availability row, or has one with no current zone set) against the delivery
+request's **pickup** facility's `ServiceZone` (`Facility.service_zone`, from Phase 1). This is
+plain FK-equality, not distance/geofencing math — consistent with Phase 1's decision to keep
+facility coordinates as plain decimals until Phase 4 actually needs geo-distance dispatch logic. If
+either side has no zone set at all, the filter does **not** fail the courier — a documented,
+deliberately permissive default, since the engine cannot honestly claim a mismatch it has no data
+for. This honest permissiveness is itself covered by a test
+(`test_missing_zone_data_does_not_fail_the_zone_filter`).
+
+### 7. Facility restriction: a simple, documented heuristic over free text, not a rules engine
+
+`Facility.verification_requirements` (Phase 1) is free text — there is no structured
+"required credential/role" field on `Facility` to check against. The `FACILITY_RESTRICTION_NOT_MET`
+filter therefore uses the only real signal that field carries: if either the pickup or destination
+facility has any non-blank `verification_requirements` text, the delivery is treated as requiring
+an identity-verified courier, checked against `CourierProfile.identity_review_status ==
+IdentityReviewStatus.APPROVED`. This is a deliberately simple, honestly-documented heuristic, not a
+real per-facility rules engine — a facility whose free-text requirement is about something entirely
+unrelated to identity (e.g. "loading dock access code required") would still trigger this same
+check today. Building a genuine structured facility-restriction rule type is reasonable future work
+once a real requirement taxonomy exists.
+
+### 8. SLA-mathematically-infeasible: explicitly out of scope, with a real place in the return type
+
+Per `docs/PRODUCT_REQUIREMENTS.md` section 11's tenth hard filter, "SLA mathematically infeasible"
+needs a real ETA/routing estimate that does not exist until Phase 4's dispatch scoring.
+`EligibilityResult.sla_feasibility` is a dedicated field, always set to the literal string
+`"not_evaluated"` in this phase — a documented "not yet evaluated," never silently omitted, and
+never allowed to make `eligible` false on its own (verified by
+`test_sla_feasibility_is_never_a_hard_failure_reason`, which deliberately fails a courier on every
+other filter and still asserts no SLA-related code ever appears in `hard_failure_reasons`). Phase 4
+can implement a real check by changing what value this one field carries — no breaking change to
+`check_courier_eligibility`'s signature or callers is needed.
+
+### 9. `eligible_couriers_for`/`eligible_deliveries_for` are Python-level filters, not optimized queries
+
+Both convenience functions fetch a full candidate queryset (`CourierProfile.objects.all()` or
+`DeliveryRequest.objects.filter(status=READY_FOR_DISPATCH)`) and then call
+`check_courier_eligibility` once per candidate in Python — O(n×m), not a single optimized SQL
+query with `WHERE`/`JOIN` conditions pushed down. This is honestly fine at this prototype's demo
+data volumes (tens of couriers, tens of open deliveries) and is stated as a known, deliberate
+scope limit in the module's own docstring; a real optimization pass is reasonable future work once
+Phase 4 needs to run this over meaningfully large candidate sets.
+
+### 10. Hypothesis property test, alongside explicit per-filter tests
+
+Per docs/TECH_STACK_AND_ZERO_COST_POLICY.md's explicit mention of Hypothesis, `hypothesis` was
+added as a dev-only dependency (see "Exact files created/changed" above) and used for one property
+test, `test_eligible_iff_every_hard_filter_passes`
+(`apps/couriers/tests/test_eligibility.py`): for 60 randomly generated combinations of the nine
+implemented hard-filter pass/fail conditions, it builds a real courier/delivery-request scenario
+matching those flags and asserts the resulting `EligibilityResult` reports *exactly* the expected
+set of failure codes (via an independently-written reference calculation,
+`_expected_codes`), and that `eligible` is true iff that expected set is empty. This is in addition
+to — not instead of — one explicit positive test (`test_fully_qualified_courier_is_eligible_with_no_reasons`)
+and one negative test per filter (16 more tests covering sub-cases like "no active vehicle at all"
+vs. "vehicle present but not refrigerated" vs. "refrigerated equipment substitutes for a
+refrigerated vehicle"). The property test's real bug-catching power was verified during
+development: a deliberately injected regression (skipping the capacity check entirely) was
+correctly caught and minimally shrunk by Hypothesis before being reverted — see the "Verification"
+note below. `max_examples=60` and `deadline=None` are set explicitly (60 real DB scenarios per
+test run is fast — well under a second in this suite — and disabling the per-example timing
+deadline avoids flakiness from ordinary DB write latency, not from anything slow in the eligibility
+check itself).
+
+## The eligibility engine
+
+`apps.couriers.eligibility.check_courier_eligibility(courier, delivery_request, *, as_of=None) ->
+EligibilityResult` implements every hard filter from `docs/PRODUCT_REQUIREMENTS.md` section 11
+that Phase 3's data model can honestly support:
+
+| Filter | Implemented as |
+|---|---|
+| account not active | `CourierProfile.status != CourierStatus.APPROVED` |
+| credential expired (or missing) | No approved, unexpired `CourierCredential` for each of `DRIVER_LICENSE`/`INSURANCE` |
+| cargo authorization missing | No active `CargoAuthorization` row for the delivery's `cargo_class` |
+| temperature capability missing | Authorization exists but `supports_refrigeration=False` and the delivery requires refrigeration |
+| vehicle/equipment incompatible | No active vehicle at all, or (when refrigeration is required) no active refrigerated vehicle/equipment |
+| outside service zone | Courier's current/home `ServiceZone` != pickup facility's `ServiceZone` (permissive if either is unset) |
+| unavailable | `CourierAvailability` missing or offline, or the pickup window start (converted to America/New_York) falls outside a configured shift |
+| current capacity exceeded | `_current_workload` (always `0` — see design decision 5) >= `CourierAvailability.max_concurrent_deliveries` |
+| facility restriction not met | Pickup/destination facility has non-blank `verification_requirements` and courier's `identity_review_status != APPROVED` |
+| SLA mathematically infeasible | **Not evaluated** — `EligibilityResult.sla_feasibility == "not_evaluated"` always (design decision 8) |
+
+`EligibilityResult` is a frozen dataclass: `eligible: bool`, `hard_failure_reasons: tuple[EligibilityFailureReason, ...]`
+(each a `(code, message)` pair — every failing filter is reported, not just the first), and
+`sla_feasibility: str`. `eligible_couriers_for(delivery_request)` and
+`eligible_deliveries_for(courier)` are the inverse queries (design decision 9); the latter only
+considers `READY_FOR_DISPATCH` requests, which is what makes "no unauthorized job appears to
+courier" a meaningful, testable claim — a `DRAFT`/`VALIDATION_REQUIRED` request is never a
+candidate job at all, eligible or not.
+
+## Credential expiration warnings
+
+`CourierCredentialQuerySet.expiring_within(days, *, as_of=None)` and `.expired(as_of=None)` (both
+available as `courier.credentials.expiring_within(...)` via the manager) are the query/flagging
+logic `docs/IMPLEMENTATION_ROADMAP.md` Phase 3 asks for. `python manage.py
+flag_expiring_credentials [--within-days 30]` (`apps/couriers/management/commands/
+flag_expiring_credentials.py`) prints a plain-text report of already-expired and soon-expiring
+approved credentials to stdout. **This sends no real notification** — email/SMS/in-app delivery of
+this information is explicitly Phase 7 work (`apps.notifications`), stated in the command's own
+docstring and help text.
+
+## Data minimization checked
+
+Per `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`, this is the first phase handling anything
+identity-document-*adjacent*, so every field was reviewed with that in mind: `CourierCredential`
+stores a status enum, issued/expiry dates, a reviewer FK, and `evidence_reference` (a placeholder
+text label/synthetic filename only — see design decision 3) — never a real driver's-license
+number, real SSN, real insurance policy number, or an uploaded document. `Vehicle.plate_number` is
+explicitly documented as a synthetic placeholder string, never a real plate. `CourierProfile.notes`
+and `Organization.notes`-style free-text fields carry the same "internal operational notes only,
+never diagnosis/clinical/SSN/ID-number" help text convention already used elsewhere in the
+codebase. No field anywhere in `apps.couriers` stores a diagnosis, lab result, clinical note,
+medication indication, SSN, or insurance identifier.
+
+## Deferred, out of scope for Phase 3 (by design, per roadmap)
+
+- **`CourierLocationPing`** — Phase 5 (courier PWA and tracking) work; not built.
+- **`CourierPerformanceSnapshot`** — Phase 4 (dispatch scoring history) work; not built.
+- **A full courier-status change history/audit log** — deferred to Phase 8's "audit viewer" (design
+  decision 2); `CourierProfile.status` is a plain field today.
+- **`DeliveryAssignment`** does not exist yet (Phase 4) — the `CAPACITY_EXCEEDED` filter's
+  "current workload" is honestly always `0` in this phase (design decision 5), not a real
+  in-flight-delivery count.
+- **SLA-mathematically-infeasible** is explicitly not evaluated (design decision 8) —
+  `EligibilityResult.sla_feasibility` always reports `"not_evaluated"`.
+- **No real background-check/identity-verification provider integration** —
+  `IdentityReviewStatus`/`DriverLicenseStatus`/`InsuranceStatus` are placeholder, manually-set
+  enums (per `docs/PRODUCT_REQUIREMENTS.md` section 6 and
+  `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`'s explicit Checkr prohibition); no `BackgroundCheckProvider`
+  adapter is introduced this phase (nothing external to adapt for yet).
+- **No file upload for credential evidence** — `evidence_reference` is placeholder text only
+  (design decision 3); there is no `FileField`/`ImageField`/upload view anywhere in `apps.couriers`.
+- **`TrainingRecord` is not wired into the eligibility engine** — `docs/PRODUCT_REQUIREMENTS.md`
+  section 11's hard-filter list has no "training missing" entry, and none of Phase 2's three
+  seeded cargo classes require a specific training certification in this prototype. The model
+  exists for onboarding-record completeness (section 6: "training records") and is available for a
+  later phase to wire in if a cargo class ever needs it.
+- **No dedicated courier-facing UI/views** — Phase 3 scope (per the roadmap) is the data model,
+  admin, and eligibility engine; the courier PWA itself (including real job-offer accept/reject UI)
+  is Phase 5.
+- **No demo/seed courier data added to `seed_demo_data`** — Phase 3 introduces no data migration
+  (unlike Phase 2's cargo/pricing reference data) since there is no fixed courier taxonomy to seed;
+  a manual admin-driven courier onboarding walkthrough was not performed this phase (covered
+  instead by the automated test suite's factories, which exercise the identical model/service
+  layer a real onboarding flow would use).
+- **`eligible_couriers_for`/`eligible_deliveries_for` are O(n×m) Python-level filters**, not
+  optimized database queries (design decision 9).
+- Coverage is 95%, not 100% (see gate output below) — no hard coverage threshold was specified as
+  a gate; the uncovered lines are concentrated in `__str__`/defensive branches and the pre-existing
+  Phase 0 environment-entrypoint gaps, none of it load-bearing Phase 3 logic.
+- `*.tests.*` modules remain excluded from `mypy` checking (factory_boy stub gap, unchanged from
+  Phase 1) — all production code in `apps.couriers` has full mypy coverage, verified by the
+  `mypy .` run below (145 source files, 0 errors).
+- Not yet built (correctly out of scope for Phase 3, per the roadmap): dispatch, custody, tracking,
+  temperature (readings/excursions), incidents, notifications, billing, reporting — all later
+  phases.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. `uv lock` and `uv sync --group dev` were re-run after
+adding `hypothesis` to `pyproject.toml` (both succeeded against the real PyPI index — no fallback
+needed; resolved `hypothesis==6.165.0` + its one transitive dependency, `sortedcontainers==2.4.0`).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+145 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 145 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/accounts/migrations/0002_user_is_courier.py` and
+`apps/couriers/migrations/0001_initial.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+229 passed in 6.57s
+```
+Coverage: 95% overall (2023 statements, 100 missed) for the whole project including Phase 0/1/2
+code — all 196 Phase 0/1/2 tests still pass, plus 33 new Phase 3 tests (35 tests total collected
+under `apps/couriers`, two of which — `test_apps.py`'s smoke tests — predate this phase).
+New-app coverage: `apps/couriers/management/commands/flag_expiring_credentials.py` 100%,
+`apps/couriers/admin.py` 99%, `apps/couriers/eligibility.py` 98% (3 lines uncovered: a defensive
+`cargo_class_id is None` branch documented as unreachable via `eligible_deliveries_for`'s
+`READY_FOR_DISPATCH`-only candidate set, and two `__str__`-adjacent lines), `apps/couriers/models.py`
+95% (uncovered lines are `__str__` methods and admin-only display methods not separately
+exercised). The remaining project-wide misses are the pre-existing Phase 0 environment-entrypoint
+gaps (`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`) plus
+a handful of defensive branches in other apps' `admin.py`/`views.py` — none of it Phase 3 code.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 21 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is 21, up from Phase 2's 20 — the one addition is `hypothesis` (dev-only,
+explicitly named as an approved zero-cost dependency in
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`).
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from Phase 1/2 (`.secrets.baseline` still has empty
+`results: {}`). Run after `git add -A` so every new Phase 3 file was actually scanned (not just
+previously-tracked ones — the same lesson Phase 1/2 called out).
+
+### Property-test verification (beyond the automated suite)
+
+To confirm `test_eligible_iff_every_hard_filter_passes` has real bug-catching power and is not a
+vacuously-true property, a regression was deliberately injected into
+`apps/couriers/eligibility.py` (the capacity-exceeded check's result was hard-coded to `None`,
+silently skipping it) and the test was re-run: it failed immediately and Hypothesis's shrinker
+reduced the failing example down to the single minimal flag combination
+(`capacity_exceeded=True`, every other flag `False`), correctly reporting `assert set() ==
+{'capacity_exceeded'}`. The injected regression was then reverted and the full suite (`pytest`,
+229 tests) was re-run and confirmed green again before this phase's final commit.
+
+## Known gaps / deviations (honest list)
+
+See "Deferred, out of scope for Phase 3" above for the full list. In summary: `CourierLocationPing`
+and `CourierPerformanceSnapshot` are not built (Phase 5/Phase 4 respectively); courier-status
+history is a plain field, not an audit log (deferred to Phase 8); the `CAPACITY_EXCEEDED` filter's
+workload figure is honestly always `0` (no `DeliveryAssignment` model exists yet); SLA feasibility
+is explicitly not evaluated; no background-check/identity-verification provider is integrated (by
+policy); no credential-evidence file upload exists at all; `TrainingRecord` is not wired into
+eligibility; there is no courier-facing UI yet (Phase 5); `eligible_couriers_for`/
+`eligible_deliveries_for` are O(n×m) Python-level filters, not optimized queries.
+
+## Commit history for this phase
+
+(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)

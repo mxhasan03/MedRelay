@@ -49,6 +49,7 @@ ALLOWED_PACKAGES: set[str] = {
     "djangorestframework-stubs",
     "coverage",
     "detect-secrets",
+    "hypothesis",
 }
 
 # ---------------------------------------------------------------------------
