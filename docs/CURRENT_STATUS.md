@@ -1391,4 +1391,10 @@ eligibility; there is no courier-facing UI yet (Phase 5); `eligible_couriers_for
 
 ## Commit history for this phase
 
-(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)
+1. `ff7f718a72cea1885f3c42d9dbec985d4a499b3e` — "Phase 3: courier onboarding, credentials, and
+   hard-eligibility engine" — the main Phase 3 commit (all models, migrations, admin,
+   eligibility engine, management command, tests, and dependency/allowlist changes).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag Phase 0 called out), so this line was added in a small follow-up
+commit after commit (1) landed — see `git log --oneline` for the definitive, current history.
