@@ -1,6 +1,6 @@
 """AppConfig for the facilities app.
 
-Customer facilities, contacts, receiving rules, and service zones. No domain models yet in Phase 0.
+Customer facilities, contacts, receiving rules, and service zones. Phase 1.
 """
 
 from django.apps import AppConfig
