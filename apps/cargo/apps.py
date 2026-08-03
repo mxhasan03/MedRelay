@@ -1,6 +1,8 @@
 """AppConfig for the cargo app.
 
-Cargo classes, policies, and temperature profiles. No domain models yet in Phase 0.
+Cargo classes, policies, temperature profiles, packages, package
+identifiers, and packaging attestations — see apps/cargo/models.py
+(Phase 2, docs/IMPLEMENTATION_ROADMAP.md).
 """
 
 from django.apps import AppConfig
