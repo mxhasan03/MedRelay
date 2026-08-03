@@ -1,6 +1,8 @@
 """AppConfig for the deliveries app.
 
-Delivery requests, stops, and the delivery state machine. No domain models yet in Phase 0.
+Delivery requests, stops, the delivery state machine, pricing/quotes, and
+recurring routes — see apps/deliveries/models.py (Phase 2,
+docs/IMPLEMENTATION_ROADMAP.md).
 """
 
 from django.apps import AppConfig

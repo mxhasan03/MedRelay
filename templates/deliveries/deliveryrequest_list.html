@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Delivery Requests — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:70rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <p><a href="{% url 'organization-list' %}">&larr; Organizations</a></p>
+    <h1>Delivery Requests</h1>
+    <p style="color:#555;font-size:0.9rem;">
+        Showing only delivery requests for organizations {{ request.user }} may view.
+    </p>
+    <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="text-align:left;border-bottom:2px solid #ccc;">
+                <th style="padding:0.4rem;">Delivery</th>
+                <th style="padding:0.4rem;">Organization</th>
+                <th style="padding:0.4rem;">Service Level</th>
+                <th style="padding:0.4rem;">Status</th>
+                <th style="padding:0.4rem;">Cargo Class</th>
+                <th style="padding:0.4rem;">Estimated Price</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for dr in delivery_requests %}
+            <tr style="border-bottom:1px solid #eee;">
+                <td style="padding:0.4rem;">
+                    <a href="{% url 'deliveryrequest-detail' dr.pk %}">{{ dr.pk|truncatechars:8 }}</a>
+                </td>
+                <td style="padding:0.4rem;">{{ dr.organization.name }}</td>
+                <td style="padding:0.4rem;">{{ dr.get_service_level_display }}</td>
+                <td style="padding:0.4rem;">{{ dr.get_status_display }}</td>
+                <td style="padding:0.4rem;">{{ dr.cargo_class|default:"—" }}</td>
+                <td style="padding:0.4rem;">{{ dr.estimated_price|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" style="padding:0.4rem;">No delivery requests visible to this account.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Delivery {{ delivery_request.pk|truncatechars:8 }} — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:70rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <p><a href="{% url 'deliveryrequest-list' %}">&larr; Delivery Requests</a></p>
+    <h1>Delivery {{ delivery_request.pk|truncatechars:8 }}</h1>
+    <p>Organization: <a href="{% url 'organization-detail' delivery_request.organization.pk %}">{{ delivery_request.organization.name }}</a></p>
+    <p>Service level: {{ delivery_request.get_service_level_display }} &middot; Status: <strong>{{ delivery_request.get_status_display }}</strong></p>
+    <p>Cargo class: {{ delivery_request.cargo_class|default:"(not set)" }} &middot; Temperature: {{ delivery_request.temperature_profile|default:"(not set)" }}</p>
+    <p>Package count: {{ delivery_request.package_count }} &middot; Estimated price: {{ delivery_request.estimated_price|default:"—" }}</p>
+
+    {% if validation_errors %}
+    <div style="border:1px solid #7a1f1f;background:#fdecea;padding:0.75rem;margin:1rem 0;">
+        <strong>Blocking dispatch — validation required:</strong>
+        <ul>
+            {% for error in validation_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if can_manage %}
+    <p>
+        <form method="post" action="{% url 'deliveryrequest-submit' delivery_request.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit">Re-run submit/validation</button>
+        </form>
+        <form method="post" action="{% url 'deliveryrequest-cancel' delivery_request.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit">Cancel request</button>
+        </form>
+    </p>
+    {% endif %}
+
+    <h2>Stops</h2>
+    <ul>
+        {% for stop in delivery_request.stops.all %}
+        <li>{{ stop.get_stop_type_display }}: <a href="{% url 'facility-detail' stop.facility.pk %}">{{ stop.facility.name }}</a></li>
+        {% empty %}
+        <li>No stops recorded.</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Packages</h2>
+    <ul>
+        {% for package in delivery_request.packages.all %}
+        <li>#{{ package.sequence_number }} — {{ package.cargo_class }} / {{ package.temperature_profile }}
+            {% if package.identifier %} &mdash; barcode: <code>{{ package.identifier.code }}</code>{% endif %}</li>
+        {% empty %}
+        <li>No packages recorded.</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Packaging attestation</h2>
+    {% if packaging_attestation %}
+    <p>Attested by {{ packaging_attestation.attested_by|default:"(unknown)" }} at {{ packaging_attestation.attested_at }}.
+       Packaging confirmed: {{ packaging_attestation.packaging_confirmed|yesno:"yes,no" }};
+       classification confirmed: {{ packaging_attestation.classification_confirmed|yesno:"yes,no" }}.</p>
+    {% else %}
+    <p>No packaging attestation on file.</p>
+    {% endif %}
+
+    <h2>Quote</h2>
+    {% if quote %}
+    <ul>
+        <li>Base fee: {{ quote.base_fee }}</li>
+        <li>Distance: {{ quote.distance_km }} km (distance/time fee: {{ quote.distance_time_fee }})</li>
+        <li>Service level surcharge: {{ quote.service_level_surcharge }}</li>
+        <li>Cargo/equipment surcharge: {{ quote.cargo_equipment_surcharge }}</li>
+        <li>Toll estimate: {{ quote.toll_estimate }}</li>
+        <li>Wait-time placeholder: {{ quote.wait_time_fee }}</li>
+        <li>After-hours surcharge: {{ quote.after_hours_surcharge }}</li>
+        <li>Return-trip fee: {{ quote.return_trip_fee }}</li>
+        <li><strong>Total: {{ quote.total_price }}</strong></li>
+    </ul>
+    {% else %}
+    <p>No quote computed yet.</p>
+    {% endif %}
+
+    <h2>Status history</h2>
+    <ul>
+        {% for transition in delivery_request.status_transitions.all %}
+        <li>{{ transition.occurred_at }} — {{ transition.from_status|default:"(none)" }} &rarr; {{ transition.to_status }}
+            {% if transition.actor %}(by {{ transition.actor }}){% endif %}</li>
+        {% empty %}
+        <li>No status history recorded.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}
