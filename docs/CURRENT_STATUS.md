@@ -2337,4 +2337,12 @@ require a baseline entry.
 
 ## Commit history for this phase
 
-(Recorded after the commit lands — see `git log --oneline` for the definitive, current history.)
+1. `b063e5475c6a2744ec662922146fbee021136c52` — "Phase 5: courier PWA, job offers, pickup/transit
+   workflow, and location tracking" — the main Phase 5 commit (all models, migrations, admin,
+   services, courier PWA views/templates, PWA shell/service worker, offline queue, and the
+   idempotency mechanism).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag every prior phase called out), so this line was added in a small
+follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
+history.
