@@ -26,6 +26,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from apps.organizations.forms import OrganizationForm
 from apps.organizations.models import Organization
 from apps.organizations.services import (
+    can_create_delivery_requests,
     can_manage_organization,
     can_view_organization,
     has_cross_org_manage_access,
@@ -54,6 +55,9 @@ class OrganizationDetailView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         context["can_manage"] = can_manage_organization(self.request.user, self.object.pk)
+        context["can_create_deliveries"] = can_create_delivery_requests(
+            self.request.user, self.object.pk
+        )
         context["memberships"] = self.object.memberships.select_related("user").all()
         return context
 

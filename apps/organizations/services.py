@@ -28,7 +28,12 @@ from django.contrib.auth.models import AnonymousUser
 from django.db.models import Model, QuerySet
 
 from apps.accounts.models import InternalRole, User
-from apps.organizations.models import ORG_MANAGING_ROLES, Organization, OrganizationMembership
+from apps.organizations.models import (
+    ORG_MANAGING_ROLES,
+    CustomerRole,
+    Organization,
+    OrganizationMembership,
+)
 
 _T = TypeVar("_T", bound=Model)
 
@@ -134,6 +139,22 @@ def can_manage_organization(user: AnyUser, organization_id: int) -> bool:
 # `requester_dispatcher` manage facilities without full org-admin rights —
 # without touching call sites that already say "facilities".
 can_manage_facilities = can_manage_organization
+
+# Customer-org roles allowed to create delivery requests for their own
+# organization (apps.deliveries, Phase 2). Deliberately broader than
+# `ORG_MANAGING_ROLES`: "requester/dispatcher" is the role
+# docs/PRODUCT_REQUIREMENTS.md section 4 names explicitly for this job, and
+# should not need full org-admin rights just to submit a delivery request.
+DELIVERY_REQUEST_CREATOR_ROLES = frozenset(
+    {CustomerRole.OWNER, CustomerRole.ADMINISTRATOR, CustomerRole.REQUESTER_DISPATCHER}
+)
+
+
+def can_create_delivery_requests(user: AnyUser, organization_id: int) -> bool:
+    """Can the user create delivery requests on behalf of this organization?"""
+    if get_org_role(user, organization_id) in DELIVERY_REQUEST_CREATOR_ROLES:
+        return True
+    return has_cross_org_manage_access(user)
 
 
 def scope_queryset_to_user_orgs(

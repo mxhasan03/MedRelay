@@ -44,5 +44,18 @@
     {% if can_manage %}
     <p><a href="{% url 'facility-create' organization.pk %}">+ New facility</a></p>
     {% endif %}
+
+    <h2>Delivery requests</h2>
+    <ul>
+        {% for delivery_request in organization.delivery_requests.all|slice:":20" %}
+        <li><a href="{% url 'deliveryrequest-detail' delivery_request.pk %}">{{ delivery_request.pk|truncatechars:8 }}</a>
+            &mdash; {{ delivery_request.get_status_display }}</li>
+        {% empty %}
+        <li>No delivery requests yet.</li>
+        {% endfor %}
+    </ul>
+    {% if can_create_deliveries %}
+    <p><a href="{% url 'deliveryrequest-create' organization.pk %}">+ New delivery request</a></p>
+    {% endif %}
 </div>
 {% endblock %}
