@@ -248,7 +248,10 @@ $ git diff --cached --stat | tail -1
 121 files changed, 3886 insertions(+)
 ```
 
-Commit hash: **see the top of the git log** — this file was written before the commit that
-includes it, so the exact hash of *that* commit is recorded in a follow-up commit's message and
-in this file's next revision (see the final report delivered alongside this work for the literal
-hash values of both commits).
+Phase 0 foundation commit hash: `1ffa79b4f0199afdd0ab00d8f11b935336dc4620`
+("Phase 0: repository foundation for MedRelay prototype", 122 files, 4140 insertions).
+
+This file was necessarily written *before* that commit was created (a doc can't contain its own
+future commit's hash), so this line was added in a small follow-up commit that touches only this
+file. That follow-up commit's own hash is reported in the final human-facing report for this
+session, alongside this hash, so both are available without needing to inspect `git log` by hand.
