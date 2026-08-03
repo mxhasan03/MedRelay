@@ -1850,4 +1850,11 @@ $ python -m pytest apps/dispatch/tests/test_concurrency.py -q --no-cov --ds=conf
 
 ## Commit history for this phase
 
-(Recorded after the commit lands — see `git log --oneline` for the definitive, current history.)
+1. `a1d511a6aad4efe1f0caad2a3113c525a7b0068c` — "Phase 4: dispatch recommendations, scoring,
+   assignment, and operations console" — the main Phase 4 commit (all models, migrations, admin,
+   services, scoring/SLA engine, dispatch board, and the `apps.couriers`/`apps.deliveries`
+   wiring changes).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag Phase 0 called out), so this line was added in a small follow-up
+commit after commit (1) landed — see `git log --oneline` for the definitive, current history.
