@@ -622,3 +622,378 @@ not just the test suite, demonstrates tenant isolation.
 ## Commit history for this phase
 
 (Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)
+
+# Current Status — Phase 2 (Cargo Policy and Delivery Requests)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 2 on top of the
+Phase 1 foundation (starting point: commit `985c53f`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 2 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 2 — Cargo policy and delivery
+requests": cargo classes/policies, temperature profiles, packages/package identifiers (with real
+QR rendering)/packaging attestations, a delivery-request "wizard" (single form), the early-lifecycle
+delivery state machine with an append-only transition log, a deterministic synthetic quote engine,
+a keyword-based prohibited-cargo guard, and the `RecurringRoute` data model (CRUD only — generation
+is a documented stub). All new models have migrations (including two data migrations that seed fixed
+reference rows), all quality gates pass (see below), and every Phase 2 acceptance criterion — missing
+cargo classification/packaging attestation blocking `READY_FOR_DISPATCH`, prohibited-cargo keyword
+rejection, deterministic per-component quote pricing, and append-only status transitions — is covered
+by real, passing tests.
+
+## Exact files created/changed
+
+`git diff --cached 985c53f --stat` (Phase 1's final commit → this phase's staged working tree):
+
+```
+46 files changed, 4204 insertions(+), 5 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/cargo/`**: `models.py` (`CargoClassCode`/`CargoClass`, `CargoPolicy`,
+  `TemperatureProfileCode`/`TemperatureProfile`, `Package`, `PackageIdentifier`,
+  `PackagingAttestation`), `services.py` (`get_cargo_policy`, `temperature_profile_allowed`,
+  `create_packages_for_delivery_request`), `validation.py` (the prohibited-cargo keyword guard),
+  `admin.py`, `apps.py` (docstring update), `migrations/0001_initial.py` + `0002_initial.py` (the FK
+  cycle with `deliveries` forces Django to split cargo's initial migration in two — see "Design
+  decisions" below), `migrations/0003_seed_cargo_reference_data.py` (data migration: 3 `CargoClass` +
+  3 `CargoPolicy` + 2 `TemperatureProfile` rows), `migrations/0004_alter_package_description.py`
+  (help-text-only field alter), `management/commands/render_package_qr.py` (QR PNG-rendering demo
+  command), `tests/factories.py`, `tests/test_models.py`, `tests/test_services.py`,
+  `tests/test_validation.py`, `tests/test_render_package_qr_command.py`.
+- **`apps/deliveries/`**: `models.py` (`ServiceLevel`, `DeliveryStatus`, `RecipientVerificationMethod`,
+  `DeliveryRequest`, `StopType`, `DeliveryStop`, `DeliveryStatusTransition`, `PricingRuleKey`,
+  `PricingRule`, `Quote`, `RecurrenceFrequency`, `RecurringRoute`, `RecurringRouteStop`),
+  `state_machine.py` (`ALLOWED_TRANSITIONS`, `validate_ready_for_dispatch`,
+  `transition_delivery_request`), `pricing.py` (the synthetic quote engine), `services.py`
+  (`create_delivery_request`, `submit_delivery_request`, `cancel_delivery_request`,
+  `update_delivery_request_with_version_check`,
+  `generate_delivery_requests_for_recurring_route` stub), `exceptions.py`
+  (`InvalidTransitionError`, `StaleDeliveryRequestError`), `forms.py` (`DeliveryRequestForm`, the
+  wizard), `views.py`, `urls.py`, `admin.py`, `apps.py` (docstring update),
+  `migrations/0001_initial.py`, `migrations/0002_seed_pricing_rules.py` (13 seeded `PricingRule`
+  rows), `tests/factories.py`, `tests/test_models.py`, `tests/test_state_machine.py`,
+  `tests/test_pricing.py`, `tests/test_services.py`, `tests/test_views.py`.
+- **`apps/organizations/services.py`**: added `DELIVERY_REQUEST_CREATOR_ROLES` and
+  `can_create_delivery_requests` (owner/administrator/requester-dispatcher, or cross-org manage
+  access) — the permission gate for the delivery-request wizard, following the exact same
+  allowlist-function pattern as `can_manage_organization`/`can_manage_facilities`.
+- **`apps/organizations/views.py`** / **`templates/organizations/organization_detail.html`**: added
+  a "Delivery requests" section and "+ New delivery request" link to the organization detail page.
+- **`templates/deliveries/*.html`**: `deliveryrequest_list.html`, `deliveryrequest_detail.html`,
+  `deliveryrequest_form.html` — same minimal plain-HTML convention as Phase 1's templates.
+- **`config/urls.py`**: added `path("deliveries/", include("apps.deliveries.urls"))`.
+- **`pyproject.toml`** / **`uv.lock`**: added `segno>=1.6,<2.0` (pure-Python QR generation, no
+  Pillow/system dependency — on the zero-cost allowed list per
+  docs/TECH_STACK_AND_ZERO_COST_POLICY.md's "Segno or qrcode for QR generation").
+- **`apps/audit/management/commands/audit_cost.py`**: added `"segno"` to `ALLOWED_PACKAGES`.
+- **`docs/COST_AUDIT.md`**: regenerated (20 dependencies now, was 19).
+
+## Design decisions
+
+### 1. `CargoClass`/`TemperatureProfile` as real lookup models, not bare enums
+
+Both are modeled as real tables with a `TextChoices`-backed `code` field, seeded via data
+migrations (`apps/cargo/migrations/0003_seed_cargo_reference_data.py`) rather than plain
+`TextChoices` enums used directly as `CharField(choices=...)` on `Package`/`DeliveryRequest`.
+`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 3 lists `CargoClass` and `CargoPolicy` as two
+separate entities, and `CargoPolicy` needs an FK target to attach class-specific rules
+(`requires_packaging_attestation`, `allows_ambient`, `allows_refrigerated`) to — a real model makes
+that relationship a normal FK rather than a synthetic `CharField` join. `TemperatureProfile` gets
+the same treatment for symmetry and because `CargoPolicy.allows_temperature_profile()` needs a
+stable object to check against. The cost: one extra lookup table each for what is, in practice, a
+fixed three-row (cargo) and two-row (temperature) taxonomy — there is no UI/API path anywhere in
+this codebase to create a fourth `CargoClass` or a third `TemperatureProfile` (frozen is explicitly
+out of scope). This is the direct, deliberate consequence of `Package`/`DeliveryRequest` holding an
+FK to `apps.cargo.CargoClass`/`TemperatureProfile` rather than a `CharField`, which in turn means
+`apps.cargo` and `apps.deliveries` have a two-way *data-model* dependency (see item 2 below).
+
+### 2. Two-way cross-app FK relationship between `cargo` and `deliveries`
+
+`cargo.Package`/`cargo.PackagingAttestation` hold an FK to `deliveries.DeliveryRequest` (string
+reference, `"deliveries.DeliveryRequest"`), while `deliveries.DeliveryRequest` holds FKs back to
+`cargo.CargoClass`/`cargo.TemperatureProfile`. This matches `docs/ARCHITECTURE_AND_DATA_MODEL.md`'s
+entity grouping (cargo/packages vs. delivery/dispatch are separate bounded groups, but with cargo
+depending on which delivery request a package belongs to). It is an ordinary Django cross-app FK
+relationship (resolved lazily by the app registry — no Python import cycle, since neither
+`models.py` module imports the other's `models` module directly), not a service-layer coupling;
+CLAUDE.md's "cross-app calls go through service functions" rule is about *behavior* (tenant-scoping
+logic, etc.), not plain FK relations, which every app in this codebase already uses. Practical
+consequence: `python manage.py makemigrations cargo deliveries` produces a **split migration** for
+`cargo` — `0001_initial.py` creates the tables, and a separate `0002_initial.py` (depending on both
+`cargo.0001_initial` and `deliveries.0001_initial`) adds the FK columns that point into
+`deliveries`. This is Django's own dependency-resolution behavior for a genuine bidirectional
+model-FK cycle, not a hand-rolled workaround.
+
+### 3. Wizard = a single Django `Form`, not a multi-step UI
+
+`docs/PRODUCT_REQUIREMENTS.md` section 5 describes the delivery-request wizard by its *required
+field list* (pickup/destination facility, pickup window, required delivery time, service level,
+cargo class, package count, approximate dimensions/weight, temperature requirement, sender/recipient
+contact, packaging/classification attestation, recipient verification method, facility
+instructions), not by a mandated multi-page UI, and the roadmap's Phase 2 acceptance criteria are
+about *validation/blocking behavior*, not step count. `apps/deliveries/forms.py`'s
+`DeliveryRequestForm` is a single `forms.Form` (not a `ModelForm`, since two of its fields —
+`pickup_facility`/`destination_facility` — aren't `DeliveryRequest` model fields at all, and two
+more — `attest_packaging`/`attestation_notes` — belong to a different model, `PackagingAttestation`)
+covering every required field from the list above in one page, POSTed once to
+`DeliveryRequestCreateView`. A real multi-step client-side wizard (with per-step validation, a
+progress indicator, etc.) is exactly the kind of UI-polish investment `docs/IMPLEMENTATION_ROADMAP.md`
+Phase 8 ("unified design system... accessibility pass") is for. This single-form approach proves the
+same real HTTP mechanism Phase 1's Organization/Facility CRUD did: a real POST, real tenant-scoped
+permission checks, real service-layer creation, real validation blocking — see
+`apps/deliveries/tests/test_views.py::test_wizard_blocks_dispatch_when_packaging_attestation_missing`.
+
+`pickup_facility`'s queryset is scoped to the requesting organization's own facilities (a delivery
+originates from your own site); `destination_facility`'s queryset is *any* active facility across
+*any* organization, since real B2B courier deliveries routinely cross organizations (e.g. an
+urgent-care clinic's specimens going to a different organization's diagnostic lab) — restricting
+destination to the requester's own org would make the most common real use case (clinic → lab)
+impossible to model.
+
+### 4. Delivery-creation auto-submits (create + submit are one wizard action)
+
+`DeliveryRequestCreateView.form_valid` calls `services.create_delivery_request` (which leaves the
+row at `DRAFT`) and then immediately calls `services.submit_delivery_request` in the same request —
+so the wizard's single "Create and submit" button drives `DRAFT → SUBMITTED → VALIDATION_REQUIRED →
+(attempt) READY_FOR_DISPATCH` in one step, landing the delivery request at `READY_FOR_DISPATCH` if
+everything required is present, or leaving it at `VALIDATION_REQUIRED` (with the specific missing-
+field messages shown on the detail page) if not. A separate "Re-run submit/validation" button on the
+detail page (`DeliveryRequestSubmitView`) lets an operator retry after fixing the delivery request
+(e.g. adding the missing packaging attestation via the admin) without rebuilding the whole request.
+
+### 5. Quote engine: `PricingRule` as a real, admin-editable model; distance is a synthetic haversine estimate
+
+Every dollar figure the quote engine (`apps/deliveries/pricing.py`) uses is read from an active
+`PricingRule` row (13 named keys — `PricingRuleKey` — seeded via
+`apps/deliveries/migrations/0002_seed_pricing_rules.py`), not a hard-coded constant, so tuning the
+demo's synthetic pricing is a data edit (via the admin) rather than a code change —
+`docs/PRODUCT_REQUIREMENTS.md` section 14 explicitly calls for "synthetic configurable rules."
+Distance is computed as a **straight-line (haversine) estimate** between the pickup/destination
+facilities' Phase-1 `DecimalField` `latitude`/`longitude` — not a real routing call. Real
+turn-by-turn/road-network distance via self-hosted OSRM remains explicitly deferred, per
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` ("OSRM self-hosted/local for routing in the demo... a
+later phase"); this function makes no external call and never will fake one. If either facility is
+missing coordinates, a flat fallback distance (`FALLBACK_DISTANCE_KM = 5.0`) is used instead, so the
+engine still produces a deterministic result. After-hours is computed against the pickup window's
+**start time** (not wall-clock "now") converted to `America/New_York`, per
+`docs/PRODUCT_REQUIREMENTS.md` section 2's "Weekdays: 7:00 AM-8:00 PM" — this is what makes the
+quote genuinely deterministic (`test_quote_is_deterministic_for_identical_inputs`) rather than
+"deterministic except when you happen to run the test at night." Every other surcharge (service
+level, cargo class 2/3, refrigerated equipment, inter-borough toll, wait-time placeholder,
+return-trip fee) is covered by its own component test in `apps/deliveries/tests/test_pricing.py`.
+
+A `Quote` is persisted **one per delivery request** (`OneToOneField`, `update_or_create`d on
+recompute) — Phase 2 keeps a single current quote, not a quote history table; recomputing a quote
+after a request changes overwrites the prior figures rather than appending a new row.
+
+### 6. Prohibited-cargo guard: structural (3 fixed classes) + a deliberately crude keyword scan
+
+The primary defense against the excluded categories in `docs/PRODUCT_REQUIREMENTS.md` section 3
+(patient transportation, Category A infectious substances, controlled substances, human organs,
+radioactive material, regulated medical waste, loose sharps, unsealed specimens, specialized blood
+products, emergency-response cargo, air shipments, courier packaging/repacking) is **structural**:
+`CargoClass` has exactly three seeded rows and no UI/API path creates a fourth, so none of those
+categories can ever be *formally selected* as a cargo class. The secondary guard,
+`apps/cargo/validation.find_prohibited_cargo_keywords`, is a plain case-insensitive substring match
+against a fixed keyword list, applied to `DeliveryRequest.facility_instructions` (via
+`DeliveryRequest.clean()` and `state_machine.validate_ready_for_dispatch`) and
+`PackagingAttestation.notes` (via `PackagingAttestation.clean()`, called from its `save()`). **This
+is explicitly not a compliance control** — it is trivially evaded by misspellings, synonyms not on
+the list, or non-English text, and it exists only to catch the obvious/accidental case and give this
+prototype *some* documented, safety-conscious behavior in free-text fields. This is stated in the
+module's own docstring, not just here.
+
+### 7. `RecurringRoute`: data model + admin/service CRUD only; generation is a loud, documented stub
+
+`apps/deliveries/models.py`'s `RecurringRoute`/`RecurringRouteStop` implement the full data model
+from `docs/PRODUCT_REQUIREMENTS.md` section 5 ("Recurring routes"): daily/weekly recurrence
+(`RecurrenceFrequency`, `weekly_days_of_week` as a plain list of weekday ints), route start/end
+dates, holiday exceptions (`holiday_exceptions` — "a simple date-list field," per the task spec, is
+literally what's implemented: a `JSONField` list of ISO date strings, no calendar-provider
+integration), multiple stops (`RecurringRouteStop`, ordered/unique by `sequence`), an
+operations-approval flag (`is_approved`), and pause/resume (`is_paused`). Basic CRUD exists via the
+Django admin (`apps/deliveries/admin.py`) and the model layer; **no dedicated end-user views/URLs
+were built** for `RecurringRoute` this phase (unlike `DeliveryRequest`), since the roadmap only asks
+for "the data model and basic admin/service CRUD" here. The job that would actually turn an
+approved, unpaused `RecurringRoute` into concrete `DeliveryRequest` rows on a schedule is **not
+implemented**: `apps.deliveries.services.generate_delivery_requests_for_recurring_route` raises
+`NotImplementedError` unconditionally, with a docstring pointing back to this section, and is
+covered by a test (`test_generate_delivery_requests_for_recurring_route_is_a_documented_stub`)
+asserting exactly that — a loud, discoverable gap rather than a silently-missing feature or a
+function that quietly returns an empty list.
+
+### 8. Append-only `DeliveryStatusTransition`: ORM-layer enforcement, honestly not a DB-layer guarantee
+
+`DeliveryStatusTransition.save()` raises `ValidationError` if `self.pk` is already set (i.e. this
+would be an update to an existing row); `.delete()` always raises; and the custom
+`DeliveryStatusTransitionQuerySet` overrides queryset-level `.update()`/`.delete()` to raise too, so
+every mutation path reachable through the Django ORM — instance-level or bulk-queryset-level — is
+blocked. This is exercised by four dedicated tests: an existing row cannot be `.save()`d after a
+field change, cannot be `.delete()`d, and neither can a bulk `queryset.update()`/`queryset.delete()`
+targeting it. **Honest limitation, stated here and in the model's own docstring**: this is an
+**ORM-layer** guard, not a database-level one — there is no Postgres `REVOKE`, rule, or trigger
+behind it, so a raw SQL statement issued outside the ORM (or a direct database client) could still
+bypass it. Building a real DB-level guard is explicitly left as a reasonable Phase 6 addition,
+alongside that phase's tamper-evident hash-chain verifier for the full custody-event system — Phase
+2 deliberately does not build hash chaining here, per the roadmap ("a lightweight precursor to the
+full... system that comes in Phase 6").
+
+### 9. State machine: only the early-lifecycle transitions are load-bearing
+
+`DeliveryStatus` defines the full enum from `docs/PRODUCT_REQUIREMENTS.md` section 9 (`DRAFT`
+through `DELIVERED`, plus `REJECTED`/`CANCELLED`/`INCIDENT_HOLD`/`RETURNING`/`RETURNED`/`FAILED`) so
+later phases never need to migrate this field. `apps/deliveries/state_machine.ALLOWED_TRANSITIONS`
+is a deliberately **partial** map covering only:
+
+```
+DRAFT -> SUBMITTED -> VALIDATION_REQUIRED -> READY_FOR_DISPATCH
+```
+
+plus `CANCELLED` reachable from any of those four states. Nothing in this phase drives a delivery
+into or out of `OFFERED` onward — attempting `READY_FOR_DISPATCH -> OFFERED` raises
+`InvalidTransitionError` (`test_offered_onward_transitions_are_not_implemented_in_phase_2`), by
+design: the dict simply has no entry allowing it, rather than a partially-implemented handler that
+might silently no-op. Phase 4 (dispatch)/Phase 5 (courier PWA)/Phase 6 (custody/incidents) should
+extend this same dict (and its tests) as each subsequent transition is actually implemented, not
+build a parallel transition map elsewhere.
+
+## Data minimization checked
+
+Every field added this phase was reviewed against `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section
+2. `DeliveryRequest.sender_contact_name/phone/role` and `recipient_contact_name/phone/role` are
+operational contacts at a facility (e.g. "Front Desk" / "Site Coordinator", "Lab Intake" / "Lab
+Tech") — never a patient name or patient-linked identifier; nothing here is a diagnosis, lab result,
+clinical note, medication indication, SSN, or insurance ID. `Package.description` is a short,
+free-text *operational* label (e.g. "sealed specimen bag") with a docstring/help-text explicitly
+noting it must never carry clinical content — this is a free-text field with no server-side content
+filter beyond the same crude prohibited-keyword scan described in decision 6, which is a real, if
+limited, gap: nothing stops an operator from typing a diagnosis into `Package.description` or
+`facility_instructions` beyond that keyword list. `PackageIdentifier.code` is a synthetic
+barcode-style string (`PKG-<12 hex chars>`), not a real specimen accession number. No field anywhere
+in `apps.cargo`/`apps.deliveries` stores a patient identifier, diagnosis, lab result, or insurance
+ID.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. `uv lock` and `uv sync --group dev` were re-run after
+adding `segno` to `pyproject.toml` (both succeeded against the real PyPI index — no fallback
+needed).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+135 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 135 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/cargo/migrations/{0001_initial,0002_initial,0003_seed_cargo_reference_data,0004_alter_package_description}.py`
+and `apps/deliveries/migrations/{0001_initial,0002_seed_pricing_rules}.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+196 passed in 3.62s
+```
+Coverage: 95% overall (1602 statements, 88 missed) for the whole project including Phase 0/1 code —
+all 106 Phase 0/1 tests still pass, plus 90 new Phase 2 tests. New-app coverage:
+`apps/cargo/services.py` 100%, `apps/cargo/validation.py` 100%, `apps/cargo/admin.py` 100%,
+`apps/cargo/management/commands/render_package_qr.py` 100% (exercised by
+`apps/cargo/tests/test_render_package_qr_command.py`, which asserts real PNG bytes are written to
+disk), `apps/cargo/models.py` 95%, `apps/deliveries/services.py` 100%,
+`apps/deliveries/state_machine.py` 98%, `apps/deliveries/pricing.py` 99%,
+`apps/deliveries/models.py` 96%, `apps/deliveries/forms.py` 98%, `apps/deliveries/views.py` 88%
+(uncovered lines are mostly `dispatch`'s `PermissionDenied` early-return branches and the
+cancel-view POST path, which is behaviorally identical to the already-tested submit-view POST
+path). The remaining project-wide misses are the pre-existing Phase 0 environment-entrypoint gaps
+(`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`) plus a
+handful of defensive branches in `config/health.py`/`audit_cost.py`/admin `get_queryset` overrides —
+none of it Phase 2 code.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 20 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is 20, up from Phase 1's 19 — the one addition is `segno` (pure-Python QR
+generation, no Pillow/system dependency, on the explicit allowed list in
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`).
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from Phase 1 (`.secrets.baseline` still has empty
+`results: {}`). Run *after* `git add -A` so every new Phase 2 file was actually scanned (not just
+previously-tracked ones — the same lesson Phase 1 called out).
+
+### End-to-end manual verification (beyond the automated suite)
+
+Ran `seed_demo_data` against a real (in-process) SQLite-backed test environment, logged in as
+`northstar_owner` via the Django test client, and drove the real wizard HTTP flow: `GET
+/deliveries/organizations/<pk>/new/` → 200; `POST` the full wizard payload (pickup facility = a
+NorthStar facility, destination facility = a different organization's facility, service level
+`same_day`, cargo class 2, 2 packages, ambient temperature, `attest_packaging=on`) → 200 (followed
+redirect), page content contains "Ready for Dispatch" and a quote total. The created
+`DeliveryRequest` had `status="ready_for_dispatch"`, 2 `Package` rows, and `estimated_price=49.12`.
+Rendered one of those packages' `PackageIdentifier` (`code="PKG-188BB65A6568"`) to a real PNG file
+at `/tmp/medrelay_manual_qr.png` via `render_qr_png_bytes()` and independently confirmed with the
+system `file` command: `PNG image data, 84 x 84, 1-bit grayscale, non-interlaced` — a real, valid QR
+image, not just PNG-magic-byte-shaped output.
+
+## Known gaps / deviations (honest list)
+
+- **No dedicated `RecurringRoute` end-user views/URLs** — admin-only CRUD this phase (see design
+  decision 7). No generation job exists; calling
+  `services.generate_delivery_requests_for_recurring_route` always raises `NotImplementedError`.
+- **`DeliveryStatusTransition` append-only enforcement is ORM-layer, not database-layer** — a raw
+  SQL statement or direct DB client could bypass it (see design decision 8). A real DB-level guard
+  is deferred to Phase 6 alongside the tamper-evident hash chain.
+- **Prohibited-cargo keyword guard is a crude, documented placeholder**, not a compliance control —
+  trivially evadable by misspellings/synonyms/non-English text (see design decision 6).
+- **No real routing/distance API** — distance is a synthetic haversine straight-line estimate
+  between facility coordinates; OSRM integration remains deferred to a later phase (see design
+  decision 5).
+- **`Quote` keeps one current row per delivery request, not a quote history table** — recomputing
+  overwrites the prior breakdown.
+- **`DeliveryRequest.final_price` is never set in Phase 2** — it exists as a placeholder field for
+  Phase 7 (billing/invoicing) and is always `null` today.
+- **`recipient_verification_method` is a plain stored choice only** — the actual PIN/signature
+  capture flow is Phase 6 (custody/proof) work, per the roadmap.
+- **`PackageConditionCheck`** (listed in `docs/ARCHITECTURE_AND_DATA_MODEL.md`'s "Cargo and
+  packages" entity group) **is not built this phase** — it belongs to Phase 6's package
+  condition/custody workflow, not Phase 2's cargo-policy/delivery-request scope.
+- **No demo/seed `DeliveryRequest` data added to `seed_demo_data`** — Phase 2's reference data
+  (cargo classes/policies, temperature profiles, pricing rules) is seeded via data migrations
+  (always present, including in CI), but no sample delivery requests were added to the optional
+  `seed_demo_data` command. A manual end-to-end run (see above) exercises the same path a demo
+  operator would use to create one by hand through the UI.
+- Coverage is 93%, not 100% (see gate output above) — no hard threshold was specified as a gate;
+  the uncovered lines are concentrated in defensive/early-return branches already covered
+  behaviorally by sibling tests, plus the pre-existing Phase 0 environment-entrypoint gaps.
+- `*.tests.*` modules remain excluded from `mypy` checking (factory_boy stub gap, unchanged from
+  Phase 1) — all production code in `apps.cargo`/`apps.deliveries` has full mypy coverage, verified
+  by the `mypy .` run above (135 source files, 0 errors).
+- Not yet built (correctly out of scope for Phase 2, per the roadmap): couriers, dispatch, custody,
+  tracking, temperature (readings/excursions), incidents, notifications, billing, reporting — all
+  later phases.
+
+## Commit history for this phase
+
+(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)
