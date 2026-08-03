@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ facility.name }} — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <p><a href="{% url 'facility-list' %}">&larr; Facilities</a></p>
+    <h1>{{ facility.name }}</h1>
+    <p>Organization: <a href="{% url 'organization-detail' facility.organization.pk %}">{{ facility.organization.name }}</a></p>
+    <p>Type: {{ facility.get_facility_type_display }} &middot; Borough: {{ facility.get_borough_display }}
+       &middot; Active: {{ facility.is_active|yesno:"yes,no" }}</p>
+    <p>{{ facility.address_line1 }}{% if facility.address_line2 %}, {{ facility.address_line2 }}{% endif %},
+       {{ facility.city }}, {{ facility.state }} {{ facility.postal_code }}</p>
+    <p>Timezone: {{ facility.timezone }}</p>
+    {% if facility.access_instructions %}<p><strong>Access instructions:</strong> {{ facility.access_instructions }}</p>{% endif %}
+    {% if facility.verification_requirements %}<p><strong>Verification requirements:</strong> {{ facility.verification_requirements }}</p>{% endif %}
+
+    {% if can_manage %}
+    <p>
+        <a href="{% url 'facility-update' facility.pk %}">Edit</a> &middot;
+        <a href="{% url 'facility-delete' facility.pk %}">Delete</a>
+    </p>
+    {% endif %}
+
+    <h2>Contacts</h2>
+    <ul>
+        {% for contact in contacts %}
+        <li>{{ contact.name }}{% if contact.title %} ({{ contact.title }}){% endif %}
+            {% if contact.is_primary %}<strong>[primary]</strong>{% endif %}
+            &mdash; {{ contact.phone }} {{ contact.email }}</li>
+        {% empty %}
+        <li>No contacts on file.</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Receiving rules</h2>
+    <ul>
+        {% for rule in receiving_rules %}
+        <li>{{ rule.get_day_of_week_display }}:
+            {% if rule.is_closed %}closed{% else %}{{ rule.opens_at|default:"?" }}&ndash;{{ rule.closes_at|default:"?" }}
+            (cutoff {{ rule.same_day_cutoff_time|default:"n/a" }}){% endif %}</li>
+        {% empty %}
+        <li>No receiving rules on file.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

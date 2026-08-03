@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Organization form — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:40rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <h1>{% if object %}Edit {{ object.name }}{% else %}New organization{% endif %}</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Save</button>
+    </form>
+</div>
+{% endblock %}

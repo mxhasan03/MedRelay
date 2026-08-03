@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Facilities — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <p><a href="{% url 'organization-list' %}">&larr; Organizations</a></p>
+    <h1>Facilities</h1>
+    <p style="color:#555;font-size:0.9rem;">
+        Showing only facilities belonging to organizations {{ request.user }} may view.
+    </p>
+    <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="text-align:left;border-bottom:2px solid #ccc;">
+                <th style="padding:0.4rem;">Name</th>
+                <th style="padding:0.4rem;">Organization</th>
+                <th style="padding:0.4rem;">Borough</th>
+                <th style="padding:0.4rem;">Active</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for facility in facilities %}
+            <tr style="border-bottom:1px solid #eee;">
+                <td style="padding:0.4rem;">
+                    <a href="{% url 'facility-detail' facility.pk %}">{{ facility.name }}</a>
+                </td>
+                <td style="padding:0.4rem;">{{ facility.organization.name }}</td>
+                <td style="padding:0.4rem;">{{ facility.get_borough_display }}</td>
+                <td style="padding:0.4rem;">{{ facility.is_active|yesno:"yes,no" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" style="padding:0.4rem;">No facilities visible to this account.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
