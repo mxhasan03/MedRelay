@@ -36,7 +36,11 @@ from apps.couriers.tests.factories import (
 from apps.deliveries.models import DeliveryStatus, StopType
 from apps.deliveries.state_machine import transition_delivery_request
 from apps.deliveries.tests.factories import DeliveryRequestFactory, DeliveryStopFactory
-from apps.dispatch.exceptions import AssignmentConflictError, IneligibleCourierError
+from apps.dispatch.exceptions import (
+    AssignmentConflictError,
+    IneligibleCourierError,
+    JobOfferOwnershipError,
+)
 from apps.dispatch.models import (
     AssignmentStatus,
     DeliveryAssignment,
@@ -44,11 +48,14 @@ from apps.dispatch.models import (
     DispatchOverrideType,
     DispatchRecommendation,
     JobOffer,
+    JobOfferStatus,
     RoutePlan,
 )
 from apps.dispatch.services import (
+    accept_job_offer,
     assign_delivery,
     at_risk_delivery_ids,
+    decline_job_offer,
     offer_delivery,
     reassign_delivery,
     recommend_couriers,
@@ -389,3 +396,183 @@ def test_at_risk_delivery_ids_excludes_comfortably_feasible_delivery() -> None:
     at_risk = at_risk_delivery_ids()
 
     assert delivery_request.pk not in at_risk
+
+
+# --- accept_job_offer / decline_job_offer (Phase 5) ---------------------------
+
+
+def test_accept_job_offer_finalizes_assignment_and_cancels_other_open_offers() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier_a = _eligible_courier(cargo_class, zone)
+    courier_b = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    offers = offer_delivery(delivery_request.pk, [courier_a.pk, courier_b.pk], expires_at)
+    offer_a = next(o for o in offers if o.courier_id == courier_a.pk)
+    offer_b = next(o for o in offers if o.courier_id == courier_b.pk)
+
+    assignment = accept_job_offer(offer_a.pk, courier_a.pk)
+
+    assert assignment.courier_id == courier_a.pk
+    delivery_request.refresh_from_db()
+    assert delivery_request.status == DeliveryStatus.ASSIGNED
+    offer_a.refresh_from_db()
+    assert offer_a.status == JobOfferStatus.ACCEPTED
+    offer_b.refresh_from_db()
+    assert offer_b.status == JobOfferStatus.CANCELLED
+    assert (
+        DeliveryAssignment.objects.filter(
+            delivery_request=delivery_request, status=AssignmentStatus.ACTIVE
+        ).count()
+        == 1
+    )
+
+
+def test_accept_job_offer_records_a_dispatch_override_note() -> None:
+    """Every accepted offer leaves an audit row, per module docstring — this
+    is deliberate, not a bug (the courier's own acceptance is not a
+    dispatcher scoring decision, but it still needs recording)."""
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    (offer,) = offer_delivery(delivery_request.pk, [courier.pk], expires_at)
+
+    accept_job_offer(offer.pk, courier.pk)
+
+    override = DispatchOverride.objects.get(delivery_request=delivery_request)
+    assert override.chosen_courier_id == courier.pk
+    assert str(offer.pk) in override.reason
+
+
+def test_accept_job_offer_rejects_wrong_courier() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier = _eligible_courier(cargo_class, zone)
+    other_courier = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    (offer,) = offer_delivery(delivery_request.pk, [courier.pk], expires_at)
+
+    with pytest.raises(JobOfferOwnershipError):
+        accept_job_offer(offer.pk, other_courier.pk)
+
+    delivery_request.refresh_from_db()
+    assert delivery_request.status == DeliveryStatus.OFFERED
+
+
+def test_accept_job_offer_rejects_expired_offer() -> None:
+    """Hard acceptance criterion: an expired offer cannot be accepted."""
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() - datetime.timedelta(minutes=1)  # already in the past
+    (offer,) = offer_delivery(delivery_request.pk, [courier.pk], expires_at)
+    assert offer.is_expired is True
+
+    with pytest.raises(AssignmentConflictError):
+        accept_job_offer(offer.pk, courier.pk)
+
+    # No status is persisted-and-then-rolled-back — offer.status is left
+    # exactly as offer_delivery created it (still nominally "offered" in the
+    # database, even though is_expired correctly reports it as unusable for
+    # display/API purposes). See apps.dispatch.services._reject_if_not_acceptable's
+    # docstring for why this is deliberately read-only.
+    offer.refresh_from_db()
+    assert offer.status == JobOfferStatus.OFFERED
+    assert offer.is_expired is True
+    delivery_request.refresh_from_db()
+    assert delivery_request.status == DeliveryStatus.OFFERED  # untouched, not ASSIGNED
+    assert not DeliveryAssignment.objects.filter(delivery_request=delivery_request).exists()
+
+
+def test_accept_job_offer_rejects_already_responded_offer() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    (offer,) = offer_delivery(delivery_request.pk, [courier.pk], expires_at)
+    accept_job_offer(offer.pk, courier.pk)
+
+    with pytest.raises(AssignmentConflictError):
+        accept_job_offer(offer.pk, courier.pk)
+
+
+def test_accept_job_offer_still_enforces_hard_eligibility_gate() -> None:
+    """If a courier becomes ineligible after being offered a job (e.g.
+    suspended) but before accepting, acceptance must still be rejected — the
+    hard-eligibility gate is never bypassed, even via the offer/accept path."""
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    (offer,) = offer_delivery(delivery_request.pk, [courier.pk], expires_at)
+
+    courier.status = CourierStatus.SUSPENDED
+    courier.save(update_fields=["status"])
+
+    with pytest.raises(IneligibleCourierError):
+        accept_job_offer(offer.pk, courier.pk)
+
+    assert not DeliveryAssignment.objects.filter(delivery_request=delivery_request).exists()
+
+
+def test_decline_job_offer_records_reason_and_does_not_block_other_offers() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier_a = _eligible_courier(cargo_class, zone)
+    courier_b = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    offers = offer_delivery(delivery_request.pk, [courier_a.pk, courier_b.pk], expires_at)
+    offer_a = next(o for o in offers if o.courier_id == courier_a.pk)
+    offer_b = next(o for o in offers if o.courier_id == courier_b.pk)
+
+    declined = decline_job_offer(
+        offer_a.pk, courier_a.pk, reason="Package smells wrong — safety concern."
+    )
+
+    assert declined.status == JobOfferStatus.DECLINED
+    assert declined.decline_reason == "Package smells wrong — safety concern."
+
+    # Declining must not block the delivery from being offered to/accepted by
+    # someone else — courier_b's own offer is completely unaffected.
+    offer_b.refresh_from_db()
+    assert offer_b.status == JobOfferStatus.OFFERED
+    assignment = accept_job_offer(offer_b.pk, courier_b.pk)
+    assert assignment.courier_id == courier_b.pk
+
+
+def test_decline_job_offer_reason_is_optional() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    (offer,) = offer_delivery(delivery_request.pk, [courier.pk], expires_at)
+
+    declined = decline_job_offer(offer.pk, courier.pk)
+
+    assert declined.status == JobOfferStatus.DECLINED
+    assert declined.decline_reason == ""
+
+
+def test_decline_job_offer_rejects_wrong_courier() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier = _eligible_courier(cargo_class, zone)
+    other_courier = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    (offer,) = offer_delivery(delivery_request.pk, [courier.pk], expires_at)
+
+    with pytest.raises(JobOfferOwnershipError):
+        decline_job_offer(offer.pk, other_courier.pk)
+
+
+def test_decline_job_offer_rejects_already_responded_offer() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    courier = _eligible_courier(cargo_class, zone)
+    expires_at = timezone.now() + datetime.timedelta(minutes=30)
+    (offer,) = offer_delivery(delivery_request.pk, [courier.pk], expires_at)
+    decline_job_offer(offer.pk, courier.pk)
+
+    with pytest.raises(AssignmentConflictError):
+        decline_job_offer(offer.pk, courier.pk)

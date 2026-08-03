@@ -35,3 +35,22 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
 ]
+
+# Phase 5 is the first phase whose templates actually render a {% static %}
+# tag during a test run (the courier PWA's manifest link/icon/JS includes).
+# config/settings/base.py's STORAGES uses whitenoise's
+# CompressedManifestStaticFilesStorage for "staticfiles", which requires a
+# real `collectstatic` run to have already built its hashed-filename
+# manifest -- appropriate for a real deployment, but not something the test
+# suite runs (and shouldn't need to, for a fast, hermetic unit/integration
+# test run). Test settings use the plain, non-manifest StaticFilesStorage
+# instead, so {% static %} tags resolve directly against
+# STATICFILES_DIRS/static/ without requiring collectstatic.
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}

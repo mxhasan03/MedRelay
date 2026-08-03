@@ -70,11 +70,18 @@ class DispatchRecommendationAdmin(admin.ModelAdmin):
 
 @admin.register(JobOffer)
 class JobOfferAdmin(admin.ModelAdmin):
-    list_display = ["delivery_request", "courier", "status", "offered_at", "expires_at"]
+    list_display = [
+        "delivery_request",
+        "courier",
+        "status",
+        "offered_at",
+        "expires_at",
+        "responded_at",
+    ]
     list_filter = ["status"]
-    search_fields = ["delivery_request__id", "courier__user__username"]
+    search_fields = ["delivery_request__id", "courier__user__username", "decline_reason"]
     autocomplete_fields = ["delivery_request", "courier", "created_by"]
-    readonly_fields = ["offered_at"]
+    readonly_fields = ["offered_at", "responded_at"]
 
 
 @admin.register(DeliveryAssignment)

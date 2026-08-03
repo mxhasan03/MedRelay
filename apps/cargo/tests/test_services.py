@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from apps.accounts.tests.factories import UserFactory
 from apps.cargo.models import CargoClassCode, TemperatureProfileCode
 from apps.cargo.services import (
+    PackageScanError,
+    confirm_package_scan,
     create_packages_for_delivery_request,
     get_cargo_policy,
     temperature_profile_allowed,
@@ -13,6 +16,8 @@ from apps.cargo.services import (
 from apps.cargo.tests.factories import (
     CargoClassFactory,
     CargoPolicyFactory,
+    PackageFactory,
+    PackageIdentifierFactory,
     TemperatureProfileFactory,
 )
 from apps.deliveries.tests.factories import DeliveryRequestFactory
@@ -57,3 +62,60 @@ def test_create_packages_for_delivery_request_creates_count_with_identifiers() -
         assert package.identifier.code.startswith("PKG-")
         assert package.cargo_class_id == cargo_class.id
         assert package.temperature_profile_id == temperature_profile.id
+
+
+# --- confirm_package_scan (Phase 5: manual-entry pickup scan confirmation) ---
+
+
+def test_confirm_package_scan_with_correct_code_marks_scanned() -> None:
+    delivery_request = DeliveryRequestFactory()
+    package = PackageFactory(delivery_request=delivery_request, sequence_number=1)
+    identifier = PackageIdentifierFactory(package=package)
+    actor = UserFactory()
+
+    result = confirm_package_scan(delivery_request, identifier.code, actor=actor)
+
+    assert result.pk == package.pk
+    package.refresh_from_db()
+    assert package.scanned_at is not None
+    assert package.scanned_by_id == actor.pk
+
+
+def test_confirm_package_scan_with_nonexistent_code_raises() -> None:
+    delivery_request = DeliveryRequestFactory()
+    PackageFactory(delivery_request=delivery_request)
+
+    with pytest.raises(PackageScanError):
+        confirm_package_scan(delivery_request, "PKG-DOESNOTEXIST")
+
+
+def test_confirm_package_scan_with_blank_code_raises() -> None:
+    delivery_request = DeliveryRequestFactory()
+
+    with pytest.raises(PackageScanError):
+        confirm_package_scan(delivery_request, "   ")
+
+
+def test_confirm_package_scan_rejects_code_belonging_to_a_different_delivery() -> None:
+    delivery_request = DeliveryRequestFactory()
+    other_delivery_request = DeliveryRequestFactory()
+    other_package = PackageFactory(delivery_request=other_delivery_request)
+    other_identifier = PackageIdentifierFactory(package=other_package)
+
+    with pytest.raises(PackageScanError):
+        confirm_package_scan(delivery_request, other_identifier.code)
+
+
+def test_confirm_package_scan_is_idempotent_for_the_same_correct_code() -> None:
+    """Scanning the same correct code twice just refreshes scanned_at rather
+    than erroring — the courier re-tapping "scan" on an already-scanned
+    package should not be treated as a failure."""
+    delivery_request = DeliveryRequestFactory()
+    package = PackageFactory(delivery_request=delivery_request)
+    identifier = PackageIdentifierFactory(package=package)
+
+    first = confirm_package_scan(delivery_request, identifier.code)
+    second = confirm_package_scan(delivery_request, identifier.code)
+
+    assert first.pk == second.pk
+    assert second.scanned_at is not None

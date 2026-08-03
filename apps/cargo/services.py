@@ -13,6 +13,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.utils import timezone
+
 from apps.cargo.models import (
     CargoClass,
     CargoPolicy,
@@ -22,7 +24,18 @@ from apps.cargo.models import (
 )
 
 if TYPE_CHECKING:
+    from apps.accounts.models import User
     from apps.deliveries.models import DeliveryRequest
+
+
+class PackageScanError(Exception):
+    """Raised by `confirm_package_scan` when the submitted code does not identify a
+    package belonging to the given delivery request. Used for both a genuinely
+    unknown/nonexistent code and a code that identifies a real package belonging
+    to a *different* delivery request — deliberately the same error/message for
+    both, so a courier scanning the wrong package's code gets no information
+    about what delivery request that code actually belongs to.
+    """
 
 
 def get_cargo_policy(cargo_class: CargoClass) -> CargoPolicy:
@@ -70,3 +83,45 @@ def create_packages_for_delivery_request(
         PackageIdentifier.objects.create(package=package)
         packages.append(package)
     return packages
+
+
+def confirm_package_scan(
+    delivery_request: DeliveryRequest, code: str, *, actor: User | None = None
+) -> Package:
+    """Confirm a package pickup scan for `code` against `delivery_request`'s packages.
+
+    This is the manual-code-entry (and, from the browser, camera-`BarcodeDetector`-
+    filled-then-submitted) fallback path described in
+    docs/PRODUCT_REQUIREMENTS.md section 6 ("scan package") —
+    apps.couriers.views.PackageScanView is the only caller. Real camera-based
+    scanning happens entirely in the browser (populating the same manual-entry
+    field with the decoded value before submit); this function only ever sees a
+    plain string code and has no way to know whether it came from a camera or a
+    keyboard, which is exactly the point — the manual path is always present and
+    always functional, per this phase's honesty requirement about what can
+    actually be tested headlessly.
+
+    Raises `PackageScanError` for a blank/unknown code, or a code belonging to a
+    different delivery request. Idempotent at the call level: scanning the same
+    correct code twice just refreshes `scanned_at`/`scanned_by` rather than
+    erroring (the courier re-tapping "scan" on an already-scanned package should
+    not be treated as a failure).
+    """
+    code = (code or "").strip()
+    if not code:
+        raise PackageScanError("A package code is required.")
+    try:
+        identifier = PackageIdentifier.objects.select_related("package").get(code=code)
+    except PackageIdentifier.DoesNotExist as exc:
+        raise PackageScanError(
+            f"Code {code!r} does not match any package for this delivery."
+        ) from exc
+
+    package = identifier.package
+    if package.delivery_request_id != delivery_request.pk:
+        raise PackageScanError(f"Code {code!r} does not match any package for this delivery.")
+
+    package.scanned_at = timezone.now()
+    package.scanned_by = actor
+    package.save(update_fields=["scanned_at", "scanned_by", "updated_at"])
+    return package

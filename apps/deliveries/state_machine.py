@@ -1,5 +1,5 @@
-"""The delivery status state machine — extended through Phase 4's dispatch
-transitions.
+"""The delivery status state machine — extended through Phase 5's courier
+pickup/transit transitions.
 
 docs/PRODUCT_REQUIREMENTS.md section 9 defines the full state machine
 (`DRAFT` through `DELIVERED`, plus exception/terminal states). Phase 2
@@ -8,19 +8,37 @@ implemented the early-lifecycle transitions:
     DRAFT -> SUBMITTED -> VALIDATION_REQUIRED -> READY_FOR_DISPATCH
 
 plus `CANCELLED` from any of those four states. Phase 4
-(`apps.dispatch.services`) extends this same dict — per Phase 2's own
-instruction to do so here rather than build a parallel transition map
-elsewhere — with the dispatch transitions it actually implements:
+(`apps.dispatch.services`) extended this same dict with the dispatch
+transitions it implements:
 
     READY_FOR_DISPATCH -> OFFERED -> ASSIGNED
     READY_FOR_DISPATCH -> ASSIGNED   (direct assignment, skipping a broadcast offer)
     OFFERED -> READY_FOR_DISPATCH    (an offer round with no acceptance reverts to the open pool)
 
-plus `CANCELLED` reachable from `OFFERED`/`ASSIGNED` too. `ALLOWED_TRANSITIONS`
-below is still intentionally a *partial* map — it does not include anything
-from `ASSIGNED` onward toward `PICKED_UP`/`IN_TRANSIT`/`DELIVERED`, because no
-code through Phase 4 drives a delivery into those states (that is Phase 5/6
-work: courier PWA pickup/transit/delivery events, custody). A reassignment
+plus `CANCELLED` reachable from `OFFERED`/`ASSIGNED` too. Phase 5
+(`apps.couriers.services.advance_delivery_status`) extends this same dict
+again — per Phase 2's own instruction to do so here rather than build a
+parallel transition map elsewhere — with the courier-driven middle
+transitions it implements:
+
+    ASSIGNED -> COURIER_EN_ROUTE_TO_PICKUP -> AT_PICKUP -> PICKED_UP
+        -> IN_TRANSIT -> AT_DESTINATION
+
+plus `CANCELLED` reachable from every one of those five states too (the same
+"cancellation is always reachable from any active state" precedent Phase 2/4
+established). **`ALLOWED_TRANSITIONS` below is still intentionally a
+*partial* map: it stops at `AT_DESTINATION` and does not include
+`AT_DESTINATION -> DELIVERED`.** This is a deliberate phase boundary, not an
+oversight — `DELIVERED` implies proof-of-delivery capture (recipient
+PIN/signature), which is Phase 6 ("custody, proof, temperature, and
+incidents") work per docs/IMPLEMENTATION_ROADMAP.md. Phase 5 gets a delivery
+to the destination's doorstep and stops there; see
+docs/CURRENT_STATUS.md "Phase 5" for the full write-up of this boundary and
+`apps.couriers.services.advance_delivery_status`'s own docstring for the
+courier-authorization guard layered on top of this dict (only the currently
+assigned courier, or an internal ops override, may drive these five
+transitions — this module itself has no notion of "who" is asking, only
+"is this transition legal at all"). A reassignment
 (`apps.dispatch.services.reassign_delivery`) does not change
 `DeliveryRequest.status` at all — it stays `ASSIGNED` while the underlying
 `apps.dispatch.models.DeliveryAssignment` row is swapped — so no
@@ -59,7 +77,20 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DeliveryStatus.OFFERED: frozenset(
         {DeliveryStatus.ASSIGNED, DeliveryStatus.READY_FOR_DISPATCH, DeliveryStatus.CANCELLED}
     ),
-    DeliveryStatus.ASSIGNED: frozenset({DeliveryStatus.CANCELLED}),
+    DeliveryStatus.ASSIGNED: frozenset(
+        {DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP, DeliveryStatus.CANCELLED}
+    ),
+    DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP: frozenset(
+        {DeliveryStatus.AT_PICKUP, DeliveryStatus.CANCELLED}
+    ),
+    DeliveryStatus.AT_PICKUP: frozenset({DeliveryStatus.PICKED_UP, DeliveryStatus.CANCELLED}),
+    DeliveryStatus.PICKED_UP: frozenset({DeliveryStatus.IN_TRANSIT, DeliveryStatus.CANCELLED}),
+    DeliveryStatus.IN_TRANSIT: frozenset({DeliveryStatus.AT_DESTINATION, DeliveryStatus.CANCELLED}),
+    # AT_DESTINATION -> DELIVERED is deliberately not implemented in Phase 5 —
+    # see module docstring. AT_DESTINATION has no outgoing transition here at
+    # all yet (a delivery that reaches the doorstep and needs to be cancelled
+    # from there is an edge case left for Phase 6's incident/return-to-sender
+    # flow, not modeled here as a bare CANCELLED escape hatch).
 }
 
 

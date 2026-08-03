@@ -68,7 +68,11 @@ from apps.couriers.models import CourierProfile
 from apps.deliveries.models import DeliveryRequest, DeliveryStatus
 from apps.deliveries.pricing import estimate_distance_km
 from apps.deliveries.state_machine import transition_delivery_request
-from apps.dispatch.exceptions import AssignmentConflictError, IneligibleCourierError
+from apps.dispatch.exceptions import (
+    AssignmentConflictError,
+    IneligibleCourierError,
+    JobOfferOwnershipError,
+)
 from apps.dispatch.models import (
     ACTIVE_ASSIGNMENT_STATUSES,
     AssignmentStatus,
@@ -259,10 +263,10 @@ def offer_delivery(
     actor: User | None = None,
 ) -> list[JobOffer]:
     """Offer `delivery_id` to every courier in `candidate_ids` (broadcast-style
-    — Phase 5 will build the courier-facing accept/decline flow). Every
-    candidate must independently pass the hard-eligibility gate; if any one
-    of them fails it, the whole call is rejected atomically (no partial
-    offers created) — see module docstring."""
+    — `accept_job_offer`/`decline_job_offer` below are the courier-facing
+    accept/decline flow, Phase 5). Every candidate must independently pass
+    the hard-eligibility gate; if any one of them fails it, the whole call is
+    rejected atomically (no partial offers created) — see module docstring."""
     delivery_request = DeliveryRequest.objects.select_for_update().get(pk=delivery_id)
     if delivery_request.status not in OFFERABLE_STATUSES:
         raise AssignmentConflictError(
@@ -305,6 +309,140 @@ def offer_delivery(
         )
         for courier in couriers
     ]
+
+
+def _reject_if_not_acceptable(offer: JobOffer) -> None:
+    """Raise `AssignmentConflictError` if `offer` cannot be accepted right now:
+    its status is not (still) `OFFERED`, or it has passed `expires_at`.
+
+    Deliberately **read-only** — it does not flip `offer.status` to `EXPIRED`
+    in the database. An earlier version of this function tried to "correct"
+    an expired offer's stored status to `EXPIRED` before raising, but since
+    `accept_job_offer`/`decline_job_offer` are themselves wrapped in
+    `transaction.atomic()`, that write would be rolled back along with
+    everything else the moment the exception this function raises propagates
+    out of the atomic block — a real bug caught by this phase's own test
+    (`test_accept_job_offer_rejects_expired_offer_and_marks_it_expired`
+    failed until this was fixed). `JobOffer.is_expired` (a plain computed
+    property) already reports the correct answer for display without needing
+    a persisted status flip; a real background job to flip stale `OFFERED`
+    rows to `EXPIRED` in the database remains Phase 7 territory, unchanged
+    from Phase 4's own framing.
+    """
+    if offer.status != JobOfferStatus.OFFERED:
+        raise AssignmentConflictError(
+            f"Job offer {offer.pk} is not open (status: {offer.status!r})."
+        )
+    if offer.is_expired:
+        raise AssignmentConflictError(
+            f"Job offer {offer.pk} expired at {offer.expires_at} and can no longer be accepted."
+        )
+
+
+@transaction.atomic
+def accept_job_offer(
+    offer_id: Any, courier_id: Any, *, actor: User | None = None
+) -> DeliveryAssignment:
+    """A courier accepts one of their own open `JobOffer`s.
+
+    Per docs/PRODUCT_REQUIREMENTS.md section 6 ("Job offers... Courier can
+    accept or reject") and docs/CURRENT_STATUS.md's Phase 4 "Known gaps"
+    (accept/decline was explicitly deferred to Phase 5): accepting an offer is
+    fundamentally the same race as a dispatcher directly assigning a courier —
+    two couriers could try to accept overlapping offers for the same delivery
+    at once — so this is a **thin wrapper around `assign_delivery`**, not a
+    reimplementation of its atomicity/hard-eligibility logic. `assign_delivery`
+    still runs inside its own `transaction.atomic()`/`select_for_update()` and
+    is still backed by the same partial `UniqueConstraint` on
+    `DeliveryAssignment` — see that function's docstring for the full
+    concurrency write-up.
+
+    A synthetic, always-non-blank `reason` is passed through to
+    `assign_delivery` on every call (not just when the courier happens not to
+    be the top-ranked candidate) so the courier's own acceptance is never
+    rejected by `assign_delivery`'s "a reason is required for a non-top-ranked
+    override" `ValueError` — the `JobOffer` itself, not a dispatcher's
+    judgment call, is what justifies this courier being the one assigned. This
+    does mean every accepted offer leaves a `DispatchOverride` audit row
+    (`NOT_TOP_RANKED` if this courier was not the top-ranked candidate,
+    `NOTE` otherwise) — an intentional, honest side effect: "this assignment
+    came from a courier's direct offer acceptance," not silence.
+
+    Raises `JobOfferOwnershipError` if `offer_id` was not offered to
+    `courier_id`; `AssignmentConflictError` if the offer is not (still) open,
+    **including an offer whose `expires_at` has already passed** (see
+    `_reject_if_not_acceptable` — this is the load-bearing check for "an
+    expired offer cannot be accepted"); and
+    `IneligibleCourierError`/`AssignmentConflictError` from the underlying
+    `assign_delivery` call for the same reasons that function would normally
+    raise them (courier no longer eligible, delivery concurrently assigned to
+    someone else, etc.).
+    """
+    offer = JobOffer.objects.select_for_update().get(pk=offer_id)
+    if str(offer.courier_id) != str(courier_id):
+        raise JobOfferOwnershipError(f"Job offer {offer_id} was not made to courier {courier_id}.")
+    _reject_if_not_acceptable(offer)
+
+    assignment = assign_delivery(
+        offer.delivery_request_id,
+        courier_id,
+        actor,
+        reason=f"Courier accepted job offer {offer.pk} directly.",
+    )
+
+    offer.status = JobOfferStatus.ACCEPTED
+    offer.responded_at = timezone.now()
+    offer.save(update_fields=["status", "responded_at"])
+
+    # Other still-open offers for the same delivery are now moot — the
+    # partial unique constraint on DeliveryAssignment already guarantees only
+    # one of them could ever be successfully accepted, but leaving them
+    # dangling as OFFERED would be misleading in the courier's job-offer list
+    # (docs/PRODUCT_REQUIREMENTS.md section 6: "Show only eligible jobs").
+    JobOffer.objects.filter(
+        delivery_request_id=offer.delivery_request_id, status=JobOfferStatus.OFFERED
+    ).exclude(pk=offer.pk).update(status=JobOfferStatus.CANCELLED, responded_at=timezone.now())
+
+    return assignment
+
+
+@transaction.atomic
+def decline_job_offer(offer_id: Any, courier_id: Any, *, reason: str = "") -> JobOffer:
+    """A courier declines one of their own open `JobOffer`s, optionally recording
+    a reason.
+
+    Per docs/PRODUCT_REQUIREMENTS.md section 6 ("Legitimate cargo/safety
+    rejection must be recordable") `reason` is always optional (a courier may
+    decline without giving one) but is stored verbatim on `JobOffer.decline_reason`
+    when given. Declining **must not** block the same delivery from being
+    offered to/accepted by someone else — this function only ever mutates the
+    one `JobOffer` row being declined; it never touches the `DeliveryRequest`
+    status or any other courier's offer for the same delivery, so every other
+    open offer (and a fresh `offer_delivery`/`assign_delivery` call) is
+    completely unaffected.
+
+    Raises `JobOfferOwnershipError` if `offer_id` was not offered to
+    `courier_id`, or `AssignmentConflictError` if the offer is not (still)
+    open (already accepted/declined/cancelled). Unlike `accept_job_offer`,
+    declining an already-expired-but-still-`OFFERED` offer is allowed —
+    the acceptance criterion this project must honor is specifically "an
+    expired offer cannot be *accepted*"; declining one (recording that the
+    courier is not taking it) is harmless and arguably useful bookkeeping
+    even after `expires_at` has passed.
+    """
+    offer = JobOffer.objects.select_for_update().get(pk=offer_id)
+    if str(offer.courier_id) != str(courier_id):
+        raise JobOfferOwnershipError(f"Job offer {offer_id} was not made to courier {courier_id}.")
+    if offer.status != JobOfferStatus.OFFERED:
+        raise AssignmentConflictError(
+            f"Job offer {offer_id} is not open to decline (status: {offer.status!r})."
+        )
+
+    offer.status = JobOfferStatus.DECLINED
+    offer.responded_at = timezone.now()
+    offer.decline_reason = reason or ""
+    offer.save(update_fields=["status", "responded_at", "decline_reason"])
+    return offer
 
 
 @transaction.atomic
@@ -447,8 +585,10 @@ def at_risk_delivery_ids(*, as_of: datetime.datetime | None = None) -> set[Any]:
 __all__ = [
     "ASSIGNABLE_STATUSES",
     "OFFERABLE_STATUSES",
+    "accept_job_offer",
     "assign_delivery",
     "at_risk_delivery_ids",
+    "decline_job_offer",
     "offer_delivery",
     "reassign_delivery",
     "recommend_couriers",

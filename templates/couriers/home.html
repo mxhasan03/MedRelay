@@ -1,0 +1,23 @@
+{% extends "couriers/base.html" %}
+{% block title %}Courier Home — MedRelay (Demo Prototype){% endblock %}
+{% block courier_content %}
+<h1>Welcome, {{ request.user }}</h1>
+
+<div class="card">
+  <p><strong>{{ open_offer_count }}</strong> open job offer{{ open_offer_count|pluralize }}.</p>
+  <a class="btn" href="{% url 'courier-job-offer-list' %}">View job offers</a>
+</div>
+
+<h2>Active deliveries</h2>
+{% if active_assignments %}
+{% for assignment in active_assignments %}
+<div class="card">
+  <p>Delivery {{ assignment.delivery_request_id|truncatechars:8 }} &mdash;
+     {{ assignment.delivery_request.get_status_display }}</p>
+  <a class="btn" href="{% url 'courier-active-delivery' assignment.delivery_request_id %}">Open</a>
+</div>
+{% endfor %}
+{% else %}
+<p>No active deliveries right now.</p>
+{% endif %}
+{% endblock %}

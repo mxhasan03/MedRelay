@@ -492,3 +492,65 @@ class CourierAvailability(models.Model):
     def __str__(self) -> str:
         state = "online" if self.is_online else "offline"
         return f"{self.courier} ({state})"
+
+
+class CourierActionIdempotencyKey(models.Model):
+    """Phase 5's idempotency mechanism (docs/ARCHITECTURE_AND_DATA_MODEL.md
+    section 9: "require Idempotency-Key for create/transition endpoints"),
+    covering every new courier-facing state-mutating endpoint: job offer
+    accept/decline, pickup/transit status transitions, and location pings.
+
+    The courier's PWA generates a fresh client-side key (a UUID) once per
+    logical action (see `static/js/offline-queue.js`) and sends it as the
+    `Idempotency-Key` request header (or an `idempotency_key` form field as a
+    no-JS fallback). `apps.couriers.idempotency.idempotent_call` is the single
+    call site every affected view goes through: it looks up an existing row
+    for `(courier, endpoint, key)` first and, if found, replays its stored
+    `response_data` instead of re-running the underlying service call — this
+    is what makes retries from the offline event queue (submitted after
+    connectivity returns, possibly more than once) safe: the *effect*
+    (a `DeliveryAssignment`, a `DeliveryStatusTransition`, a
+    `CourierLocationPing`) is created at most once per key, no matter how many
+    times the same request is replayed.
+
+    Scoped per-courier (not globally unique on `key` alone) so two different
+    couriers' independently-generated UUIDs can never collide with each
+    other — a courier only ever needs uniqueness against their own prior
+    requests. `endpoint` further scopes the key so the same client-generated
+    UUID reused (by a client bug) across two conceptually different actions
+    does not falsely dedupe them against each other.
+
+    Only successful outcomes are recorded here (see `apps.couriers.idempotency`
+    for the exact behavior on failure) — a request that legitimately fails
+    (e.g. an invalid transition) is never remembered, so retrying it with a
+    corrected request under the *same* key is still possible.
+    """
+
+    courier = models.ForeignKey(
+        CourierProfile, on_delete=models.CASCADE, related_name="action_idempotency_keys"
+    )
+    endpoint = models.CharField(
+        max_length=64,
+        help_text="Logical endpoint name, e.g. 'job_offer_accept', 'delivery_status_advance', "
+        "'location_ping'.",
+    )
+    key = models.CharField(max_length=255, help_text="Client-generated Idempotency-Key value.")
+    response_data = models.JSONField(
+        default=dict, blank=True, help_text="The stored successful response, replayed on retry."
+    )
+    status_code = models.PositiveSmallIntegerField(default=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["courier", "endpoint", "key"],
+                name="unique_courier_action_idempotency_key",
+            )
+        ]
+        verbose_name = "Courier action idempotency key"
+        verbose_name_plural = "Courier action idempotency keys"
+
+    def __str__(self) -> str:
+        return f"{self.courier} — {self.endpoint} [{self.key}]"

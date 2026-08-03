@@ -24,6 +24,17 @@ class IneligibleCourierError(Exception):
     """
 
 
+class JobOfferOwnershipError(Exception):
+    """Raised when a courier tries to accept/decline a `JobOffer` that was not
+    offered to them (`apps.dispatch.services.accept_job_offer`/
+    `decline_job_offer`). Deliberately a distinct type from
+    `IneligibleCourierError`/`AssignmentConflictError` — this is an
+    authorization failure (wrong courier), not a hard-eligibility or
+    concurrency-state failure, so a caller (the courier PWA view) can map it
+    to a 403 rather than a 409/422.
+    """
+
+
 class AssignmentConflictError(Exception):
     """Raised when an assignment/offer/reassignment operation cannot proceed
     because of the delivery's current state: already has an active

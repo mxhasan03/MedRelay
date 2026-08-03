@@ -50,10 +50,12 @@ class PackageAdmin(admin.ModelAdmin):
         "cargo_class",
         "temperature_profile",
         "approximate_weight_kg",
+        "scanned_at",
     ]
     list_filter = ["cargo_class", "temperature_profile"]
     search_fields = ["delivery_request__id", "description"]
-    autocomplete_fields = ["cargo_class", "temperature_profile"]
+    autocomplete_fields = ["cargo_class", "temperature_profile", "scanned_by"]
+    readonly_fields = ["scanned_at", "scanned_by"]
     inlines = [PackageIdentifierInline]
 
 

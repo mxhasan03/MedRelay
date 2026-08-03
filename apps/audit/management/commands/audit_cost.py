@@ -50,6 +50,7 @@ ALLOWED_PACKAGES: set[str] = {
     "coverage",
     "detect-secrets",
     "hypothesis",
+    "playwright",
 }
 
 # ---------------------------------------------------------------------------

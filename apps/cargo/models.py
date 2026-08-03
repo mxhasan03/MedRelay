@@ -176,6 +176,25 @@ class Package(models.Model):
         blank=True,
         help_text="Short operational description (e.g. 'sealed specimen bag'). Never clinical.",
     )
+    scanned_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Phase 5 (courier PWA): when the assigned courier confirmed this package's "
+            "PackageIdentifier code during pickup (camera QR scan or manual code entry — see "
+            "apps.cargo.services.confirm_package_scan). This is the physical act of scanning a "
+            "package at pickup, not the custody/chain-of-custody proof event (recipient "
+            "PIN/signature capture), which is Phase 6 work — see docs/CURRENT_STATUS.md 'Phase 5' "
+            "for the exact boundary."
+        ),
+    )
+    scanned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scanned_packages",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

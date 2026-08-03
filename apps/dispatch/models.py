@@ -174,15 +174,19 @@ class JobOffer(models.Model):
     `apps.dispatch.services.offer_delivery` can create several `JobOffer`
     rows at once (a broadcast-style offer to more than one eligible
     candidate) — Phase 4 builds the model and the dispatcher-facing creation
-    path only. **No code in this phase ever transitions a `JobOffer` to
-    `ACCEPTED`/`DECLINED`** — the courier-facing accept/decline UI is Phase 5
-    (courier PWA) work, per docs/IMPLEMENTATION_ROADMAP.md, stated here and
-    in docs/CURRENT_STATUS.md's "Known gaps". `is_expired` is a plain
-    computed property for display (the dashboard can show a stale-looking
-    offer as expired); nothing automatically flips `status` to `EXPIRED` in
-    the background — that would need a scheduled job, which is explicitly
-    Phase 7 territory ("SLA-risk rules... not a background job/notification
-    yet" per this phase's own scope).
+    path only. **Phase 5 implements the accept/decline transitions** — see
+    `apps.dispatch.services.accept_job_offer`/`decline_job_offer`, which reuse
+    `assign_delivery`'s atomicity/hard-eligibility guarantees for acceptance
+    rather than duplicating them (docs/CURRENT_STATUS.md "Phase 5"). `is_expired`
+    is still a plain computed property for display; nothing automatically
+    flips a stale `OFFERED` row's stored `status` to `EXPIRED` in the
+    database, in the background or otherwise (still Phase 7 territory) —
+    `accept_job_offer` rejects an attempt to accept an already-expired offer
+    (`apps.dispatch.services._reject_if_not_acceptable`, checking `is_expired`
+    read-only) without ever persisting a status change for it, specifically
+    because that write would be rolled back anyway the moment the resulting
+    exception propagates out of `accept_job_offer`'s own `transaction.atomic()`
+    -- see that function's docstring for the real bug this avoided.
     """
 
     delivery_request = models.ForeignKey(
@@ -197,6 +201,14 @@ class JobOffer(models.Model):
     offered_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     responded_at = models.DateTimeField(null=True, blank=True)
+    decline_reason = models.TextField(
+        blank=True,
+        help_text=(
+            "Phase 5: optional courier-recorded reason for declining "
+            "(docs/PRODUCT_REQUIREMENTS.md section 6 — 'Legitimate cargo/safety rejection must "
+            "be recordable'). Never required; a courier may decline without giving a reason."
+        ),
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

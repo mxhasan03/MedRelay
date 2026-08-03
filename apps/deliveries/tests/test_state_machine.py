@@ -160,20 +160,72 @@ def test_offered_can_revert_to_ready_for_dispatch() -> None:
     assert delivery_request.status == DeliveryStatus.READY_FOR_DISPATCH
 
 
-def test_courier_en_route_onward_transitions_are_not_implemented_in_phase_4() -> None:
-    """ASSIGNED onward (courier en route, pickup, transit, delivery) is
-    explicitly out of scope through Phase 4 — see
-    apps/deliveries/state_machine.py's module docstring. Attempting it must
-    raise, not silently succeed."""
+def _assigned_delivery_request():
     delivery_request = _fully_valid_delivery_request()
     transition_delivery_request(delivery_request, DeliveryStatus.SUBMITTED, actor=None)
     transition_delivery_request(delivery_request, DeliveryStatus.VALIDATION_REQUIRED, actor=None)
     transition_delivery_request(delivery_request, DeliveryStatus.READY_FOR_DISPATCH, actor=None)
     transition_delivery_request(delivery_request, DeliveryStatus.ASSIGNED, actor=None)
+    return delivery_request
+
+
+def test_assigned_through_at_destination_succeeds_step_by_step() -> None:
+    """Phase 5 extends the state machine with the courier-driven middle
+    transitions (apps.couriers.services.advance_delivery_status)."""
+    delivery_request = _assigned_delivery_request()
+    for to_status in (
+        DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP,
+        DeliveryStatus.AT_PICKUP,
+        DeliveryStatus.PICKED_UP,
+        DeliveryStatus.IN_TRANSIT,
+        DeliveryStatus.AT_DESTINATION,
+    ):
+        transition_delivery_request(delivery_request, to_status, actor=None)
+        assert delivery_request.status == to_status
+
+
+def test_skipping_a_pickup_transit_step_raises_invalid_transition() -> None:
+    """Each Phase 5 transition must be taken in order — jumping straight from
+    ASSIGNED to PICKED_UP (skipping COURIER_EN_ROUTE_TO_PICKUP/AT_PICKUP) is
+    not allowed."""
+    delivery_request = _assigned_delivery_request()
     with pytest.raises(InvalidTransitionError):
-        transition_delivery_request(
-            delivery_request, DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP, actor=None
-        )
+        transition_delivery_request(delivery_request, DeliveryStatus.PICKED_UP, actor=None)
+
+
+def test_cancellation_allowed_from_every_pickup_transit_state() -> None:
+    sequence = (
+        DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP,
+        DeliveryStatus.AT_PICKUP,
+        DeliveryStatus.PICKED_UP,
+        DeliveryStatus.IN_TRANSIT,
+    )
+    for index, to_status in enumerate(sequence):
+        delivery_request = _assigned_delivery_request()
+        for step in sequence[: index + 1]:
+            transition_delivery_request(delivery_request, step, actor=None)
+        assert delivery_request.status == to_status
+        transition_delivery_request(delivery_request, DeliveryStatus.CANCELLED, actor=None)
+        assert delivery_request.status == DeliveryStatus.CANCELLED
+
+
+def test_at_destination_to_delivered_is_not_implemented_in_phase_5() -> None:
+    """DELIVERED implies proof-of-delivery capture (recipient PIN/signature),
+    which is Phase 6 ("custody, proof, temperature, and incidents") work —
+    see apps/deliveries/state_machine.py's module docstring for the full
+    boundary write-up. Phase 5 stops at AT_DESTINATION; attempting the final
+    transition must raise, not silently succeed."""
+    delivery_request = _assigned_delivery_request()
+    for to_status in (
+        DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP,
+        DeliveryStatus.AT_PICKUP,
+        DeliveryStatus.PICKED_UP,
+        DeliveryStatus.IN_TRANSIT,
+        DeliveryStatus.AT_DESTINATION,
+    ):
+        transition_delivery_request(delivery_request, to_status, actor=None)
+    with pytest.raises(InvalidTransitionError):
+        transition_delivery_request(delivery_request, DeliveryStatus.DELIVERED, actor=None)
 
 
 # --- Validation gate: missing cargo classification / packaging attestation ---

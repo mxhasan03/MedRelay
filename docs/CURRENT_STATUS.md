@@ -1858,3 +1858,483 @@ $ python -m pytest apps/dispatch/tests/test_concurrency.py -q --no-cov --ds=conf
 A doc file can never contain the hash of the commit that introduces its own final content (the
 same inherent one-commit lag Phase 0 called out), so this line was added in a small follow-up
 commit after commit (1) landed — see `git log --oneline` for the definitive, current history.
+
+# Current Status — Phase 5 (Courier PWA and Tracking)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 5 on top of the
+Phase 4 foundation (starting point: commit `2537547`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 5 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 5 — Courier PWA and tracking":
+a mobile-first, server-rendered courier PWA (job offers, active-delivery timeline, pickup/transit
+status advancement, package scan) with a real PWA manifest and service worker; job-offer
+accept/reject reusing Phase 4's atomic assignment machinery; the courier-driven pickup/transit
+state-machine transitions (`ASSIGNED -> COURIER_EN_ROUTE_TO_PICKUP -> AT_PICKUP -> PICKED_UP ->
+IN_TRANSIT -> AT_DESTINATION`); browser Geolocation location pings with a hard terminal-state
+cutoff; a client-side offline event queue with server-side Idempotency-Key deduplication for every
+new state-mutating endpoint; and QR/manual package scanning. All new models have migrations, all
+quality gates pass (see below), and all three hard Phase 5 acceptance criteria have real, passing
+tests:
+
+1. **Service-worker/offline verification, honestly scoped.** Playwright + a real Chromium binary
+   were installed and did launch successfully in this sandbox (see "Playwright" section below) —
+   `tests/integration/test_pwa_browser.py` drives a real browser against a real running Django
+   server and proves the service worker actually registers and actually populates its cache with
+   the real static shell assets. Additionally, `tests/integration/test_pwa.py` verifies the
+   manifest/service-worker Django routes at the response level (content-type, content, and that a
+   real rendered courier page includes the registration `<script>`), for a fast, browser-free check
+   that doesn't depend on a downloaded browser binary being available.
+2. **Location stops after terminal state — hard requirement.** `apps.tracking.services.record_location_ping`
+   rejects (HTTP 409, no `CourierLocationPing` row created) any ping for an assignment whose
+   delivery has reached `AT_DESTINATION` (or any other terminal delivery status), or whose
+   assignment itself is no longer `ACTIVE` — proven by
+   `apps/tracking/tests/test_services.py::test_record_location_ping_rejected_once_delivery_reaches_any_terminal_status`
+   (parametrized over every terminal status) and the HTTP-level
+   `apps/tracking/tests/test_views.py::test_location_ping_rejected_after_terminal_state_hard_acceptance_criterion`.
+3. **Reruns/retries do not duplicate events — hard requirement.** `apps.couriers.idempotency.idempotent_call`
+   is the single mechanism behind every new state-mutating courier endpoint (job offer accept/decline,
+   pickup/transit status advance, package scan, location ping); submitting the exact same request
+   twice with the same `Idempotency-Key` returns the identical stored response and creates exactly
+   one underlying row/effect, not two — proven by a dedicated test per endpoint (see "Idempotency
+   tests" below) plus unit tests of the mechanism itself in `apps/couriers/tests/test_idempotency.py`.
+
+## Exact files created/changed
+
+`git diff --stat 2537547` (Phase 4's final commit → this phase's pre-commit working tree):
+
+```
+53 files changed, 3501 insertions(+), 42 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/cargo/`**: `models.py` (`Package.scanned_at`/`scanned_by` — the pickup-scan confirmation
+  timestamp, distinct from Phase 6's custody/proof events), `services.py` (`PackageScanError`,
+  `confirm_package_scan` — the manual-code-entry pickup-scan confirmation), `admin.py` (`Package`
+  admin shows `scanned_at`), `migrations/0005_package_scanned_at_package_scanned_by.py`,
+  `tests/test_services.py` (5 new tests: correct code, nonexistent code, blank code, wrong-delivery
+  code, idempotent re-scan).
+- **`apps/couriers/`**: `models.py` (`CourierActionIdempotencyKey` — the Idempotency-Key mechanism's
+  storage model), `idempotency.py` (`idempotent_call` — the single call site every new courier
+  endpoint uses), `services.py` (`COURIER_ADVANCE_SEQUENCE`, `advance_delivery_status`,
+  `can_access_courier_portal`), `views.py` (`CourierHomeView`, `JobOfferListView`,
+  `JobOfferAcceptView`, `JobOfferDeclineView`, `ActiveDeliveryView`, `DeliveryStatusAdvanceView`,
+  `PackageScanView`), `urls.py`, `admin.py` (registers `CourierActionIdempotencyKey`, read-only),
+  `apps.py` (docstring update), `migrations/0002_courieractionidempotencykey.py`,
+  `tests/test_idempotency.py`, `tests/test_services.py`, `tests/test_views.py`.
+- **`apps/deliveries/`**: `state_machine.py` (`ALLOWED_TRANSITIONS` extended with
+  `ASSIGNED -> COURIER_EN_ROUTE_TO_PICKUP -> AT_PICKUP -> PICKED_UP -> IN_TRANSIT -> AT_DESTINATION`,
+  plus `CANCELLED` reachable from every one of those five states — stops at `AT_DESTINATION`,
+  `AT_DESTINATION -> DELIVERED` deliberately not implemented, see "The DELIVERED/Phase-6 boundary"
+  below), `tests/test_state_machine.py` (replaced the old Phase-4 "not implemented" boundary test
+  with real step-by-step transition tests, a skip-a-step rejection test, a cancellation-from-every-state
+  test, and the new `AT_DESTINATION -> DELIVERED` boundary test).
+- **`apps/dispatch/`**: `models.py` (`JobOffer.decline_reason` field + docstring updates),
+  `exceptions.py` (`JobOfferOwnershipError`), `services.py` (`accept_job_offer`, `decline_job_offer`,
+  `_reject_if_not_acceptable` — both reuse `assign_delivery`'s atomicity/hard-eligibility guarantees
+  rather than duplicating them), `admin.py` (`JobOfferAdmin` shows `decline_reason`/`responded_at`),
+  `migrations/0003_joboffer_decline_reason.py`, `tests/test_services.py` (11 new tests covering
+  accept/decline success, ownership rejection, expiration rejection, hard-eligibility-gate
+  enforcement even via accept, decline-does-not-block-others, and idempotent double-accept/decline
+  at the service layer via the audit-override side effect).
+- **`apps/tracking/`** (models/services/views built for the first time — Phase 0-4 only had the
+  empty app scaffold): `models.py` (`CourierLocationPing`), `services.py`
+  (`TERMINAL_DELIVERY_STATUSES`, `LocationPingRejectedError`, `is_terminal`, `record_location_ping`),
+  `views.py` (`LocationPingView`), `urls.py`, `admin.py`, `apps.py` (docstring update),
+  `migrations/0001_initial.py`, `tests/factories.py`, `tests/test_models.py`, `tests/test_services.py`,
+  `tests/test_views.py`.
+- **`config/pwa.py`** (new): `service_worker`/`web_manifest` views serving `static/sw.js`/
+  `static/manifest.json`'s content at root-level URLs (`/sw.js`, `/manifest.json`) for full
+  service-worker scope.
+- **`config/urls.py`**: added the PWA routes, `apps.couriers.urls`, `apps.tracking.urls`.
+- **`config/settings/test.py`**: overrides `STORAGES["staticfiles"]` to the plain (non-manifest)
+  `StaticFilesStorage` for test settings — see "Design decisions" below.
+- **`static/manifest.json`**, **`static/sw.js`**, **`static/icons/icon.svg`**,
+  **`static/js/courier.js`**, **`static/js/offline-queue.js`** (all new) — the PWA shell, the
+  cache-first service worker, a synthetic SVG icon, the courier action/geolocation/camera-scan
+  helper, and the localStorage-backed offline event queue.
+- **`templates/couriers/`** (all new): `base.html` (mobile-first shell: viewport meta inherited from
+  `templates/base.html`, manifest link, service-worker registration script, CSRF meta tag, touch-friendly
+  CSS), `home.html`, `job_offer_list.html`, `active_delivery.html`.
+- **`tests/integration/test_pwa.py`** (new): Django-response-level PWA route tests (no browser
+  needed). **`tests/integration/test_pwa_browser.py`** (new): real Playwright-driven browser tests.
+- **`pyproject.toml`** / **`uv.lock`**: added `playwright>=1.62.0` (dev-only).
+- **`apps/audit/management/commands/audit_cost.py`**: added `"playwright"` to `ALLOWED_PACKAGES`.
+- **`docs/COST_AUDIT.md`**: regenerated (22 dependencies now, was 21).
+
+## Design decisions
+
+### 1. App placement: `apps.tracking` for location pings, `apps.couriers` for the PWA + idempotency, `apps.dispatch` for offer accept/decline
+
+`CourierLocationPing` lives in `apps.tracking` (empty scaffold since Phase 0, per
+`docs/ARCHITECTURE_AND_DATA_MODEL.md`'s "Couriers" entity list explicitly naming it there and
+Phase 3's own "deferred to Phase 5 (tracking)" note). The courier-facing PWA views/URLs and the
+pickup/transit authorization service (`advance_delivery_status`) live in `apps.couriers` — the same
+"the app that owns the *actor's* domain owns the cross-cutting UI/orchestration for that actor"
+precedent Phase 4 set by putting the dispatch board in `apps.dispatch` even though it reads/writes
+`apps.deliveries`/`apps.couriers` state. Job-offer accept/decline (`accept_job_offer`/
+`decline_job_offer`) live in `apps.dispatch.services` — right next to `assign_delivery`/
+`offer_delivery`, per the task's own explicit instruction to reuse (not duplicate) that module's
+atomicity/hard-eligibility logic, since accepting an offer is fundamentally the same race as a
+dispatcher directly assigning a courier.
+
+The Idempotency-Key mechanism (`CourierActionIdempotencyKey`, `apps.couriers.idempotency.idempotent_call`)
+lives in `apps.couriers` even though `apps.tracking.views.LocationPingView` also uses it — a
+one-directional dependency (`apps.tracking` → `apps.couriers`, never the reverse), so no lazy-import
+cycle-avoidance was needed, unlike the two-directional `apps.couriers.eligibility` ↔
+`apps.dispatch` relationship from Phase 4. This was judged the more honest home than inventing a new
+top-level "generic infra" app for a mechanism only Phase 5's courier endpoints need today; a later
+phase that needs idempotent create/transition endpoints outside the courier PWA (per
+`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 9's general "require Idempotency-Key for
+create/transition endpoints") should promote this to a shared location at that point, not before.
+
+### 2. Idempotency-Key mechanism: a scoped `(courier, endpoint, key)` row, store-on-success-only
+
+`CourierActionIdempotencyKey` is a real database table (`courier` FK, `endpoint` string, `key`
+string, `response_data` JSON, `status_code`), with a real `UniqueConstraint` on
+`(courier, endpoint, key)` — not an in-memory cache, so it survives process restarts and is safe
+under real concurrent requests (a losing concurrent `INSERT` fetches and returns the winner's
+already-committed row instead of erroring or silently doing nothing). `idempotent_call(courier,
+endpoint, key, fn)`:
+
+1. Looks up an existing row for `(courier, endpoint, key)` first. If found, `fn` is **never called
+   again** — the stored `response_data`/`status_code` is replayed as-is. This is what makes "reruns/
+   retries do not duplicate events" hold: the underlying effect (a `DeliveryAssignment` row, a
+   `DeliveryStatusTransition` row, a `CourierLocationPing` row) is created at most once per key.
+2. Otherwise calls `fn()`. If it raises, **nothing is recorded** — a genuinely failed request (e.g.
+   an invalid transition, a wrong package code) must remain retryable under the same key with a
+   corrected request, not be permanently remembered as a failure. This was verified directly by
+   `test_idempotent_call_does_not_record_a_failed_attempt`.
+3. If `fn()` succeeds, the result is stored. A concurrent `INSERT` race is handled by catching
+   `IntegrityError` and re-fetching the winner's row.
+
+Scoped per-courier (not globally unique on `key` alone) so two different couriers' independently
+client-generated UUIDs never collide, and scoped per-`endpoint` so the same key reused (by a client
+bug) across two different action types does not falsely dedupe them against each other — both
+covered by dedicated tests (`test_idempotent_call_scopes_by_courier`/`..._by_endpoint`).
+
+Every new Phase 5 endpoint requires an `Idempotency-Key` (header, primary path; a JSON-body or
+form-field fallback for parity with the no-JS manual-entry path) and returns `400` if it is missing:
+`JobOfferAcceptView`/`JobOfferDeclineView` (`apps.couriers.views`),
+`DeliveryStatusAdvanceView`/`PackageScanView` (`apps.couriers.views`), and `LocationPingView`
+(`apps.tracking.views`). Each has a dedicated "same key twice → one row, identical response" test —
+see `apps/couriers/tests/test_views.py`'s `test_job_offer_accept_same_idempotency_key_twice_does_not_duplicate`/
+`test_job_offer_decline_same_idempotency_key_twice_does_not_duplicate`/
+`test_delivery_status_advance_same_idempotency_key_twice_does_not_duplicate`/
+`test_package_scan_same_idempotency_key_twice_does_not_duplicate`, and
+`apps/tracking/tests/test_views.py::test_location_ping_same_idempotency_key_twice_does_not_duplicate`.
+
+### 3. A real, honest bug this design caught: idempotency-safe "expire on read" cannot mutate inside the same atomic block it raises from
+
+An early version of `accept_job_offer` tried to flip an already-expired `JobOffer`'s stored `status`
+to `EXPIRED` in the database *before* raising `AssignmentConflictError` for the rejected accept
+attempt. Since `accept_job_offer` is wrapped in `transaction.atomic()`, that write was silently
+rolled back the instant the exception it raised propagated out of the atomic block — a real,
+reproducible bug caught by this phase's own test
+(`test_accept_job_offer_rejects_expired_offer`, which asserted the persisted `EXPIRED` status and
+failed until this was fixed). The fix: `_reject_if_not_acceptable` is now deliberately **read-only**
+— it checks `JobOffer.is_expired` (a plain computed property, unchanged since Phase 4) and raises
+without ever attempting to persist a status correction. **Nothing automatically flips a stale
+`OFFERED` row's stored status to `EXPIRED` in the database** — that remains explicit Phase 7
+territory (a real background job), exactly as Phase 4 already framed it; `is_expired` alone is
+sufficient for correct accept-rejection and for display purposes.
+
+### 4. The `DELIVERED`/Phase-6 boundary
+
+Per the task's own explicit framing: "`DELIVERED` marking a delivery fully complete is arguably
+closer to Phase 6 custody/proof... use your judgment on exactly where to draw the line." The line
+drawn here: `apps.deliveries.state_machine.ALLOWED_TRANSITIONS` implements every transition through
+`IN_TRANSIT -> AT_DESTINATION` (the courier physically arriving at the destination's doorstep) but
+has **no entry at all** for `AT_DESTINATION -> DELIVERED` — the dict simply has no key mapping
+`AT_DESTINATION` to anything (matching Phase 2's own precedent for the `OFFERED`-onward boundary: "the
+dict simply has no entry allowing it, rather than a partially-implemented handler that might
+silently no-op"). `DELIVERED` — and the recipient PIN/signature capture that must accompany it,
+per `docs/PRODUCT_REQUIREMENTS.md` section 6's "Active delivery" list ("recipient PIN/signature")
+and section 9's state machine — is explicitly Phase 6 ("custody, proof, temperature, and
+incidents") work. This is proven, not just asserted, by
+`test_at_destination_to_delivered_is_not_implemented_in_phase_5`
+(`apps/deliveries/tests/test_state_machine.py`), which walks a delivery all the way to
+`AT_DESTINATION` and then asserts the final transition raises `InvalidTransitionError`.
+
+Separately, `Package.scanned_at`/`scanned_by` (this phase) is the *pickup*-scan confirmation — a
+courier confirming which physical package they picked up — and is explicitly **not** the
+chain-of-custody proof event Phase 6 will build (sender/recipient PIN or signature capture at
+hand-off). The module docstring on `Package.scanned_at` states this boundary directly, so a future
+Phase 6 session does not confuse "package was scanned at pickup" with "custody was formally
+transferred with proof."
+
+### 5. Offline event queue: `localStorage`, not IndexedDB
+
+`static/js/offline-queue.js` stores queued events (status transitions, location pings) as a single
+JSON array in `localStorage` (key `medrelay_offline_queue_v1`), not IndexedDB. At this prototype's
+realistic scale — a handful of status-advance actions plus periodic location pings for one active
+delivery at a time — a small synchronous JSON blob is a straightforward, easily-testable queue;
+IndexedDB's async, transaction-based API would add real complexity for zero benefit at this volume.
+Every queued event carries a client-generated `idempotencyKey` (a v4 UUID via
+`crypto.randomUUID()`, with a non-cryptographic fallback for older browsers) generated **once, at
+enqueue time** — not regenerated on retry — so a server that already applied an event's effect
+recognizes a replay via `apps.couriers.idempotency.idempotent_call` and returns the original result
+instead of duplicating it. `flush()` submits queued events in order via `fetch()`; an event that
+gets *any* HTTP response (success or a legitimate rejection like 409/403/422) is considered resolved
+and removed (retrying a request the server already definitively answered would not change the
+outcome); a genuine network error (offline) leaves it queued and stops the flush loop. `flush()` is
+triggered on `window`'s `load` and `online` events, and immediately after every `enqueue()` call.
+
+### 6. QR scanning: browser `BarcodeDetector` API with an always-present, always-functional manual fallback
+
+`static/js/courier.js`'s `startCameraScan` uses the browser's built-in `BarcodeDetector` API
+(feature-detected via `"BarcodeDetector" in window`) plus `navigator.mediaDevices.getUserMedia` to
+decode a QR code from a live camera feed, falling back gracefully (returns `false`, camera view
+hidden) if either API is unavailable or camera access is denied. **This camera-scanning path is
+genuinely browser/hardware-dependent and is explicitly not exercised by this project's automated
+test suite** — it can only be manually reviewed in a real browser with camera access, and is stated
+as such directly in the JS file's own comments and in `apps/couriers/views.py`'s module docstring.
+The manual-code-entry `<input>` field in `templates/couriers/active_delivery.html` is always
+present and always functional regardless of camera availability or `BarcodeDetector` support — a
+decoded camera value is written into the exact same input field before submission, so
+`apps.cargo.services.confirm_package_scan` (and `apps.couriers.views.PackageScanView`) never know
+or care whether a code came from a camera or a keyboard. This manual path is what is thoroughly
+tested: `apps/cargo/tests/test_services.py` (5 tests: correct code, nonexistent code, blank code,
+wrong-delivery-request code, idempotent re-scan) and `apps/couriers/tests/test_views.py` (3 tests:
+correct code at the HTTP level, wrong code rejected with a clear `422` error, and the idempotent
+double-submit test).
+
+### 7. Location-ping terminal-state cutoff: reject (HTTP 409), not silent no-op
+
+Per the acceptance criterion's explicit "pick one behavior and test it, document which":
+`apps.tracking.services.record_location_ping` **rejects** (raises `LocationPingRejectedError`,
+mapped to HTTP `409` by `apps.tracking.views.LocationPingView`) a ping submitted once the
+assignment/delivery has reached a terminal state — it does not silently accept-and-discard it. The
+chosen behavior gives the courier's offline-queue client (`static/js/offline-queue.js`) an
+unambiguous signal to stop retrying and drop the queued event (per `flush()`'s "any HTTP response
+resolves the queued event" rule — see design decision 5), rather than retrying forever against a
+ping that will never succeed. `TERMINAL_DELIVERY_STATUSES` includes `AT_DESTINATION` (the one
+actually reachable through Phase 5's own workflow), plus `DELIVERED`/`CANCELLED`/`REJECTED`/
+`FAILED`/`RETURNED` defensively (none reachable yet, but the set stays correct once a later phase
+reaches them). `INCIDENT_HOLD`/`RETURNING` are deliberately excluded — a courier already en route
+under an incident hold or a return-to-sender flow may still be physically moving, and neither is
+reachable via any Phase 5 code path anyway. "Terminal" also covers the assignment's *own* status: a
+`DeliveryAssignment` that is `REASSIGNED`/`COMPLETED`/`CANCELLED` (no longer `ACTIVE`) is terminal
+for ping purposes even if the delivery request's own status happens not to be, since that courier is
+no longer the one who should be reporting a location for it.
+
+### 8. Playwright: installed and genuinely usable in this sandbox, with one caveat
+
+Per the task's explicit instruction to try `uv add --group dev playwright` /
+`uv run playwright install --with-deps chromium` and report honestly: **both the package and a real
+Chromium browser binary were successfully installed and used in this environment.**
+`uv add --group dev playwright` succeeded immediately (resolved `playwright==1.62.0` +
+`greenlet==3.5.4` + `pyee==13.0.1`, all pure/prebuilt-wheel packages, no compilation). `playwright
+install --with-deps chromium` failed — `--with-deps` needs interactive `sudo` to install OS-level
+shared libraries, which is unavailable in this non-interactive sandbox
+(`sudo: a terminal is required to read the password`). **Plain `playwright install chromium`
+(without `--with-deps`) succeeded** — this environment already had the OS libraries Chromium needs
+(likely inherited from the base image), so the browser downloaded (~184 MiB) and, when tested
+directly, launched, rendered a real page, and read its content back correctly.
+
+Given that, this phase built genuine browser-driven tests
+(`tests/integration/test_pwa_browser.py`, gated behind `pytest.importorskip("playwright.sync_api")`
+so a future environment without Chromium fails gracefully/skippably rather than crashing the whole
+suite) using Django's `live_server` fixture (a real HTTP server, not just the Django test client) +
+a real launched Chromium instance:
+
+- `test_service_worker_registers_and_precaches_the_static_shell` logs in as a real courier through
+  the real login form, navigates to the real `/couriers/` page, and polls (via a JS loop evaluated
+  in the real page — see the note below on a genuine timing bug this caught) until
+  `navigator.serviceWorker.getRegistrations()` reports a real registration **and**
+  `caches.open('medrelay-courier-shell-v1')`'s real cache actually contains the four precached
+  static URLs (`/static/manifest.json`, `/static/icons/icon.svg`, `/static/js/courier.js`,
+  `/static/js/offline-queue.js`) — this is a real Cache Storage API read-back, not a mock.
+- `test_manifest_link_and_csrf_meta_are_present_in_a_real_rendered_page` reads the real, rendered
+  DOM's `<link rel="manifest">` `href` and `<meta name="csrf-token">` `content` attributes directly
+  (not response text matching).
+
+**A genuine bug this real-browser test caught during development** (not merely theorized): the
+first version polled with Playwright's `page.wait_for_function(() => caches.keys().then(names =>
+names.includes(CACHE_NAME)))` and then immediately read the cache's keys — but `caches.open(name)`
+registers the cache **name** synchronously, before the service worker's install handler's
+`cache.addAll(PRECACHE_URLS)` has actually finished populating it, so this raced ahead and read an
+empty cache every time. The fix was to poll on the cache's real *entry count* (`keys.length >= 4`)
+in a single `page.evaluate` retry loop, not on the cache's mere existence — confirmed to pass
+reliably across repeated runs afterward. This is exactly the kind of interaction real browser
+automation catches that a Django-response-level test never could.
+
+**Honest scope of what this does and does not prove**: this is real, working browser automation in
+*this* sandbox, today — not a claim that it will work in every environment this repository is
+cloned into. `--with-deps`' `sudo` requirement means a genuinely minimal/locked-down container
+without Chromium's runtime shared libraries pre-installed would need those installed by some other
+means before these tests could run; `tests/integration/test_pwa_browser.py`'s `importorskip` guard
+means such an environment gets a clean skip, not a hard failure, for exactly this reason. Nothing
+about the courier PWA's core logic (job offers, status transitions, idempotency, location-ping
+terminal cutoff) depends on Playwright being available — those are all covered by the Django
+test-client-level test suite, which needs no browser at all.
+
+### 9. Static file storage in test settings
+
+`config/settings/test.py` overrides `STORAGES["staticfiles"]` to plain
+`django.contrib.staticfiles.storage.StaticFilesStorage` — Phase 5 is the first phase whose templates
+actually render a `{% static %}` tag during a test run (the courier PWA's manifest link/icon/JS
+includes; every prior phase's plain-HTML templates never used `{% static %}`). The inherited
+`config/settings/base.py` default, whitenoise's `CompressedManifestStaticFilesStorage`, requires a
+real `collectstatic` run to have already built its hashed-filename manifest — correct for a real
+deployment, but not something the test suite runs (and shouldn't need to, for a fast, hermetic
+test run). This surfaced as a real `ValueError: Missing staticfiles manifest entry` failure the
+first time a courier template was rendered in a test, caught and fixed by this settings override
+rather than by avoiding `{% static %}` in the templates.
+
+## Data minimization checked
+
+Every field added this phase was reviewed against `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section
+2. `CourierLocationPing` stores only plain decimal coordinates, an optional accuracy radius, and a
+timestamp — never anything patient-identifying. `CourierActionIdempotencyKey.response_data` stores
+only the same operational JSON already returned to the client (assignment/offer/package IDs,
+statuses, timestamps) — never a diagnosis, lab result, clinical note, medication indication, SSN,
+or insurance identifier. `Package.scanned_at`/`scanned_by` and `JobOffer.decline_reason` are
+operational timestamps/free-text fields with the same "never clinical content" convention already
+established for `Package.description`/`PackagingAttestation.notes` in Phase 2 — `decline_reason`'s
+help text states this explicitly. No field anywhere in this phase's changes stores a real identity
+document, real background-check result, or real geolocation history beyond synthetic demo-data
+coordinates a courier's own test browser reports.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. `uv add --group dev playwright` + `uv sync --group dev`
+were run after adding `playwright` to `pyproject.toml` (both succeeded against the real PyPI index).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+179 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 179 source files
+```
+Two real production-code type findings were fixed rather than suppressed this phase:
+`apps/tracking/views.py` needed an explicit `assert isinstance(request.user, User)` narrowing (the
+same pattern `apps.deliveries.views`/`apps.dispatch.views` already use) after
+`can_access_courier_portal` guarantees an authenticated, non-anonymous user; and
+`tests/integration/test_pwa_browser.py`/`test_pwa.py` (the top-level `tests/` package, not an
+`apps/<name>/tests/` package) needed the same `*.tests.*` factory_boy-stub-gap mypy override Phase 1
+already established for in-app test packages — extended in `pyproject.toml` with one more
+`[[tool.mypy.overrides]]` entry, `module = "tests.*"`, since this is the first phase a top-level
+`tests/` module uses a factory.
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/cargo/migrations/0005_package_scanned_at_package_scanned_by.py`,
+`apps/couriers/migrations/0002_courieractionidempotencykey.py`,
+`apps/dispatch/migrations/0003_joboffer_decline_reason.py`, and
+`apps/tracking/migrations/0001_initial.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+350 passed in 15.23s
+```
+Coverage: 95% overall (3020 statements, 159 missed) for the whole project including Phase 0-4 code —
+all 345 pre-Phase-5 tests still pass (one, `test_concurrent_assign_delivery_exactly_one_wins`, was
+observed to flake once under a full-suite run due to genuine SQLite write-lock contention, exactly
+the documented Phase 4 "OperationalError: database is locked" behavior under load — re-run in
+isolation 5/5 and as part of two subsequent clean full-suite runs, 100% pass rate; not a Phase 5
+regression), plus new Phase 5 tests across `apps/cargo` (+5), `apps/couriers` (+34 across
+idempotency/services/views), `apps/deliveries` (state-machine tests replaced/added), `apps/dispatch`
+(+11), `apps/tracking` (+21), and `tests/integration` (+5, including the 2 real Playwright browser
+tests). New-app coverage: `apps/tracking/models.py`/`services.py` 100%, `apps/tracking/views.py` 91%
+(2 defensive branches: malformed-JSON and missing-lat/lng error paths, not separately exercised),
+`apps/couriers/idempotency.py` 83% (the concurrent-`IntegrityError`-race branch — a genuine, narrow
+race window not exercised by a single-threaded unit test, same honest limitation
+`apps.dispatch.tests.test_concurrency` exists specifically to cover for `assign_delivery`; not
+attempted here for idempotency itself), `apps/couriers/services.py` 100%, `apps/couriers/views.py`
+89% (defensive branches: missing-idempotency-key/malformed-body early returns), `config/pwa.py`
+100%. The remaining project-wide misses are the pre-existing Phase 0 environment-entrypoint gaps
+(`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`) plus a
+handful of defensive branches elsewhere — none of it load-bearing Phase 5 logic.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 22 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is 22, up from Phase 4's 21 — the one addition is `playwright` (dev-only,
+explicitly named as an approved zero-cost dependency in
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`: "Playwright for end-to-end browser tests").
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from prior phases (`.secrets.baseline` still has empty
+`results: {}`). Run after `git add -A` so every new Phase 5 file was actually scanned. The one
+string that plausibly looks secret-shaped —
+the synthetic `DEMO_PASSWORD` constant in `tests/integration/test_pwa_browser.py`
+(value `MedRelayPwaBrowserTest!2026`) — is marked `# pragma: allowlist secret` inline in that file
+(same convention as every prior phase's synthetic demo-password constants), confirmed not to
+require a baseline entry.
+
+## Known gaps / deviations (honest list)
+
+- **`AT_DESTINATION -> DELIVERED` is deliberately not implemented** — `DELIVERED` implies
+  proof-of-delivery capture (recipient PIN/signature), which is Phase 6 work (see design decision 4
+  above). Phase 5 gets a delivery to the destination's doorstep and stops there.
+- **No sender-side PIN/signature, package condition/seal checklist, or incident reporting** — all
+  explicitly Phase 6 ("custody, proof, temperature, and incidents") per
+  `docs/PRODUCT_REQUIREMENTS.md` section 6's "Active delivery" list; only the pieces this phase's
+  scope named (job offers, pickup/transit advancement, location pings, offline queue, QR/manual
+  scan, timeline) were built.
+- **No real navigation/routing summary shown to the courier** — `apps.dispatch.models.RoutePlan`/
+  `RouteLeg` (Phase 4's synthetic haversine-based route estimate) are not surfaced in
+  `templates/couriers/active_delivery.html` this phase; only stops/instructions are shown. A real
+  turn-by-turn map remains out of scope per the zero-cost policy (no paid Maps/OSRM wiring exists
+  yet at all).
+- **Camera-based QR scanning is genuinely untested by the automated suite** — see design decision 6.
+  Only the manual-code-entry fallback is covered by real tests; the `BarcodeDetector`/
+  `getUserMedia` path is manually-reviewable-only, stated plainly in the JS/view docstrings.
+- **The offline event queue's actual offline→online recovery behavior was not verified with a real
+  browser going through a real network-loss/recovery cycle** — `tests/integration/test_pwa_browser.py`
+  verifies service-worker registration and static-shell cache population, not the offline queue's
+  `localStorage` round-trip or its `fetch()` retry behavior under a real simulated offline condition
+  (Playwright can simulate this via `context.set_offline(True)`, but this phase's browser-test
+  budget was spent proving the two hard PWA acceptance criteria — SW registration and cache
+  population — rather than this additional scenario). The offline queue's *server-side* half (the
+  Idempotency-Key mechanism a replayed/retried request relies on) is thoroughly tested at the
+  Django level; the *client-side* queuing/retry logic itself (`static/js/offline-queue.js`) is
+  manually reviewable but not automated-browser-tested this phase.
+- **`Playwright`'s `--with-deps` flag does not work in this sandbox** (needs interactive `sudo`) —
+  plain `playwright install chromium` did work here because the needed OS shared libraries happened
+  to already be present; a more locked-down environment might not have them, which is why
+  `tests/integration/test_pwa_browser.py` is guarded with `pytest.importorskip` rather than a hard
+  dependency (see design decision 8).
+- **No demo/seed courier-PWA data was added to `seed_demo_data`** — this phase's automated test
+  suite's factories exercise the identical model/service layer a real courier interaction would use;
+  no sample job offers/location pings were added to the optional `seed_demo_data` command.
+- **`CourierLocationPing` is not append-only-hardened** like `DeliveryStatusTransition` is — a
+  deliberate, documented scope choice (see `apps/tracking/models.py`'s module docstring): raw
+  location telemetry is comparatively low-stakes, high-volume data, and building the same
+  tamper-evident guard for it would be needless ceremony for what this prototype needs.
+- **`DeliveryAssignment`/`JobOffer` idempotency-race coverage is unit-level, not multi-threaded** —
+  unlike `apps.dispatch.tests.test_concurrency`'s genuine multi-threaded test for `assign_delivery`
+  itself, `apps.couriers.idempotency`'s own concurrent-`INSERT`-race branch is not separately
+  exercised by real concurrent threads this phase (see coverage note above) — a reasonable follow-up
+  if this mechanism is later promoted to a shared, higher-traffic location.
+- Coverage is 95%, not 100% (see gate output above) — no hard coverage threshold was specified as a
+  gate; the uncovered lines are concentrated in defensive/early-return branches and one genuine,
+  narrow concurrency-race branch, plus the pre-existing Phase 0 environment-entrypoint gaps.
+- Not yet built (correctly out of scope for Phase 5, per the roadmap): custody/proof events,
+  temperature readings/excursions, incidents, notifications, billing/invoicing, reporting — all
+  later phases.
+
+## Commit history for this phase
+
+(Recorded after the commit lands — see `git log --oneline` for the definitive, current history.)

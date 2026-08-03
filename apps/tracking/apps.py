@@ -1,6 +1,8 @@
 """AppConfig for the tracking app.
 
-Courier location pings and delivery tracking views. No domain models yet in Phase 0.
+Phase 5: `CourierLocationPing` (browser Geolocation pings, tied to a
+`DeliveryAssignment`) and the location-ping endpoint/terminal-state cutoff.
+See `apps/tracking/models.py` and `apps/tracking/services.py`.
 """
 
 from django.apps import AppConfig

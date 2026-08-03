@@ -3,10 +3,13 @@ vehicles, equipment, cargo authorizations, and availability."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.contrib import admin
 
 from apps.couriers.models import (
     CargoAuthorization,
+    CourierActionIdempotencyKey,
     CourierAvailability,
     CourierCredential,
     CourierProfile,
@@ -132,3 +135,21 @@ class CourierAvailabilityAdmin(admin.ModelAdmin):
     list_filter = ["is_online", "current_service_zone"]
     search_fields = ["courier__user__username"]
     autocomplete_fields = ["courier", "current_service_zone"]
+
+
+@admin.register(CourierActionIdempotencyKey)
+class CourierActionIdempotencyKeyAdmin(admin.ModelAdmin):
+    """Read-only: these rows are an internal replay-protection record, not
+    something an operator should ever hand-edit."""
+
+    list_display = ["courier", "endpoint", "key", "status_code", "created_at"]
+    list_filter = ["endpoint", "status_code"]
+    search_fields = ["courier__user__username", "endpoint", "key"]
+    autocomplete_fields = ["courier"]
+    readonly_fields = ["courier", "endpoint", "key", "response_data", "status_code", "created_at"]
+
+    def has_add_permission(self, request: Any) -> bool:
+        return False
+
+    def has_change_permission(self, request: Any, obj: Any = None) -> bool:
+        return False

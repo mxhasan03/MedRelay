@@ -1,0 +1,62 @@
+{% extends "couriers/base.html" %}
+{% block title %}Job Offers — MedRelay (Demo Prototype){% endblock %}
+{% block courier_content %}
+<h1>Open Job Offers</h1>
+<p>Only deliveries you are eligible for are ever shown here
+   (apps.couriers.eligibility / apps.dispatch.services.offer_delivery).</p>
+
+{% if not offers %}
+<p>No open job offers right now.</p>
+{% endif %}
+
+{% for offer in offers %}
+<div class="card" id="offer-{{ offer.pk }}">
+  <p>Delivery {{ offer.delivery_request_id|truncatechars:8 }} &mdash;
+     {{ offer.delivery_request.get_service_level_display }}</p>
+  <p>Expires: {{ offer.expires_at }}</p>
+  <button data-accept-url="{% url 'courier-job-offer-accept' offer.pk %}"
+          onclick="acceptOffer(this)">Accept</button>
+  <button class="secondary" data-decline-url="{% url 'courier-job-offer-decline' offer.pk %}"
+          onclick="declineOffer(this)">Decline</button>
+  <label>Decline reason (optional):
+    <input type="text" id="reason-{{ offer.pk }}" placeholder="e.g. cargo/safety concern">
+  </label>
+  <p id="status-{{ offer.pk }}"></p>
+</div>
+{% endfor %}
+{% endblock %}
+{% block courier_scripts %}
+<script>
+function acceptOffer(btn) {
+  var url = btn.getAttribute("data-accept-url");
+  MedRelayCourier.submitAction(url, {}, function (ok, data) {
+    var statusId = url.match(/offers\/(\d+)\//)[1];
+    var el = document.getElementById("status-" + statusId);
+    if (ok) {
+      el.textContent = "Accepted! Redirecting...";
+      window.location.href = "/couriers/deliveries/" + data.delivery_request_id + "/";
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "could not accept offer");
+    }
+  });
+}
+function declineOffer(btn) {
+  var url = btn.getAttribute("data-decline-url");
+  var offerId = url.match(/offers\/(\d+)\//)[1];
+  var reason = document.getElementById("reason-" + offerId).value;
+  MedRelayCourier.submitAction(url, {reason: reason}, function (ok, data) {
+    var el = document.getElementById("status-" + offerId);
+    if (ok) {
+      el.textContent = "Declined.";
+      document.getElementById("offer-" + offerId).style.opacity = "0.5";
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "could not decline offer");
+    }
+  });
+}
+</script>
+{% endblock %}

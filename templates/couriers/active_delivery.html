@@ -1,0 +1,112 @@
+{% extends "couriers/base.html" %}
+{% block title %}Delivery {{ delivery_request.pk|truncatechars:8 }} — MedRelay (Demo Prototype){% endblock %}
+{% block courier_content %}
+<h1>Delivery {{ delivery_request.pk|truncatechars:8 }}</h1>
+<p>Status: <strong>{{ delivery_request.get_status_display }}</strong></p>
+
+<div class="card">
+  <h2>Stops</h2>
+  {% for stop in delivery_request.stops.all %}
+  <p><strong>{{ stop.get_stop_type_display }}</strong>: {{ stop.facility.name }}<br>
+     {{ stop.instructions }}</p>
+  {% endfor %}
+  <p>{{ delivery_request.facility_instructions }}</p>
+</div>
+
+{% if next_status %}
+<div class="card">
+  <h2>Advance status</h2>
+  <button id="advance-btn"
+          data-advance-url="{% url 'courier-delivery-advance' delivery_request.pk %}"
+          data-next-status="{{ next_status }}"
+          onclick="advanceStatus(this)">Mark {{ next_status }}</button>
+  <p id="advance-status"></p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Scan package</h2>
+  <video id="scan-video" style="width:100%;display:none;" playsinline muted></video>
+  <button id="camera-scan-btn"
+          data-scan-url="{% url 'courier-package-scan' delivery_request.pk %}"
+          onclick="tryCameraScan(this)">Use camera</button>
+  <label>Manual code entry (always available):
+    <input type="text" id="scan-code" placeholder="e.g. PKG-ABCDEF012345">
+  </label>
+  <button data-scan-url="{% url 'courier-package-scan' delivery_request.pk %}"
+          onclick="submitScan(this)">Confirm scan</button>
+  <p id="scan-status"></p>
+  <ul>
+    {% for package in packages %}
+    <li>Package {{ package.sequence_number }} &mdash;
+      {% if package.scanned_at %}scanned at {{ package.scanned_at }}{% else %}not scanned{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="card">
+  <h2>Status timeline</h2>
+  <ul class="timeline">
+    {% for transition in transitions %}
+    <li>{{ transition.occurred_at }}: {{ transition.from_status|default:"(none)" }}
+      &rarr; {{ transition.to_status }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
+{% block courier_scripts %}
+<script>
+if (window.MedRelayCourier && {{ active_assignment.pk|default:"null" }} !== null) {
+  MedRelayCourier.startLocationPings(
+    "{% url 'location-ping' active_assignment.pk %}"
+  );
+}
+
+function advanceStatus(btn) {
+  var url = btn.getAttribute("data-advance-url");
+  var toStatus = btn.getAttribute("data-next-status");
+  MedRelayCourier.submitAction(url, {to_status: toStatus}, function (ok, data) {
+    var el = document.getElementById("advance-status");
+    if (ok) {
+      window.location.reload();
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "could not advance status");
+    }
+  });
+}
+
+function submitScan(btn) {
+  var url = btn.getAttribute("data-scan-url");
+  var code = document.getElementById("scan-code").value;
+  MedRelayCourier.submitAction(url, {code: code}, function (ok, data) {
+    var el = document.getElementById("scan-status");
+    if (ok) {
+      el.textContent = "Package " + data.sequence_number + " scanned.";
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "invalid code");
+    }
+  });
+}
+
+function tryCameraScan(btn) {
+  var video = document.getElementById("scan-video");
+  video.style.display = "block";
+  MedRelayCourier.startCameraScan(video, function (decodedValue) {
+    document.getElementById("scan-code").value = decodedValue;
+    video.style.display = "none";
+    submitScan(btn);
+  }).then(function (started) {
+    if (!started) {
+      video.style.display = "none";
+      document.getElementById("scan-status").textContent =
+        "Camera scanning unavailable in this browser — use manual entry above.";
+    }
+  });
+}
+</script>
+{% endblock %}

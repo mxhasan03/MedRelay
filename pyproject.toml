@@ -33,6 +33,7 @@ dev = [
     "coverage>=7.6,<8.0",
     "detect-secrets>=1.5,<2.0",
     "hypothesis>=6.115,<7.0",
+    "playwright>=1.62.0",
 ]
 
 [tool.ruff]
@@ -74,6 +75,14 @@ ignore_errors = true
 # the same way generated `migrations/` content already is above.
 [[tool.mypy.overrides]]
 module = "*.tests.*"
+ignore_errors = true
+
+# Same factory_boy stub gap as the override above, for the top-level
+# tests/ package (tests/integration, tests/unit) rather than an in-app
+# apps/<name>/tests/ package — Phase 5 is the first phase where a
+# top-level test module (tests/integration/test_pwa.py) uses a factory.
+[[tool.mypy.overrides]]
+module = "tests.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]

@@ -1,0 +1,19 @@
+{
+  "name": "MedRelay Courier (Demo Prototype)",
+  "short_name": "MedRelay Courier",
+  "description": "Synthetic-data-only courier PWA prototype. Not certified or approved for real medical delivery operations.",
+  "start_url": "/couriers/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#7a1f1f",
+  "icons": [
+    {
+      "src": "/static/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
