@@ -109,7 +109,7 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": env.db_url(
         "DATABASE_URL",
-        default="postgres://medrelay:medrelay@localhost:5432/medrelay",
+        default="postgres://medrelay:medrelay@localhost:5432/medrelay",  # pragma: allowlist secret
     )
 }
 DATABASES["default"].setdefault("CONN_MAX_AGE", 60)

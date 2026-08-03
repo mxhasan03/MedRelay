@@ -147,6 +147,20 @@ script; it is kept as a placeholder for later phases.
    rewrite it. This still fails closed on any new, un-baselined secret.
 6. **`uv` worked fully; no pip fallback was needed.** Documented here for completeness since the
    task asked for an honest report either way.
+7. **Baseline regeneration bug, caught and fixed.** The `.secrets.baseline` was first generated
+   with `detect-secrets scan` immediately after `git init` but *before* anything was staged, so
+   `git ls-files` was empty and the "scan" trivially scanned zero files, producing a vacuously
+   empty (but not actually validated) baseline. This was caught during final verification when
+   `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)` — which scans explicitly
+   passed files rather than relying on git's tracked-file list at scan time — flagged two
+   `BasicAuthDetector` matches: the synthetic placeholder credential `medrelay:medrelay` in
+   `DATABASE_URL` in both `.env.example` and the default value in
+   `config/settings/base.py`. Both are non-secret synthetic local-dev placeholders (not real
+   credentials, not used anywhere outside this repo), so each was marked with a
+   `# pragma: allowlist secret` / `# pragma: allowlist nextline secret` comment rather than
+   silently added to the baseline, and the baseline was regenerated against the real, fully
+   git-tracked file set. Final state: `detect-secrets-hook --baseline .secrets.baseline
+   $(git ls-files)` exits 0 with a baseline whose `results` are genuinely empty.
 
 ## Quality gate results (all run from a clean `uv sync --group dev` virtualenv, `config.settings.test`)
 
@@ -199,8 +213,12 @@ Zero-cost policy audit passed: 19 dependencies checked, 0 prohibited-service ind
 (exit code 0; see `docs/COST_AUDIT.md` for the generated report)
 
 ### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
-Exit code 0, no output (no findings outside the committed baseline, which itself has an empty
-`results: {}` — a clean repository).
+Exit code 0, no output. The committed `.secrets.baseline` has an empty `results: {}`. Two
+`BasicAuthDetector` matches on the synthetic placeholder credential `medrelay:medrelay` (in
+`.env.example` and `config/settings/base.py`) were found and resolved during this session via
+inline `pragma: allowlist secret` / `pragma: allowlist nextline secret` comments rather than being
+added to the baseline — see deviation #7 above for the full story, including a baseline-generation
+bug this caught and fixed.
 
 ## Docker/compose verification
 
