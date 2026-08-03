@@ -37,6 +37,7 @@ ALLOWED_PACKAGES: set[str] = {
     "django-environ",
     "gunicorn",
     "whitenoise",
+    "segno",
     "pytest",
     "pytest-django",
     "pytest-cov",
