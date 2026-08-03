@@ -1,0 +1,20 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MedRelay (Demo Prototype){% endblock %}</title>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div role="banner" style="background:#7a1f1f;color:#fff;padding:0.75rem 1rem;font-size:0.9rem;text-align:center;">
+        <strong>{{ APP_MODE }}</strong> &mdash; {{ DEMO_DISCLAIMER }}
+    </div>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

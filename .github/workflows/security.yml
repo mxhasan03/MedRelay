@@ -1,0 +1,38 @@
+name: Security
+
+# Secret scanning only. Kept as its own workflow (rather than a job inside
+# ci.yml) so it shows up as a distinct required check and can be reasoned
+# about independently. Uses detect-secrets (open-source, pip-installable, no
+# credentials or network beyond normal package install) against the
+# committed .secrets.baseline.
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: detect-secrets scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install detect-secrets
+        run: pip install detect-secrets
+
+      - name: Check all tracked files against the committed baseline
+        # detect-secrets-hook (the pre-commit-hook entry point) compares the
+        # given files against the baseline read-only — unlike `detect-secrets
+        # scan --baseline`, it does not rewrite the baseline's generated_at
+        # timestamp, so this is safe to run in CI without spurious diffs.
+        run: detect-secrets-hook --baseline .secrets.baseline $(git ls-files)

@@ -1,0 +1,81 @@
+[project]
+name = "medical-courier-platform"
+version = "0.1.0"
+description = "MedRelay: synthetic-data-only B2B healthcare-courier logistics platform prototype (Phase 0). Not certified or approved for real medical delivery operations."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary - portfolio/demo project" }
+authors = [{ name = "Hasan" }]
+
+dependencies = [
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.15,<3.16",
+    "drf-spectacular>=0.28,<0.29",
+    "psycopg[binary]>=3.2,<3.3",
+    "celery>=5.6,<5.7",
+    "redis>=5.2,<6.0",
+    "django-environ>=0.11,<0.12",
+    "gunicorn>=23.0,<24.0",
+    "whitenoise>=6.8,<7.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-django>=4.9,<5.0",
+    "pytest-cov>=6.0,<7.0",
+    "factory-boy>=3.3,<4.0",
+    "ruff>=0.8,<0.9",
+    "mypy>=1.13,<2.0",
+    "django-stubs[compatible-mypy]>=5.1,<6.0",
+    "djangorestframework-stubs>=3.15,<4.0",
+    "coverage>=7.6,<8.0",
+    "detect-secrets>=1.5,<2.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations", ".venv", "staticfiles"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "DJ", "C4", "SIM"]
+ignore = ["DJ001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "apps"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main"]
+mypy_path = "."
+exclude = ["migrations/", "venv/", ".venv/"]
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
+
+[[tool.mypy.overrides]]
+module = "*.migrations.*"
+ignore_errors = true
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py", "tests.py"]
+testpaths = ["apps", "tests"]
+addopts = "-ra"
+
+[tool.coverage.run]
+source = ["apps", "config"]
+omit = ["*/migrations/*", "*/tests/*", "manage.py"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["config", "apps"]

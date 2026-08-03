@@ -1,0 +1,99 @@
+# MedRelay Phase 0 local stack.
+#
+# Tested path: `docker compose up --build` (Docker Engine + the `docker
+# compose` plugin — no Docker Desktop required).
+# `podman-compose up` against this same file should also work but is not the
+# tested path in this repository.
+#
+# Bring the stack up:   docker compose up --build
+# Validate the file:    docker compose config
+# Tear down:            docker compose down        (add -v to drop the db volume)
+
+services:
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+      - /app/.venv # anonymous volume: keep the image's venv, don't let the bind mount shadow it
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: celery -A config.celery worker --loglevel=info
+    volumes:
+      - .:/app
+      - /app/.venv # anonymous volume: keep the image's venv, don't let the bind mount shadow it
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-medrelay}
+      POSTGRES_USER: ${POSTGRES_USER:-medrelay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medrelay}
+    volumes:
+      - medrelay_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medrelay}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - medrelay_valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+
+  # Optional local S3-compatible object storage (not required for Phase 0;
+  # no file uploads exist yet). Uncomment when ObjectStorageProvider needs a
+  # real backend in a later phase.
+  # minio:
+  #   image: minio/minio:latest
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: medrelay
+  #     MINIO_ROOT_PASSWORD: medrelay-dev-only
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   volumes:
+  #     - medrelay_minio_data:/data
+
+volumes:
+  medrelay_postgres_data:
+  medrelay_valkey_data:
+  # medrelay_minio_data:
