@@ -4025,4 +4025,11 @@ phase.
 
 ## Commit history for this phase
 
-(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)
+1. `875d0b7` — "Phase 9: free public demo package (settings, comprehensive seed, quota safeguard,
+   hosting research)" — the main Phase 9 commit (15 files changed, 1980 insertions(+), 7
+   deletions(-)).
+2. (this line's own commit) — records commit (1)'s hash here, the same "a doc file can never
+   contain the hash of the commit that introduces its own final content" wrinkle every prior
+   phase's `CURRENT_STATUS.md` section has hit first.
+
+Run `git log --oneline` in the repository for the definitive, current history.
