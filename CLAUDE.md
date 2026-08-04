@@ -140,23 +140,27 @@ completing the roadmap does not change that, and does not authorize a real pilot
 
 ## Current phase and what exists today
 
-This repository is at **Phase 0 (repository foundation)** of
-`docs/IMPLEMENTATION_ROADMAP.md`. Concretely, that means:
+All ten roadmap phases (0 through 10) are built — see "Project status" above. Concretely, that
+means:
 
-- The Django project skeleton, settings package (`config/settings/{base,dev,prod,test}.py`),
-  health endpoints, and the modular `apps/*` structure exist.
-- **No domain models exist yet** — every app under `apps/` is an empty, installed, tested-as-
-  importable Django app with no models and no migrations beyond the empty `migrations/__init__.py`.
-  Do not add models to these apps casually; that is Phase 1+ work per
-  `docs/IMPLEMENTATION_ROADMAP.md`, and should follow the entity list in
-  `docs/ARCHITECTURE_AND_DATA_MODEL.md` §3.
-- SQLite is used for the test settings module (`config.settings.test`) as a deliberate, temporary
-  decision documented in `docs/CURRENT_STATUS.md` and
-  `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` — this is valid only because no PostGIS/Postgres-
-  specific behavior is being tested yet. The moment a spatial or Postgres-specific model is added,
-  that model's tests must run against the real `db` compose service, not SQLite.
-- Django Channels is deliberately not wired in yet (see `config/asgi.py`) — it's planned for a
-  later phase per the roadmap.
+- Every app under `apps/` has real domain models, migrations, services, and tests — this is no
+  longer the "empty, model-free skeleton" state Phase 0 left behind. Follow the entity list in
+  `docs/ARCHITECTURE_AND_DATA_MODEL.md` §3 and the existing per-app conventions (service-layer
+  functions, tenant scoping via `apps.organizations.services`) when touching any of them.
+- `django.db.backends.postgresql` (not the GeoDjango/PostGIS backend) is still the deliberate
+  choice — every model that needs coordinates (`Facility`, `CourierLocationPing`, etc.) uses plain
+  `DecimalField` lat/lng rather than a PostGIS `PointField`, a decision made in Phase 1 and never
+  revisited because no phase ended up needing real spatial queries/indexing. If a future change
+  introduces one, that's the moment to add the PostGIS backend and move that model's tests off
+  SQLite onto the real `db` compose service.
+- SQLite remains the test settings module (`config.settings.test`) database for exactly that
+  reason — still valid because nothing tested is PostGIS-specific.
+- Django Channels is still deliberately not wired in (see `config/asgi.py`) — no phase ended up
+  needing WebSocket push; polling/HTMX covers what was built instead. Revisit only if a real need
+  appears.
+- A Render+Neon public demo deployment was prepared (not executed) as a dated addendum to Phase 9
+  — see `render.yaml`, `config/settings/demo_render.py`, and `docs/DEPLOY_RENDER_NEON.md` for the
+  operator walkthrough. Actual account creation/deployment is the project owner's own action.
 - Always check `docs/CURRENT_STATUS.md` for the exact, current state (file paths, gate output,
   known gaps) before assuming what exists — it is updated at the end of each phase's work and is
   more current than this file's phase description will remain over time.
