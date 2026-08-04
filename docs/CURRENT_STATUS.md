@@ -2817,4 +2817,11 @@ secret-shaped string was introduced this phase (the synthetic demo PIN is genera
 
 ## Commit history for this phase
 
-(Recorded after the commit lands — see `git log --oneline` for the definitive, current history.)
+1. `f75b672` — "Phase 6: custody hash chain, proof of pickup/delivery, temperature excursions, and
+   incidents" — the main Phase 6 commit (all models, migrations, admin, services, courier PWA
+   proof/condition/incident endpoints, incident console, and the hash-chain verifier).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag every prior phase called out), so this line was added in a small
+follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
+history.
