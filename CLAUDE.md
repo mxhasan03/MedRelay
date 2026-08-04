@@ -118,6 +118,26 @@ These are explicitly out of scope until (if ever) a real pilot review under
 - A real production deployment target/hosting — Phase 9 is "free public demonstration," not
   production.
 
+## Project status (Phase 10 complete — full roadmap built as a demo prototype)
+
+As of Phase 10, every phase in `docs/IMPLEMENTATION_ROADMAP.md` (0 through 10) has been built and
+documented. **This remains a portfolio/demo software prototype using synthetic data only** —
+completing the roadmap does not change that, and does not authorize a real pilot. See:
+
+- `docs/PILOT_READINESS/GAP_ASSESSMENT.md` — every meaningful gap between this prototype and a real
+  operating pilot, organized by domain, cited to specific phases/files.
+- `docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` — the professional-review gates
+  (`docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8) that are hard blockers to any real pilot,
+  none resolvable by writing more code.
+- `docs/PILOT_READINESS/BUDGET_CHECKLIST.md` — non-binding, order-of-magnitude cost ranges for the
+  non-software costs a real pilot would face.
+- `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md` — what each zero-cost local/mock provider
+  actually does today and what a real, live implementation would need.
+- `docs/PILOT_READINESS/GO_NO_GO_REPORT.md` — the overall synthesis: what's solid, what's a hard
+  blocker, what's an addressable engineering gap, and a recommended concrete next step. **This
+  report does not itself authorize a pilot** — that decision belongs to the project owner, after the
+  professional reviews it names.
+
 ## Current phase and what exists today
 
 This repository is at **Phase 0 (repository foundation)** of
