@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Open Incidents — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:70rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <h1>Incident Console — Open Incidents</h1>
+    <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="text-align:left;border-bottom:2px solid #ccc;">
+                <th>Delivery</th>
+                <th>Category</th>
+                <th>Severity</th>
+                <th>On hold?</th>
+                <th>Opened</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for incident in incidents %}
+            <tr style="border-bottom:1px solid #eee;">
+                <td><a href="{% url 'deliveryrequest-detail' incident.delivery_request_id %}">{{ incident.delivery_request_id|truncatechars:8 }}</a></td>
+                <td>{{ incident.get_category_display }}</td>
+                <td>{{ incident.get_severity_display }}</td>
+                <td>{{ incident.placed_delivery_on_hold|yesno:"yes,no" }}</td>
+                <td>{{ incident.opened_at }}</td>
+                <td><a href="{% url 'incident-detail' incident.pk %}">View / resolve</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No open incidents.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

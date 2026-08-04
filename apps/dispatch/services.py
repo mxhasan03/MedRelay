@@ -239,6 +239,21 @@ def assign_delivery(
         delivery_request, DeliveryStatus.ASSIGNED, actor=actor, reason=reason or ""
     )
 
+    # Phase 6: append a COURIER_ASSIGNED custody event. Lazy import — see
+    # apps.dispatch.models' module docstring for this codebase's convention
+    # of a lazy in-function import at the specific call site that needs the
+    # other app's behavior.
+    from apps.custody.models import CustodyActorType, CustodyEventType
+    from apps.custody.services import record_event
+
+    record_event(
+        delivery_request,
+        CustodyEventType.COURIER_ASSIGNED,
+        actor_type=CustodyActorType.INTERNAL_OPS if actor is not None else CustodyActorType.SYSTEM,
+        actor_user=actor,
+        payload={"courier_id": courier.pk},
+    )
+
     if reason and reason.strip():
         DispatchOverride.objects.create(
             delivery_request=delivery_request,

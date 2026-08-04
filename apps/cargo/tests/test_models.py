@@ -111,3 +111,58 @@ def test_packaging_attestation_clean_notes_saves_successfully() -> None:
         delivery_request=delivery_request, notes="Sealed and labeled per policy."
     )
     assert attestation.pk is not None
+
+
+def test_temperature_profile_in_range_respects_both_bounds() -> None:
+    from decimal import Decimal
+
+    from apps.cargo.models import TemperatureProfile
+
+    # Built directly (not via TemperatureProfileFactory's get_or_create,
+    # which would fetch the already-migration-seeded "refrigerated" row and
+    # silently ignore these explicit bounds) with a unique test-only code so
+    # this test's exact min/max values are the ones actually persisted.
+    profile = TemperatureProfile.objects.create(
+        code="in_range_test_profile",
+        name="In-Range Test",
+        min_temp_c=Decimal("2.0"),
+        max_temp_c=Decimal("8.0"),
+    )
+    assert profile.in_range(Decimal("5.0")) is True
+    assert profile.in_range(Decimal("2.0")) is True
+    assert profile.in_range(Decimal("8.0")) is True
+    assert profile.in_range(Decimal("1.9")) is False
+    assert profile.in_range(Decimal("8.1")) is False
+
+
+def test_temperature_profile_in_range_with_no_bounds_is_always_true() -> None:
+    from apps.cargo.models import TemperatureProfile
+
+    profile = TemperatureProfile.objects.create(
+        code="no_bounds_test_profile", name="No Bounds Test", min_temp_c=None, max_temp_c=None
+    )
+    assert profile.in_range(999) is True
+    assert profile.in_range(-999) is True
+
+
+def test_package_condition_check_has_any_concern_true_for_temperature_tripped() -> None:
+    from apps.cargo.models import PackageConditionCheck, TemperatureIndicatorStatus
+
+    package = PackageFactory()
+    check = PackageConditionCheck.objects.create(
+        package=package,
+        stage="delivery",
+        temperature_indicator_status=TemperatureIndicatorStatus.TRIPPED,
+    )
+    assert check.has_any_concern is True
+
+
+def test_package_condition_check_unique_per_package_and_stage() -> None:
+    from django.db import IntegrityError
+
+    from apps.cargo.models import PackageConditionCheck
+
+    package = PackageFactory()
+    PackageConditionCheck.objects.create(package=package, stage="pickup")
+    with pytest.raises(IntegrityError):
+        PackageConditionCheck.objects.create(package=package, stage="pickup")

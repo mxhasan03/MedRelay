@@ -9,6 +9,14 @@
     <p>Cargo class: {{ delivery_request.cargo_class|default:"(not set)" }} &middot; Temperature: {{ delivery_request.temperature_profile|default:"(not set)" }}</p>
     <p>Package count: {{ delivery_request.package_count }} &middot; Estimated price: {{ delivery_request.estimated_price|default:"—" }}</p>
 
+    {% if messages %}
+    <ul>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
     {% if validation_errors %}
     <div style="border:1px solid #7a1f1f;background:#fdecea;padding:0.75rem;margin:1rem 0;">
         <strong>Blocking dispatch — validation required:</strong>
@@ -30,6 +38,12 @@
             {% csrf_token %}
             <button type="submit">Cancel request</button>
         </form>
+        {% if delivery_request.recipient_verification_method == "pin" %}
+        <form method="post" action="{% url 'deliveryrequest-generate-recipient-pin' delivery_request.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit">Generate recipient PIN</button>
+        </form>
+        {% endif %}
     </p>
     {% endif %}
 
@@ -85,6 +99,27 @@
             {% if transition.actor %}(by {{ transition.actor }}){% endif %}</li>
         {% empty %}
         <li>No status history recorded.</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Chain of custody (hash-chained, tamper-evident)</h2>
+    <ul>
+        {% for event in delivery_request.custody_events.all %}
+        <li>#{{ event.sequence }} {{ event.occurred_at }} — {{ event.get_event_type_display }}
+            ({{ event.get_actor_type_display }}{% if event.actor_user %}: {{ event.actor_user }}{% endif %})
+            <br><small>hash: <code>{{ event.current_hash|truncatechars:16 }}</code></small></li>
+        {% empty %}
+        <li>No custody events recorded yet.</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Incidents</h2>
+    <ul>
+        {% for incident in delivery_request.incidents.all %}
+        <li><a href="{% url 'incident-detail' incident.pk %}">{{ incident.get_category_display }}
+            ({{ incident.get_severity_display }}, {{ incident.get_status_display }})</a></li>
+        {% empty %}
+        <li>No incidents recorded.</li>
         {% endfor %}
     </ul>
 </div>

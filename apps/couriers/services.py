@@ -43,6 +43,17 @@ COURIER_ADVANCE_SEQUENCE: dict[str, str] = {
     DeliveryStatus.IN_TRANSIT: DeliveryStatus.AT_DESTINATION,
 }
 
+# Phase 6: which custody-event type (if any) a given courier-driven status
+# advance corresponds to (apps.custody.models.CustodyEventType). Not every
+# step has one — e.g. ASSIGNED -> COURIER_EN_ROUTE_TO_PICKUP has no
+# dedicated event type in docs/PRODUCT_REQUIREMENTS.md section 10's
+# vocabulary, so it is absent from this dict on purpose.
+_ADVANCE_CUSTODY_EVENT_TYPES: dict[str, str] = {
+    DeliveryStatus.AT_PICKUP: "courier_arrived",
+    DeliveryStatus.IN_TRANSIT: "route_started",
+    DeliveryStatus.AT_DESTINATION: "facility_arrival",
+}
+
 
 def can_access_courier_portal(user: User | AnonymousUser) -> bool:
     """Can `user` view/act on the courier PWA at all? Mirrors
@@ -116,7 +127,22 @@ def advance_delivery_status(
             f"{to_status!r} via the courier pickup/transit workflow."
         )
 
-    return transition_delivery_request(delivery_request, to_status, actor=actor)
+    result = transition_delivery_request(delivery_request, to_status, actor=actor)
+
+    custody_event_type = _ADVANCE_CUSTODY_EVENT_TYPES.get(to_status)
+    if custody_event_type is not None:
+        from apps.custody.models import CustodyActorType
+        from apps.custody.services import record_event
+
+        record_event(
+            result,
+            custody_event_type,
+            actor_type=CustodyActorType.COURIER,
+            actor_user=actor,
+            payload={"to_status": to_status},
+        )
+
+    return result
 
 
 __all__ = ["COURIER_ADVANCE_SEQUENCE", "advance_delivery_status", "can_access_courier_portal"]

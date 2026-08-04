@@ -19,7 +19,10 @@ from apps.cargo.models import (
     CargoClass,
     CargoPolicy,
     Package,
+    PackageConditionCheck,
     PackageIdentifier,
+    SealStatus,
+    TemperatureIndicatorStatus,
     TemperatureProfile,
 )
 
@@ -124,4 +127,77 @@ def confirm_package_scan(
     package.scanned_at = timezone.now()
     package.scanned_by = actor
     package.save(update_fields=["scanned_at", "scanned_by", "updated_at"])
+
+    # Phase 6: append a PICKUP_SCAN custody event alongside the existing
+    # package-level scanned_at/scanned_by bookkeeping (Phase 5). Lazy import —
+    # apps.custody does not need apps.cargo at module scope, but this keeps
+    # the direction of the dependency explicit and matches this codebase's
+    # "lazy import inside the function that needs the other app's behavior"
+    # convention (see apps.deliveries.state_machine's docstring for the same
+    # pattern used elsewhere).
+    from apps.custody.models import CustodyActorType, CustodyEventType
+    from apps.custody.services import record_event
+
+    record_event(
+        delivery_request,
+        CustodyEventType.PICKUP_SCAN,
+        actor_type=CustodyActorType.COURIER if actor is not None else CustodyActorType.SYSTEM,
+        actor_user=actor,
+        package=package,
+        payload={"code": code},
+    )
     return package
+
+
+def record_condition_check(
+    package: Package,
+    *,
+    stage: str,
+    actor: User | None,
+    seal_status: str = SealStatus.NOT_APPLICABLE,
+    physical_damage_observed: bool = False,
+    damage_description: str = "",
+    temperature_indicator_status: str = TemperatureIndicatorStatus.NOT_APPLICABLE,
+    notes: str = "",
+) -> PackageConditionCheck:
+    """Record a package condition/seal checklist at `stage` (pickup or
+    delivery) and append a `CONDITION_VERIFIED` custody event for the
+    package's delivery request.
+
+    One check per `(package, stage)` — a second call for the same stage
+    updates the existing row (`update_or_create`) rather than erroring,
+    since a courier double-tapping "confirm condition" should not be a hard
+    failure.
+    """
+    from apps.custody.models import CustodyActorType, CustodyEventType
+    from apps.custody.services import record_event
+
+    check, _ = PackageConditionCheck.objects.update_or_create(
+        package=package,
+        stage=stage,
+        defaults={
+            "seal_status": seal_status,
+            "physical_damage_observed": physical_damage_observed,
+            "damage_description": damage_description,
+            "temperature_indicator_status": temperature_indicator_status,
+            "notes": notes,
+            "checked_by": actor,
+        },
+    )
+    event = record_event(
+        package.delivery_request,
+        CustodyEventType.CONDITION_VERIFIED,
+        actor_type=CustodyActorType.COURIER if actor is not None else CustodyActorType.SYSTEM,
+        actor_user=actor,
+        package=package,
+        payload={
+            "stage": stage,
+            "seal_status": seal_status,
+            "physical_damage_observed": physical_damage_observed,
+            "temperature_indicator_status": temperature_indicator_status,
+            "has_concern": check.has_any_concern,
+        },
+    )
+    check.custody_event = event
+    check.save(update_fields=["custody_event"])
+    return check

@@ -26,23 +26,39 @@ transitions it implements:
 
 plus `CANCELLED` reachable from every one of those five states too (the same
 "cancellation is always reachable from any active state" precedent Phase 2/4
-established). **`ALLOWED_TRANSITIONS` below is still intentionally a
-*partial* map: it stops at `AT_DESTINATION` and does not include
-`AT_DESTINATION -> DELIVERED`.** This is a deliberate phase boundary, not an
-oversight — `DELIVERED` implies proof-of-delivery capture (recipient
-PIN/signature), which is Phase 6 ("custody, proof, temperature, and
-incidents") work per docs/IMPLEMENTATION_ROADMAP.md. Phase 5 gets a delivery
-to the destination's doorstep and stops there; see
-docs/CURRENT_STATUS.md "Phase 5" for the full write-up of this boundary and
-`apps.couriers.services.advance_delivery_status`'s own docstring for the
-courier-authorization guard layered on top of this dict (only the currently
-assigned courier, or an internal ops override, may drive these five
-transitions — this module itself has no notion of "who" is asking, only
-"is this transition legal at all"). A reassignment
+established). A reassignment
 (`apps.dispatch.services.reassign_delivery`) does not change
 `DeliveryRequest.status` at all — it stays `ASSIGNED` while the underlying
 `apps.dispatch.models.DeliveryAssignment` row is swapped — so no
 `ASSIGNED -> ASSIGNED` self-transition entry is needed here.
+
+**Phase 6** (`apps.custody`/`apps.incidents`/`apps.temperature`) finally
+extends this dict past `AT_DESTINATION`:
+
+    AT_DESTINATION -> DELIVERED   (gated by validate_delivered below)
+    {ASSIGNED, COURIER_EN_ROUTE_TO_PICKUP, AT_PICKUP, PICKED_UP, IN_TRANSIT,
+        AT_DESTINATION} -> INCIDENT_HOLD
+    {ASSIGNED, COURIER_EN_ROUTE_TO_PICKUP, AT_PICKUP, PICKED_UP, IN_TRANSIT,
+        AT_DESTINATION} -> RETURNING   (a return can also be initiated
+        directly, without a formal incident ever being opened — per
+        docs/IMPLEMENTATION_ROADMAP.md's "RETURNING -> RETURNED... from
+        INCIDENT_HOLD (or from other applicable states per the state
+        diagram)")
+    INCIDENT_HOLD -> {ASSIGNED, COURIER_EN_ROUTE_TO_PICKUP, AT_PICKUP,
+        PICKED_UP, IN_TRANSIT, AT_DESTINATION, RETURNING, CANCELLED, FAILED}
+    RETURNING -> RETURNED
+
+`INCIDENT_HOLD` is only ever entered/exited through
+`apps.incidents.services.open_incident`/`resolve_incident` (never a bare
+`transition_delivery_request` call from arbitrary code) — those functions
+snapshot which status to resume to and pick the right destination status.
+This module's own hard, un-bypassable guard is `validate_delivered` below:
+`DELIVERED` requires a `ProofOfDelivery` row to exist *and* no open
+severe/critical incident, checked every time `DELIVERED` is attempted
+regardless of which service function is calling — see
+docs/CURRENT_STATUS.md "Phase 6" section for the full write-up and
+`apps/deliveries/tests/test_state_machine.py`'s incident-hold-blocks-DELIVERED
+test.
 """
 
 from __future__ import annotations
@@ -59,10 +75,20 @@ if TYPE_CHECKING:
     from apps.accounts.models import User
     from apps.deliveries.models import DeliveryRequest
 
-# Phase-2-owned transitions. Every other `DeliveryStatus` value maps to an
-# empty set here (no outgoing transition implemented yet), not because it is
-# truly terminal in the product sense, but because Phase 2 does not drive
-# any transition into or out of it.
+# The "active courier workflow" states an incident can place on hold from —
+# matches exactly the states apps.couriers.services.COURIER_ADVANCE_SEQUENCE
+# drives a delivery through, plus AT_DESTINATION (its final stop).
+_ACTIVE_COURIER_STATES = frozenset(
+    {
+        DeliveryStatus.ASSIGNED,
+        DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP,
+        DeliveryStatus.AT_PICKUP,
+        DeliveryStatus.PICKED_UP,
+        DeliveryStatus.IN_TRANSIT,
+        DeliveryStatus.AT_DESTINATION,
+    }
+)
+
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     DeliveryStatus.DRAFT: frozenset({DeliveryStatus.SUBMITTED, DeliveryStatus.CANCELLED}),
     DeliveryStatus.SUBMITTED: frozenset(
@@ -78,19 +104,57 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
         {DeliveryStatus.ASSIGNED, DeliveryStatus.READY_FOR_DISPATCH, DeliveryStatus.CANCELLED}
     ),
     DeliveryStatus.ASSIGNED: frozenset(
-        {DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP, DeliveryStatus.CANCELLED}
+        {
+            DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP,
+            DeliveryStatus.CANCELLED,
+            DeliveryStatus.INCIDENT_HOLD,
+            DeliveryStatus.RETURNING,
+        }
     ),
     DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP: frozenset(
-        {DeliveryStatus.AT_PICKUP, DeliveryStatus.CANCELLED}
+        {
+            DeliveryStatus.AT_PICKUP,
+            DeliveryStatus.CANCELLED,
+            DeliveryStatus.INCIDENT_HOLD,
+            DeliveryStatus.RETURNING,
+        }
     ),
-    DeliveryStatus.AT_PICKUP: frozenset({DeliveryStatus.PICKED_UP, DeliveryStatus.CANCELLED}),
-    DeliveryStatus.PICKED_UP: frozenset({DeliveryStatus.IN_TRANSIT, DeliveryStatus.CANCELLED}),
-    DeliveryStatus.IN_TRANSIT: frozenset({DeliveryStatus.AT_DESTINATION, DeliveryStatus.CANCELLED}),
-    # AT_DESTINATION -> DELIVERED is deliberately not implemented in Phase 5 —
-    # see module docstring. AT_DESTINATION has no outgoing transition here at
-    # all yet (a delivery that reaches the doorstep and needs to be cancelled
-    # from there is an edge case left for Phase 6's incident/return-to-sender
-    # flow, not modeled here as a bare CANCELLED escape hatch).
+    DeliveryStatus.AT_PICKUP: frozenset(
+        {
+            DeliveryStatus.PICKED_UP,
+            DeliveryStatus.CANCELLED,
+            DeliveryStatus.INCIDENT_HOLD,
+            DeliveryStatus.RETURNING,
+        }
+    ),
+    DeliveryStatus.PICKED_UP: frozenset(
+        {
+            DeliveryStatus.IN_TRANSIT,
+            DeliveryStatus.CANCELLED,
+            DeliveryStatus.INCIDENT_HOLD,
+            DeliveryStatus.RETURNING,
+        }
+    ),
+    DeliveryStatus.IN_TRANSIT: frozenset(
+        {
+            DeliveryStatus.AT_DESTINATION,
+            DeliveryStatus.CANCELLED,
+            DeliveryStatus.INCIDENT_HOLD,
+            DeliveryStatus.RETURNING,
+        }
+    ),
+    # AT_DESTINATION -> DELIVERED (Phase 6, gated by validate_delivered).
+    DeliveryStatus.AT_DESTINATION: frozenset(
+        {DeliveryStatus.DELIVERED, DeliveryStatus.INCIDENT_HOLD, DeliveryStatus.RETURNING}
+    ),
+    # Phase 6: incident-hold resume/exit paths. Structurally this dict allows
+    # resuming to any active courier state or exiting to RETURNING/CANCELLED/
+    # FAILED — apps.incidents.services.resolve_incident is what actually
+    # decides *which* one to use for a given incident (see module docstring).
+    DeliveryStatus.INCIDENT_HOLD: _ACTIVE_COURIER_STATES
+    | frozenset({DeliveryStatus.RETURNING, DeliveryStatus.CANCELLED, DeliveryStatus.FAILED}),
+    # Phase 6: return-to-sender completion.
+    DeliveryStatus.RETURNING: frozenset({DeliveryStatus.RETURNED}),
 }
 
 
@@ -147,6 +211,52 @@ def validate_ready_for_dispatch(delivery_request: DeliveryRequest) -> None:
         raise ValidationError(errors)
 
 
+def validate_delivered(delivery_request: DeliveryRequest) -> None:
+    """Raise `ValidationError` if `delivery_request` is not yet eligible for
+    `DELIVERED`.
+
+    This is the hard, un-bypassable gate for two Phase 6 invariants
+    (docs/ARCHITECTURE_AND_DATA_MODEL.md section 5):
+
+    - "delivery requires pickup/custody acceptance" — a `ProofOfDelivery` row
+      (recipient PIN/signature capture) must exist.
+    - "incident hold blocks completion until an authorized resolution" — no
+      `OPEN` incident whose severity is in `apps.incidents.models.
+      HOLD_SEVERITIES` may exist for this delivery.
+
+    Lazy imports (of `apps.custody.models`/`apps.incidents.models`) match
+    `validate_ready_for_dispatch`'s own convention above, and avoid a
+    module-scope import cycle: `apps.incidents.services` imports this module
+    at module scope (to call `transition_delivery_request`), so this module
+    cannot import `apps.incidents` back at module scope without creating a
+    real cycle.
+    """
+    from apps.custody.models import ProofOfDelivery
+    from apps.incidents.models import HOLD_SEVERITIES, Incident, IncidentStatus
+
+    errors: list[str] = []
+
+    if not ProofOfDelivery.objects.filter(delivery_request=delivery_request).exists():
+        errors.append(
+            "Proof of delivery (recipient PIN/signature capture) is required before this "
+            "delivery can be marked delivered."
+        )
+
+    open_severe_incident_exists = Incident.objects.filter(
+        delivery_request=delivery_request,
+        status=IncidentStatus.OPEN,
+        severity__in=HOLD_SEVERITIES,
+    ).exists()
+    if open_severe_incident_exists:
+        errors.append(
+            "An open incident is placing this delivery on hold; it must be resolved before "
+            "delivery can be completed."
+        )
+
+    if errors:
+        raise ValidationError(errors)
+
+
 @transaction.atomic
 def transition_delivery_request(
     delivery_request: DeliveryRequest,
@@ -161,8 +271,8 @@ def transition_delivery_request(
     Raises `InvalidTransitionError` if `to_status` is not reachable from the
     current status per `ALLOWED_TRANSITIONS`. Raises `ValidationError` (and
     leaves the delivery request's status unchanged) if `to_status` is
-    `READY_FOR_DISPATCH` and `validate_ready_for_dispatch` finds anything
-    missing.
+    `READY_FOR_DISPATCH`/`DELIVERED` and the corresponding validation gate
+    finds anything missing.
     """
     from_status = delivery_request.status
     allowed = ALLOWED_TRANSITIONS.get(from_status, frozenset())
@@ -174,6 +284,8 @@ def transition_delivery_request(
 
     if to_status == DeliveryStatus.READY_FOR_DISPATCH:
         validate_ready_for_dispatch(delivery_request)
+    elif to_status == DeliveryStatus.DELIVERED:
+        validate_delivered(delivery_request)
 
     delivery_request.status = to_status
     delivery_request.version += 1

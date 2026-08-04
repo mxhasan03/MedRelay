@@ -45,6 +45,92 @@
   </ul>
 </div>
 
+{% if not has_proof_of_pickup %}
+<div class="card">
+  <h2>Sender hand-off proof (pickup)</h2>
+  <label>Sender name: <input type="text" id="pickup-sender-name"></label>
+  <label>Sender role: <input type="text" id="pickup-sender-role"></label>
+  <p>Signature:</p>
+  <canvas id="pickup-signature-pad" width="300" height="100" style="border:1px solid #999;touch-action:none;"></canvas>
+  <button type="button" onclick="document.getElementById('pickup-signature-pad').getContext('2d').clearRect(0,0,300,100);">Clear</button>
+  <label>Or typed name (fallback): <input type="text" id="pickup-typed-name"></label>
+  <button data-url="{% url 'courier-pickup-proof' delivery_request.pk %}" onclick="submitPickupProof(this)">Confirm pickup proof</button>
+  <p id="pickup-proof-status"></p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Package condition check</h2>
+  <label>Package:
+    <select id="condition-package">
+      {% for package in packages %}
+      <option value="{{ package.pk }}">Package {{ package.sequence_number }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Stage:
+    <select id="condition-stage">
+      <option value="pickup">At Pickup</option>
+      <option value="delivery">At Delivery</option>
+    </select>
+  </label>
+  <label>Seal status:
+    <select id="condition-seal">
+      <option value="intact">Intact</option>
+      <option value="broken">Broken</option>
+      <option value="not_applicable">Not Applicable</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="condition-damage"> Physical damage observed</label>
+  <label>Temperature indicator:
+    <select id="condition-temp-indicator">
+      <option value="not_applicable">Not Applicable</option>
+      <option value="ok">Within Range</option>
+      <option value="tripped">Tripped/Excursion Indicated</option>
+      <option value="unknown">Unknown/Unreadable</option>
+    </select>
+  </label>
+  <button data-url="{% url 'courier-condition-check' delivery_request.pk %}" onclick="submitConditionCheck(this)">Confirm condition check</button>
+  <p id="condition-check-status"></p>
+</div>
+
+{% if at_destination and not has_proof_of_delivery %}
+<div class="card">
+  <h2>Complete delivery — recipient proof</h2>
+  <label>Delivered to (name): <input type="text" id="delivery-recipient-name"></label>
+  {% if recipient_verification_method == "pin" %}
+  <label>Recipient PIN: <input type="text" id="delivery-pin" inputmode="numeric"></label>
+  {% endif %}
+  <p>Signature:</p>
+  <canvas id="delivery-signature-pad" width="300" height="100" style="border:1px solid #999;touch-action:none;"></canvas>
+  <button type="button" onclick="document.getElementById('delivery-signature-pad').getContext('2d').clearRect(0,0,300,100);">Clear</button>
+  <label>Or typed name (fallback): <input type="text" id="delivery-typed-name"></label>
+  <button data-url="{% url 'courier-delivery-complete' delivery_request.pk %}" onclick="submitCompleteDelivery(this)">Mark delivered</button>
+  <p id="complete-delivery-status"></p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Report an incident</h2>
+  <label>Category:
+    <select id="incident-category">
+      {% for value, label in incident_categories %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Severity:
+    <select id="incident-severity">
+      {% for value, label in incident_severities %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Summary: <textarea id="incident-summary" rows="2"></textarea></label>
+  <button data-url="{% url 'courier-report-incident' delivery_request.pk %}" onclick="submitIncidentReport(this)">Report incident</button>
+  <p id="incident-report-status"></p>
+</div>
+
 <div class="card">
   <h2>Status timeline</h2>
   <ul class="timeline">
@@ -89,6 +175,92 @@ function submitScan(btn) {
       el.textContent = "Offline — queued, will retry automatically.";
     } else {
       el.textContent = "Error: " + (data.error || "invalid code");
+    }
+  });
+}
+
+var pickupPad = document.getElementById("pickup-signature-pad");
+if (pickupPad && window.MedRelayCourier) {
+  window.pickupSignaturePad = MedRelayCourier.initSignaturePad(pickupPad);
+}
+var deliveryPad = document.getElementById("delivery-signature-pad");
+if (deliveryPad && window.MedRelayCourier) {
+  window.deliverySignaturePad = MedRelayCourier.initSignaturePad(deliveryPad);
+}
+
+function submitPickupProof(btn) {
+  var body = {
+    sender_name: document.getElementById("pickup-sender-name").value,
+    sender_role: document.getElementById("pickup-sender-role").value,
+    signature_data_url: window.pickupSignaturePad ? window.pickupSignaturePad.getDataUrl() : "",
+    typed_signature_name: document.getElementById("pickup-typed-name").value,
+  };
+  MedRelayCourier.submitAction(btn.getAttribute("data-url"), body, function (ok, data) {
+    var el = document.getElementById("pickup-proof-status");
+    if (ok) {
+      window.location.reload();
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "could not capture pickup proof");
+    }
+  });
+}
+
+function submitConditionCheck(btn) {
+  var body = {
+    package_id: document.getElementById("condition-package").value,
+    stage: document.getElementById("condition-stage").value,
+    seal_status: document.getElementById("condition-seal").value,
+    physical_damage_observed: document.getElementById("condition-damage").checked,
+    temperature_indicator_status: document.getElementById("condition-temp-indicator").value,
+  };
+  MedRelayCourier.submitAction(btn.getAttribute("data-url"), body, function (ok, data) {
+    var el = document.getElementById("condition-check-status");
+    if (ok) {
+      el.textContent = data.has_any_concern ? "Recorded — concern flagged." : "Condition check recorded.";
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "could not record condition check");
+    }
+  });
+}
+
+function submitCompleteDelivery(btn) {
+  var pinField = document.getElementById("delivery-pin");
+  var body = {
+    delivered_to_name: document.getElementById("delivery-recipient-name").value,
+    pin: pinField ? pinField.value : "",
+    signature_data_url: window.deliverySignaturePad ? window.deliverySignaturePad.getDataUrl() : "",
+    typed_signature_name: document.getElementById("delivery-typed-name").value,
+  };
+  MedRelayCourier.submitAction(btn.getAttribute("data-url"), body, function (ok, data) {
+    var el = document.getElementById("complete-delivery-status");
+    if (ok) {
+      window.location.reload();
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "could not complete delivery");
+    }
+  });
+}
+
+function submitIncidentReport(btn) {
+  var body = {
+    category: document.getElementById("incident-category").value,
+    severity: document.getElementById("incident-severity").value,
+    summary: document.getElementById("incident-summary").value,
+  };
+  MedRelayCourier.submitAction(btn.getAttribute("data-url"), body, function (ok, data) {
+    var el = document.getElementById("incident-report-status");
+    if (ok) {
+      el.textContent = data.placed_on_hold ? "Incident reported — delivery placed on hold." : "Incident reported.";
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "could not report incident");
     }
   });
 }

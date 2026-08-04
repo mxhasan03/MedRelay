@@ -190,3 +190,48 @@ def test_pickup_facility_choices_are_scoped_to_requesting_organization(client: C
     pickup_choices = set(form.fields["pickup_facility"].queryset.values_list("pk", flat=True))
     assert own_facility.pk in pickup_choices
     assert other_facility.pk not in pickup_choices
+
+
+def test_generate_recipient_pin_shows_plaintext_pin_once_via_flash_message(client: Client) -> None:
+    """Phase 6: an authorized org user can generate a recipient PIN; the
+    plaintext value is shown once via a flash message, never persisted."""
+    from apps.custody.models import RecipientVerification
+    from apps.deliveries.models import RecipientVerificationMethod
+
+    organization = OrganizationFactory()
+    user = UserFactory()
+    OrganizationMembership.objects.create(
+        user=user, organization=organization, role=CustomerRole.OWNER
+    )
+    delivery_request = DeliveryRequestFactory(
+        organization=organization, recipient_verification_method=RecipientVerificationMethod.PIN
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("deliveryrequest-generate-recipient-pin", kwargs={"pk": delivery_request.pk}),
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    messages = [str(m) for m in response.context["messages"]]
+    assert any("Recipient PIN generated" in m for m in messages)
+    verification = RecipientVerification.objects.get(delivery_request=delivery_request)
+    assert verification.pin_hash != ""
+
+
+def test_generate_recipient_pin_forbidden_for_unauthorized_user(client: Client) -> None:
+    organization = OrganizationFactory()
+    other_org = OrganizationFactory()
+    outsider = UserFactory()
+    OrganizationMembership.objects.create(
+        user=outsider, organization=other_org, role=CustomerRole.OWNER
+    )
+    delivery_request = DeliveryRequestFactory(organization=organization)
+    client.force_login(outsider)
+
+    response = client.post(
+        reverse("deliveryrequest-generate-recipient-pin", kwargs={"pk": delivery_request.pk})
+    )
+
+    assert response.status_code == 403

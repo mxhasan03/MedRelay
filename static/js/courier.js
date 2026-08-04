@@ -112,9 +112,66 @@
     }
   }
 
+  // --- HTML5 canvas signature pad (Phase 6 sender/recipient proof
+  // prototype — see docs/CURRENT_STATUS.md "Phase 6" for the honest
+  // limitations: this is a drawn squiggle captured as a base64 PNG data
+  // URL, not a legally binding e-signature). Mouse and touch both
+  // supported; `getDataUrl` returns "" if nothing was drawn, and callers
+  // (templates/couriers/active_delivery.html) fall back to a typed-name
+  // field in that case.
+  function initSignaturePad(canvasEl) {
+    const ctx = canvasEl.getContext("2d");
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#111";
+    let drawing = false;
+    let hasDrawn = false;
+
+    function pos(evt) {
+      const rect = canvasEl.getBoundingClientRect();
+      const point = evt.touches ? evt.touches[0] : evt;
+      return { x: point.clientX - rect.left, y: point.clientY - rect.top };
+    }
+    function start(evt) {
+      drawing = true;
+      const p = pos(evt);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      evt.preventDefault();
+    }
+    function move(evt) {
+      if (!drawing) return;
+      const p = pos(evt);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      hasDrawn = true;
+      evt.preventDefault();
+    }
+    function end() {
+      drawing = false;
+    }
+    canvasEl.addEventListener("mousedown", start);
+    canvasEl.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+    canvasEl.addEventListener("touchstart", start, { passive: false });
+    canvasEl.addEventListener("touchmove", move, { passive: false });
+    canvasEl.addEventListener("touchend", end);
+
+    return {
+      clear: function () {
+        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+        hasDrawn = false;
+      },
+      getDataUrl: function () {
+        return hasDrawn ? canvasEl.toDataURL("image/png") : "";
+      },
+    };
+  }
+
   window.MedRelayCourier = {
     submitAction: submitAction,
     startLocationPings: startLocationPings,
     startCameraScan: startCameraScan,
+    initSignaturePad: initSignaturePad,
   };
 })();

@@ -209,12 +209,7 @@ def test_cancellation_allowed_from_every_pickup_transit_state() -> None:
         assert delivery_request.status == DeliveryStatus.CANCELLED
 
 
-def test_at_destination_to_delivered_is_not_implemented_in_phase_5() -> None:
-    """DELIVERED implies proof-of-delivery capture (recipient PIN/signature),
-    which is Phase 6 ("custody, proof, temperature, and incidents") work —
-    see apps/deliveries/state_machine.py's module docstring for the full
-    boundary write-up. Phase 5 stops at AT_DESTINATION; attempting the final
-    transition must raise, not silently succeed."""
+def _at_destination_delivery_request():
     delivery_request = _assigned_delivery_request()
     for to_status in (
         DeliveryStatus.COURIER_EN_ROUTE_TO_PICKUP,
@@ -224,8 +219,85 @@ def test_at_destination_to_delivered_is_not_implemented_in_phase_5() -> None:
         DeliveryStatus.AT_DESTINATION,
     ):
         transition_delivery_request(delivery_request, to_status, actor=None)
-    with pytest.raises(InvalidTransitionError):
+    return delivery_request
+
+
+def test_at_destination_to_delivered_requires_proof_of_delivery() -> None:
+    """Phase 6: AT_DESTINATION -> DELIVERED is now implemented, but
+    `validate_delivered` blocks it (ValidationError, not a bare
+    InvalidTransitionError) until a ProofOfDelivery row exists — see
+    apps/deliveries/state_machine.py's validate_delivered docstring."""
+    from apps.custody.models import ProofOfDelivery
+
+    delivery_request = _at_destination_delivery_request()
+    with pytest.raises(ValidationError) as exc_info:
         transition_delivery_request(delivery_request, DeliveryStatus.DELIVERED, actor=None)
+    assert any("Proof of delivery" in message for message in exc_info.value.messages)
+    delivery_request.refresh_from_db()
+    assert delivery_request.status == DeliveryStatus.AT_DESTINATION
+
+    ProofOfDelivery.objects.create(
+        delivery_request=delivery_request, typed_signature_name="R. Test"
+    )
+    transition_delivery_request(delivery_request, DeliveryStatus.DELIVERED, actor=None)
+    assert delivery_request.status == DeliveryStatus.DELIVERED
+
+
+def test_delivered_blocked_by_open_severe_incident_and_allowed_after_resolution() -> None:
+    """Phase 6 hard invariant: an open SEVERE/CRITICAL incident blocks
+    DELIVERED (docs/PRODUCT_REQUIREMENTS.md section 13), and resolving it
+    makes DELIVERED reachable again."""
+    from apps.custody.models import ProofOfDelivery
+    from apps.incidents.models import Incident, IncidentCategory, IncidentSeverity, IncidentStatus
+
+    delivery_request = _at_destination_delivery_request()
+    ProofOfDelivery.objects.create(
+        delivery_request=delivery_request, typed_signature_name="R. Test"
+    )
+
+    incident = Incident.objects.create(
+        delivery_request=delivery_request,
+        category=IncidentCategory.SUSPECTED_TAMPERING,
+        severity=IncidentSeverity.SEVERE,
+        status=IncidentStatus.OPEN,
+        summary="Seal appeared broken on arrival.",
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        transition_delivery_request(delivery_request, DeliveryStatus.DELIVERED, actor=None)
+    assert any("incident" in message.lower() for message in exc_info.value.messages)
+    delivery_request.refresh_from_db()
+    assert delivery_request.status == DeliveryStatus.AT_DESTINATION
+
+    incident.status = IncidentStatus.RESOLVED
+    incident.save(update_fields=["status"])
+
+    transition_delivery_request(delivery_request, DeliveryStatus.DELIVERED, actor=None)
+    assert delivery_request.status == DeliveryStatus.DELIVERED
+
+
+def test_minor_incident_does_not_block_delivered() -> None:
+    """Only SEVERE/CRITICAL severities gate DELIVERED — a MINOR/MODERATE
+    incident is recorded but does not suspend completion
+    (docs/PRODUCT_REQUIREMENTS.md section 13: "Severe incidents suspend
+    normal completion", not every incident)."""
+    from apps.custody.models import ProofOfDelivery
+    from apps.incidents.models import Incident, IncidentCategory, IncidentSeverity, IncidentStatus
+
+    delivery_request = _at_destination_delivery_request()
+    ProofOfDelivery.objects.create(
+        delivery_request=delivery_request, typed_signature_name="R. Test"
+    )
+    Incident.objects.create(
+        delivery_request=delivery_request,
+        category=IncidentCategory.MISSED_SLA,
+        severity=IncidentSeverity.MINOR,
+        status=IncidentStatus.OPEN,
+        summary="Delivered slightly behind schedule.",
+    )
+
+    transition_delivery_request(delivery_request, DeliveryStatus.DELIVERED, actor=None)
+    assert delivery_request.status == DeliveryStatus.DELIVERED
 
 
 # --- Validation gate: missing cargo classification / packaging attestation ---

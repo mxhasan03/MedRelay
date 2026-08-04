@@ -119,3 +119,76 @@ def test_confirm_package_scan_is_idempotent_for_the_same_correct_code() -> None:
 
     assert first.pk == second.pk
     assert second.scanned_at is not None
+
+
+def test_confirm_package_scan_appends_a_pickup_scan_custody_event() -> None:
+    """Phase 6: PICKUP_SCAN custody event alongside the existing
+    scanned_at/scanned_by bookkeeping."""
+    from apps.custody.models import CustodyEventType
+
+    delivery_request = DeliveryRequestFactory()
+    package = PackageFactory(delivery_request=delivery_request)
+    identifier = PackageIdentifierFactory(package=package)
+
+    confirm_package_scan(delivery_request, identifier.code)
+
+    last_event = delivery_request.custody_events.order_by("-sequence").first()
+    assert last_event.event_type == CustodyEventType.PICKUP_SCAN
+    assert last_event.package_id == package.pk
+
+
+# --- record_condition_check (Phase 6) ---------------------------------------
+
+
+def test_record_condition_check_creates_row_and_custody_event() -> None:
+    from apps.cargo.models import PackageConditionCheck, SealStatus, TemperatureIndicatorStatus
+    from apps.cargo.services import record_condition_check
+    from apps.custody.models import CustodyEventType
+
+    delivery_request = DeliveryRequestFactory()
+    package = PackageFactory(delivery_request=delivery_request)
+
+    check = record_condition_check(
+        package,
+        stage="pickup",
+        actor=None,
+        seal_status=SealStatus.INTACT,
+        temperature_indicator_status=TemperatureIndicatorStatus.OK,
+    )
+
+    assert isinstance(check, PackageConditionCheck)
+    assert check.has_any_concern is False
+    assert check.custody_event is not None
+    assert check.custody_event.event_type == CustodyEventType.CONDITION_VERIFIED
+
+    last_event = delivery_request.custody_events.order_by("-sequence").first()
+    assert last_event.pk == check.custody_event_id
+
+
+def test_record_condition_check_with_broken_seal_flags_a_concern() -> None:
+    from apps.cargo.models import SealStatus
+    from apps.cargo.services import record_condition_check
+
+    delivery_request = DeliveryRequestFactory()
+    package = PackageFactory(delivery_request=delivery_request)
+
+    check = record_condition_check(
+        package, stage="delivery", actor=None, seal_status=SealStatus.BROKEN
+    )
+
+    assert check.has_any_concern is True
+
+
+def test_record_condition_check_twice_for_same_stage_updates_not_duplicates() -> None:
+    from apps.cargo.models import PackageConditionCheck, SealStatus
+    from apps.cargo.services import record_condition_check
+
+    delivery_request = DeliveryRequestFactory()
+    package = PackageFactory(delivery_request=delivery_request)
+
+    record_condition_check(package, stage="pickup", actor=None, seal_status=SealStatus.INTACT)
+    record_condition_check(package, stage="pickup", actor=None, seal_status=SealStatus.BROKEN)
+
+    assert PackageConditionCheck.objects.filter(package=package, stage="pickup").count() == 1
+    check = PackageConditionCheck.objects.get(package=package, stage="pickup")
+    assert check.seal_status == SealStatus.BROKEN

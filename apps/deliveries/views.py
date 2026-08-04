@@ -22,6 +22,7 @@ from django.views.generic import DetailView, ListView
 from django.views.generic.edit import FormView
 
 from apps.accounts.models import User
+from apps.custody.services import generate_recipient_pin
 from apps.deliveries.forms import DeliveryRequestForm
 from apps.deliveries.models import DeliveryRequest, DeliveryStatus
 from apps.deliveries.services import (
@@ -185,4 +186,27 @@ class DeliveryRequestCancelView(DeliveryRequestActionView):
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         delivery_request = self.get_delivery_request()
         cancel_delivery_request(delivery_request, actor=_actor(request))
+        return redirect("deliveryrequest-detail", pk=delivery_request.pk)
+
+
+class GenerateRecipientPinView(DeliveryRequestActionView):
+    """Phase 6: generate (or regenerate) the recipient PIN for a delivery and
+    show it once via a flash message.
+
+    Honest limitation (see `apps.custody.services.generate_recipient_pin`'s
+    docstring): this prototype has no real recipient portal/SMS/email
+    channel yet (Phase 7) to deliver the PIN automatically — an authorized
+    customer-org user reads it here and relays it to the recipient out of
+    band.
+    """
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        delivery_request = self.get_delivery_request()
+        _verification, plaintext_pin = generate_recipient_pin(delivery_request)
+        messages.success(
+            request,
+            f"Recipient PIN generated: {plaintext_pin}. Share this with the recipient by phone "
+            "or in person — it is shown only this once and is not sent automatically in this "
+            "prototype.",
+        )
         return redirect("deliveryrequest-detail", pk=delivery_request.pk)

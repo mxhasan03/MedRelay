@@ -24,4 +24,9 @@ urlpatterns = [
         views.DeliveryRequestCancelView.as_view(),
         name="deliveryrequest-cancel",
     ),
+    path(
+        "<uuid:pk>/generate-recipient-pin/",
+        views.GenerateRecipientPinView.as_view(),
+        name="deliveryrequest-generate-recipient-pin",
+    ),
 ]

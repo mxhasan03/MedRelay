@@ -124,11 +124,36 @@ class TemperatureProfileCode(models.TextChoices):
 
 
 class TemperatureProfile(models.Model):
-    """A reference row for one of the two supported temperature profiles."""
+    """A reference row for one of the two supported temperature profiles.
+
+    `min_temp_c`/`max_temp_c` (Phase 6): the allowed synthetic temperature
+    range used by `apps.temperature.services.record_reading` to decide
+    whether a simulated reading is an excursion. These are illustrative
+    demo/reference values (e.g. a typical cold-chain 2-8C refrigerated
+    range), not a medically validated cold-chain specification — see
+    docs/PRODUCT_REQUIREMENTS.md section 12's "no claim of validated
+    cold-chain compliance in the prototype."
+    """
 
     code = models.CharField(max_length=16, choices=TemperatureProfileCode.choices, unique=True)
     name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
+    min_temp_c = models.DecimalField(
+        max_digits=5,
+        decimal_places=1,
+        null=True,
+        blank=True,
+        help_text="Minimum acceptable temperature (Celsius) for this profile. Blank means "
+        "no lower bound is enforced (e.g. ambient).",
+    )
+    max_temp_c = models.DecimalField(
+        max_digits=5,
+        decimal_places=1,
+        null=True,
+        blank=True,
+        help_text="Maximum acceptable temperature (Celsius) for this profile. Blank means "
+        "no upper bound is enforced.",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -138,6 +163,16 @@ class TemperatureProfile(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    def in_range(self, temperature_c: Any) -> bool:
+        """Whether `temperature_c` falls within this profile's [min, max] range.
+        A blank bound is treated as unconstrained on that side."""
+        from decimal import Decimal
+
+        value = Decimal(str(temperature_c))
+        if self.min_temp_c is not None and value < self.min_temp_c:
+            return False
+        return not (self.max_temp_c is not None and value > self.max_temp_c)
 
 
 class Package(models.Model):
@@ -309,3 +344,86 @@ class PackagingAttestation(models.Model):
                     )
                 }
             )
+
+
+class PackageConditionCheckStage(models.TextChoices):
+    PICKUP = "pickup", "At Pickup"
+    DELIVERY = "delivery", "At Delivery"
+
+
+class SealStatus(models.TextChoices):
+    INTACT = "intact", "Intact"
+    BROKEN = "broken", "Broken"
+    NOT_APPLICABLE = "not_applicable", "Not Applicable"
+
+
+class TemperatureIndicatorStatus(models.TextChoices):
+    NOT_APPLICABLE = "not_applicable", "Not Applicable"
+    OK = "ok", "Within Range"
+    TRIPPED = "tripped", "Tripped/Excursion Indicated"
+    UNKNOWN = "unknown", "Unknown/Unreadable"
+
+
+class PackageConditionCheck(models.Model):
+    """A structured pickup/delivery condition checklist for one `Package`
+    (docs/ARCHITECTURE_AND_DATA_MODEL.md "Cargo and packages" entity list;
+    docs/PRODUCT_REQUIREMENTS.md section 6 "condition/seal checklist").
+
+    Linked to the `CustodyEvent` ("condition_verified") it produced — see
+    `apps.cargo.services.record_condition_check`, the only intended way to
+    create one (it also appends the custody event; a bare
+    `PackageConditionCheck.objects.create(...)` would silently skip that).
+    Placeholder/indicator status only (`TemperatureIndicatorStatus`) — no
+    real IoT temperature-indicator hardware is integrated; see
+    `apps.temperature` for the separate simulated-sensor-reading mechanism.
+    """
+
+    package = models.ForeignKey(Package, on_delete=models.CASCADE, related_name="condition_checks")
+    stage = models.CharField(max_length=16, choices=PackageConditionCheckStage.choices)
+    seal_status = models.CharField(
+        max_length=16, choices=SealStatus.choices, default=SealStatus.NOT_APPLICABLE
+    )
+    physical_damage_observed = models.BooleanField(default=False)
+    damage_description = models.CharField(
+        max_length=300, blank=True, help_text="Short operational description. Never clinical."
+    )
+    temperature_indicator_status = models.CharField(
+        max_length=16,
+        choices=TemperatureIndicatorStatus.choices,
+        default=TemperatureIndicatorStatus.NOT_APPLICABLE,
+    )
+    notes = models.TextField(blank=True)
+    checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="package_condition_checks",
+    )
+    checked_at = models.DateTimeField(auto_now_add=True)
+    custody_event = models.ForeignKey(
+        "custody.CustodyEvent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="condition_checks",
+    )
+
+    class Meta:
+        ordering = ["package_id", "stage"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["package", "stage"], name="unique_condition_check_per_package_stage"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_stage_display()} condition check — {self.package_id}"
+
+    @property
+    def has_any_concern(self) -> bool:
+        return (
+            self.seal_status == SealStatus.BROKEN
+            or self.physical_damage_observed
+            or self.temperature_indicator_status == TemperatureIndicatorStatus.TRIPPED
+        )

@@ -2346,3 +2346,475 @@ A doc file can never contain the hash of the commit that introduces its own fina
 same inherent one-commit lag every prior phase called out), so this line was added in a small
 follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
 history.
+
+# Current Status — Phase 6 (Custody, Proof, Temperature, and Incidents)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 6 on top of the
+Phase 5 foundation (starting point: commit `ae1f230`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 6 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 6 — Custody, proof, temperature,
+and incidents": a real, per-delivery SHA-256 hash-chained `CustodyEvent` log (`apps/custody/`)
+that is genuinely stronger than Phase 2's ORM-only append-only `DeliveryStatusTransition`; a
+sender/recipient PIN-and-signature proof-of-pickup/delivery prototype (`ProofOfPickup`,
+`ProofOfDelivery`, `RecipientVerification`); a package condition/seal checklist
+(`PackageConditionCheck`); simulated temperature readings and excursion detection
+(`TemperatureReading`, `TemperatureExcursion`) that opens a real `Incident` and can place a
+delivery on `INCIDENT_HOLD`; an incident console (`Incident`, `IncidentAction`) with a hard,
+state-machine-level invariant that an open severe/critical incident blocks the `DELIVERED`
+transition until an authorized resolution is recorded; and a return-to-sender flow
+(`ReturnResolution`) wiring `RETURNING -> RETURNED`. This is also the phase that finally extends
+`apps.deliveries.state_machine.ALLOWED_TRANSITIONS` past `AT_DESTINATION` to `DELIVERED`, which
+Phase 5 deliberately stopped short of.
+
+All three Phase 6 acceptance criteria have real, passing tests, described in detail below:
+
+1. **Custody chain integrity** — `apps/custody/tests/test_verification.py::
+   test_verify_custody_chain_detects_genuine_raw_sql_tampering` builds a real chain via
+   `apps.custody.services.record_event`, confirms it verifies, then genuinely tampers with a
+   *historical* event's stored `payload` via a raw SQL `UPDATE` against the real table (bypassing
+   both the instance-level `save()` guard and the queryset-level `.update()` guard entirely — the
+   test explicitly proves those ORM guards would have blocked a normal mutation attempt first, so
+   the raw-SQL bypass is the only way to reach this state) — and confirms
+   `apps.custody.verification.verify_custody_chain` detects the break at exactly the tampered
+   event's sequence number. A second test does the same for a tampered `previous_hash` link, and a
+   third confirms tampering with one delivery's chain never reports a false break for an unrelated
+   delivery's chain.
+2. **Corrections append, never overwrite** —
+   `test_correction_appends_a_new_event_and_never_mutates_the_original` builds a chain, calls
+   `apps.custody.services.append_correction`, confirms the original event's `payload`/`current_hash`
+   are byte-for-byte unchanged after the correction, confirms the correction is a new
+   `CORRECTION_APPENDED` event referencing the original via `correction_of`, and confirms a
+   subsequent direct edit attempt on the original still raises.
+3. **Incident hold blocks `DELIVERED`** — `apps/deliveries/tests/test_state_machine.py::
+   test_delivered_blocked_by_open_severe_incident_and_allowed_after_resolution` (state-machine-level,
+   unit-testing `validate_delivered` directly) and `apps/incidents/tests/test_services.py::
+   test_open_severe_incident_blocks_delivered_and_resolution_unblocks_it` (full service-layer flow:
+   get to `AT_DESTINATION`, open a severe incident, confirm `DELIVERED` is rejected, resolve the
+   incident, confirm `DELIVERED` now succeeds) both pass. The temperature-excursion path is covered
+   by `apps/temperature/tests/test_services.py::
+   test_out_of_range_reading_creates_excursion_opens_incident_and_holds_delivery`.
+
+## Exact files created/changed
+
+`git diff --stat ae1f230` (Phase 5's final commit → this phase's pre-commit working tree):
+
+```
+55 files changed, 4962 insertions(+), 43 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/custody/`** (models/services built for the first time — Phase 0-5 only had the empty app
+  scaffold): `hashing.py` (`compute_event_hash`/`canonical_event_fields` — the single canonicalization
+  function shared by both the writer and the verifier, so they can never silently drift out of sync),
+  `models.py` (`CustodyEventType`, `CustodyActorType`, `CustodyEvent`, `ProofOfPickup`,
+  `RecipientVerification`, `ProofOfDelivery`), `services.py` (`record_event`, `append_correction`,
+  `generate_recipient_pin`, `verify_recipient_pin`, `capture_proof_of_pickup`,
+  `capture_proof_of_delivery`), `verification.py` (`ChainVerificationResult`,
+  `verify_custody_chain`), `admin.py` (`CustodyEvent` registered read-only — no add/change/delete —
+  plus the three proof models), `migrations/0001_initial.py`, `tests/factories.py`,
+  `tests/test_services.py`, `tests/test_verification.py` (the load-bearing tamper-detection suite).
+- **`apps/incidents/`** (models/services/views built for the first time): `models.py`
+  (`IncidentCategory`, `IncidentSeverity`, `HOLD_SEVERITIES`, `IncidentStatus`,
+  `IncidentResolutionType`, `Incident`, `IncidentActionType`, `IncidentAction`,
+  `ReturnResolutionStatus`, `ReturnResolution`), `services.py` (`open_incident`, `add_incident_action`,
+  `resolve_incident`, `initiate_return`, `complete_return`, `IncidentAlreadyResolvedError`),
+  `views.py`/`urls.py` (the incident console: `IncidentListView`, `IncidentDetailView`,
+  `IncidentResolveView`), `admin.py`, `migrations/0001_initial.py`, `tests/factories.py`,
+  `tests/test_services.py` (the incident-hold invariant suite, including the "second incident while
+  already on hold" edge case this session's own testing caught — see design decision 5),
+  `tests/test_views.py`.
+- **`apps/temperature/`** (models/services/management command built for the first time): `models.py`
+  (`TemperatureReadingSource`, `TemperatureReading`, `TemperatureExcursion`), `services.py`
+  (`record_reading` — the real excursion-detection business rule), `management/commands/
+  simulate_temperature_readings.py` (the honestly-documented synthetic-sensor-data generator),
+  `admin.py`, `migrations/0001_initial.py`, `tests/factories.py`, `tests/test_services.py`,
+  `tests/test_management_commands.py`.
+- **`apps/cargo/`**: `models.py` (`TemperatureProfile.min_temp_c`/`max_temp_c`/`in_range()`;
+  `PackageConditionCheckStage`, `SealStatus`, `TemperatureIndicatorStatus`, `PackageConditionCheck`
+  — per docs/ARCHITECTURE_AND_DATA_MODEL.md's "Cargo and packages" entity grouping, this model lives
+  here rather than in `apps.custody`, cross-referencing `custody.CustodyEvent` via a lazy FK),
+  `services.py` (`record_condition_check`; `confirm_package_scan` now also appends a `PICKUP_SCAN`
+  custody event), `admin.py`, `migrations/0006.../0007.../0008_seed_temperature_ranges.py` (a data
+  migration seeding synthetic ambient 15-25C / refrigerated 2-8C reference ranges onto the two
+  existing `TemperatureProfile` rows), `tests/test_models.py`, `tests/test_services.py`.
+- **`apps/deliveries/`**: `state_machine.py` (`ALLOWED_TRANSITIONS` extended with
+  `AT_DESTINATION -> DELIVERED`, `{ASSIGNED..AT_DESTINATION} -> INCIDENT_HOLD`,
+  `{ASSIGNED..AT_DESTINATION} -> RETURNING`, `INCIDENT_HOLD -> {...resume states, RETURNING,
+  CANCELLED, FAILED}`, `RETURNING -> RETURNED`; new `validate_delivered` hard gate), `services.py`
+  (`create_delivery_request` now appends the `REQUEST_CREATED` genesis custody event), `views.py`/
+  `urls.py` (`GenerateRecipientPinView` — a customer-facing "generate and show once" PIN action),
+  `tests/test_state_machine.py` (replaced the old Phase 5 "not implemented" boundary test with real
+  Phase 6 DELIVERED-gating tests), `tests/test_views.py`.
+- **`apps/dispatch/`**: `services.py` (`assign_delivery` now appends a `COURIER_ASSIGNED` custody
+  event after the assignment transition commits).
+- **`apps/couriers/`**: `services.py` (`advance_delivery_status` now appends `COURIER_ARRIVED`/
+  `ROUTE_STARTED`/`FACILITY_ARRIVAL` custody events for the corresponding pickup/transit steps),
+  `views.py` (`CapturePickupProofView`, `CaptureConditionCheckView`, `CompleteDeliveryView` — the
+  endpoint that finally drives `AT_DESTINATION -> DELIVERED` — and `ReportIncidentView`, all behind
+  the same `Idempotency-Key` mechanism Phase 5 established), `urls.py`,
+  `tests/test_phase6_views.py`.
+- **`static/js/courier.js`**: `initSignaturePad` — a small HTML5 `<canvas>` mouse/touch signature
+  pad returning a base64 PNG data URL.
+- **`templates/couriers/active_delivery.html`**: pickup-proof capture, package condition check,
+  complete-delivery (recipient proof + PIN), and incident-report sections/JS.
+- **`templates/deliveries/deliveryrequest_detail.html`**: "Generate recipient PIN" action, a
+  hash-chain custody-event timeline, and an incidents list.
+- **`templates/incidents/incident_list.html`**, **`templates/incidents/incident_detail.html`**
+  (new): the minimal server-rendered incident console.
+- **`templates/dispatch/board_list.html`**: a link to the incident console.
+- **`config/urls.py`**: added `path("incidents/", include("apps.incidents.urls"))`.
+- **`docs/COST_AUDIT.md`**: regenerated (timestamp only; dependency count unchanged at 22 — **zero
+  new dependencies were added this phase**, exactly as scoped: `hashlib`/`secrets`/`json` are
+  stdlib, PIN hashing reuses `django.contrib.auth.hashers` (already part of Django), and signature
+  capture is plain HTML5 canvas + base64, no new JS library).
+
+## Design decisions
+
+### 1. Hash algorithm and canonicalization: SHA-256 over a `json.dumps(..., sort_keys=True)` snapshot, chained via a `previous_hash | canonical_json` digest input
+
+`apps/custody/hashing.py`'s `compute_event_hash(event, previous_hash)` is the **single** function
+both the writer (`apps.custody.services.record_event`) and the verifier
+(`apps.custody.verification.verify_custody_chain`) call — this was a deliberate structural choice
+so the two could never drift into two different hashing implementations that happen to agree today
+and silently diverge later. The canonical fields
+(`apps/custody/hashing.py::canonical_event_fields`) are every field that describes *what happened*
+(delivery/package IDs, sequence, event type, actor type/id/label, `occurred_at`, `recorded_at`,
+location, device metadata, the structured payload, and `correction_of_id`) — deliberately excluding
+`current_hash` itself (the output) and including `previous_hash` as a separate digest-input
+component (`f"{previous_hash}|{canonical_json}"`) rather than folding it into the JSON blob, so the
+chain-link and the event's own content are cleanly separable in the hash construction. `Decimal`/
+datetime values are serialized via a `default=` callback (`str()`/`isoformat()`) for deterministic,
+JSON-safe output. `hashlib.sha256` (Python stdlib) — no new dependency, per the phase's own
+zero-cost framing.
+
+**A real, honest design correction made during this session**: `CustodyEvent.recorded_at` is *not*
+`auto_now_add=True`. An `auto_now_add` field's value is only assigned by Django internally at
+`INSERT` time, which would make it impossible to include in a hash computed *before* that `INSERT`
+runs. Instead, `apps.custody.services.record_event` calls `timezone.now()` once, assigns it
+explicitly to both `occurred_at` (when not otherwise specified) and `recorded_at`, and only then
+computes the hash — so every hashed field is a value already fully known and set on the Python
+object before any database write happens, keeping the hash fully deterministic and reproducible
+from the row's own stored data.
+
+### 2. Sequence/previous-hash assignment is race-safe via the same row-lock convention Phase 4 established
+
+`record_event` wraps its work in `transaction.atomic()` and takes
+`DeliveryRequest.objects.select_for_update()` on the delivery being appended to before reading the
+prior event's `sequence`/`current_hash` — the exact same "lock the parent row before computing a
+value that depends on the current state of its children" pattern
+`apps.dispatch.services.assign_delivery` already established for `DeliveryAssignment`. This is what
+prevents two concurrent `record_event` calls for the same delivery from ever computing the same
+`sequence` or hashing against a stale `previous_hash`. Per Phase 4's own honestly-documented
+SQLite-vs-PostgreSQL caveat (`select_for_update()` is a real row lock on PostgreSQL, a documented
+no-op on SQLite), the real backend-independent correctness backstop here is the
+`unique_custody_event_sequence_per_delivery` partial-free `UniqueConstraint` on
+`(delivery_request, sequence)` — a genuine concurrent double-append would hit a real
+`IntegrityError`, not silently duplicate a sequence number. A dedicated multi-threaded concurrency
+test (mirroring `apps.dispatch.tests.test_concurrency`) was **not** built for `record_event` this
+phase — a reasonable, explicitly-flagged follow-up (see "Known gaps" below), since this phase's
+test budget went to the tamper-detection suite instead, which is the literal, explicit acceptance
+criterion.
+
+### 3. A real bug caught and fixed: UUID primary keys defeat a naive `self.pk is not None` append-only guard
+
+The first version of `CustodyEvent.save()` copied `DeliveryStatusTransition`'s exact append-only
+guard (`if self.pk is not None: raise`). This immediately broke every single custody-event write in
+the entire test suite (44 failing tests on first full-suite run) — because `CustodyEvent.id` is a
+`UUIDField(default=uuid.uuid4)`, Django assigns that default **at instantiation time**, so
+`self.pk` is already non-`None` on a brand-new, never-saved instance. `DeliveryStatusTransition`
+never had this problem because it uses a plain auto-incrementing `BigAutoField` primary key, which
+really is `None` until the first `INSERT`. The fix: check `self._state.adding` (Django's own
+"has this instance ever been successfully saved" flag) instead of `self.pk is not None` — this is
+documented directly in `CustodyEvent.save()`'s inline comment so a future UUID-pk append-only model
+doesn't repeat the same mistake.
+
+### 4. Signature-capture prototype: HTML5 `<canvas>` pad + typed-name fallback, stored as an inline base64 data URL — explicitly not a legal e-signature
+
+Per the task's explicit "your call" on canvas-vs-typed-name: **both** are implemented.
+`static/js/courier.js`'s `initSignaturePad` is a small, real mouse/touch-driven canvas drawing pad
+(no external signature-pad library — a new dependency was avoidable here) that returns a base64
+`data:image/png;base64,...` string via `canvas.toDataURL()`. `ProofOfPickup`/`ProofOfDelivery` also
+carry a `typed_signature_name` field as an always-available, always-testable fallback — used by
+every automated test in this phase (canvas-drawn strokes are not something a headless Django test
+client can produce, exactly the same "camera scanning is real but untested; manual entry is the
+tested path" honesty pattern Phase 5 already established for QR scanning). **This is explicitly a
+prototype, not a legally binding e-signature**: no timestamp-authority integration, no
+cryptographic signing of the drawn image, no identity-proofing behind it — stated directly in
+`apps/custody/models.py`'s module docstring. The image is stored inline as a `TextField` (the data
+URL string) rather than through a real object-storage adapter — a deliberate demo-scale
+simplification (this prototype's synthetic delivery volumes never approach a scale where inline
+storage matters), explicitly flagged as something a real deployment should route through the
+zero-cost policy's `ObjectStorageProvider` adapter pattern instead.
+
+### 5. PIN prototype: `django.contrib.auth.hashers.make_password`/`check_password`, never plaintext at rest — with an honestly-scoped "out of band" delivery mechanism
+
+`apps.custody.services.generate_recipient_pin` generates a synthetic 4-digit PIN using `secrets`
+(stdlib, not `random` — costs nothing extra and is the more honest default even for a low-stakes
+demo secret) and stores **only** its salted PBKDF2 hash via `django.contrib.auth.hashers.
+make_password` — the exact same hasher Django uses for account passwords, so this needed **zero**
+new dependencies. The plaintext PIN is returned to the caller exactly once, at generation time, and
+is never persisted anywhere. Honest limitation, stated directly in that function's docstring: this
+prototype has **no real recipient portal or SMS/email delivery channel yet** (that is explicitly
+Phase 7 — "notifications, recipient tracking, billing, and reports" — territory) — the demo flow
+routes the one-time plaintext PIN through a flash message on the existing, already-tenant-scoped
+customer delivery-detail page (`apps.deliveries.views.GenerateRecipientPinView`), on the
+assumption that an authorized customer-org user relays it to the recipient by phone or in person,
+mirroring how several real last-mile courier apps' PIN hand-off flows work today. This is
+data-minimization-compliant (docs/SECURITY_COMPLIANCE_BOUNDARIES.md): the PIN is a synthetic,
+operational, non-identity-document secret, never a real biometric or identity credential.
+
+### 6. Incident severity model: `HOLD_SEVERITIES` as the single source of truth two apps must agree on
+
+`docs/PRODUCT_REQUIREMENTS.md` section 13 says "**Severe** incidents suspend normal completion" —
+not every incident. `apps.incidents.models.IncidentSeverity` has four values
+(`MINOR`/`MODERATE`/`SEVERE`/`CRITICAL`); `HOLD_SEVERITIES = frozenset({SEVERE, CRITICAL})` is the
+one place that decides which severities actually place a delivery on `INCIDENT_HOLD` — consulted
+by both `apps.incidents.services.open_incident` (to decide whether to transition the delivery) and
+`apps.deliveries.state_machine.validate_delivered` (to decide whether an open incident blocks
+`DELIVERED`), so the two can never silently disagree about which incidents are hold-worthy. A
+`MINOR`/`MODERATE` incident is still fully recorded (with its own `INCIDENT_OPENED` custody event)
+but never changes `DeliveryRequest.status` — proven by
+`test_minor_incident_does_not_block_delivered` and
+`test_open_incident_with_minor_severity_does_not_change_delivery_status`.
+
+`Incident.delivery_status_before_hold` snapshots the exact pre-hold status so
+`apps.incidents.services.resolve_incident`'s `RESUMED` resolution restores it precisely rather than
+guessing (e.g. "go back to `AT_DESTINATION`" would be wrong for an incident opened while
+`IN_TRANSIT`). **A genuine edge case caught by this session's own testing, not just theorized**: a
+*second* severe incident opened while the delivery is *already* `INCIDENT_HOLD` (e.g. two
+temperature excursions on the same delivery) would otherwise attempt an illegal, non-existent
+`INCIDENT_HOLD -> INCIDENT_HOLD` self-transition and raise `InvalidTransitionError` — caught by
+`apps/temperature/tests/test_management_commands.py::
+test_simulate_temperature_readings_with_excursion_chance_can_open_incidents` (which generates ten
+consecutive excursions against one delivery) failing during development. Fixed in
+`apps.incidents.services.open_incident`: a second hold-worthy incident opened while already on
+hold is still fully recorded (`placed_delivery_on_hold=True`) but skips the redundant transition,
+inheriting the *original* still-open incident's pre-hold snapshot — see
+`test_second_severe_incident_while_already_on_hold_does_not_error`.
+
+### 7. Incident-hold enforcement mechanism: a real state-machine transition guard, not a UI suggestion
+
+Two independent, reinforcing mechanisms block `DELIVERED` while a severe incident is open — neither
+is optional or bypassable by calling a different entry point:
+
+1. **Structural**: `ALLOWED_TRANSITIONS[DeliveryStatus.INCIDENT_HOLD]` simply has no `DELIVERED`
+   entry — a delivery whose status is literally `INCIDENT_HOLD` cannot reach `DELIVERED` no matter
+   what, the same "the dict has no key for that edge" convention Phase 2/5 already established for
+   other deliberately-unimplemented transitions.
+2. **`validate_delivered`** (called by `apps.deliveries.state_machine.transition_delivery_request`
+   whenever `to_status == DELIVERED`, exactly parallel to `validate_ready_for_dispatch`'s existing
+   gate): queries for any `OPEN` `Incident` with `severity__in=HOLD_SEVERITIES` for the delivery and
+   raises `ValidationError` if one exists — this is defense-in-depth for any future code path that
+   might reach `AT_DESTINATION` with an open severe incident without the status having been flipped
+   to `INCIDENT_HOLD` (not reachable today, but the guard doesn't rely on that never happening).
+
+Both are exercised by real tests (see "Summary" above) — this was explicitly required to be a
+transition-guard-level enforcement, not a UI-only suggestion, and it is.
+
+### 8. Simulated temperature readings: an honestly-labeled synthetic generator, not a real IoT integration
+
+Per the zero-cost policy's requirement that external capabilities (temperature sensors included) go
+through an adapter interface with a local/mock implementation, and given there is no real sensor
+hardware anywhere in this project's environment: `apps.temperature.services.record_reading` is
+always called with an explicit, already-known `temperature_c` value — it never listens for or polls
+a real device. `apps/temperature/management/commands/simulate_temperature_readings.py` is the
+demo-data generator: a small random walk (via `random.Random`, seedable for reproducible demo runs)
+around a delivery's `TemperatureProfile` range, with a configurable `--excursion-chance` to
+deliberately demonstrate the excursion → incident → hold pipeline end to end. Both the model
+(`apps.temperature.models`'s module docstring) and the command's own docstring state plainly that
+this is simulated, not live sensor data — no claim of validated cold-chain compliance anywhere, per
+docs/PRODUCT_REQUIREMENTS.md section 12.
+
+`apps.cargo.models.TemperatureProfile.min_temp_c`/`max_temp_c` (seeded via a new data migration,
+`apps/cargo/migrations/0008_seed_temperature_ranges.py`, with illustrative demo values — ambient
+15-25C, refrigerated 2-8C) are the reference ranges `record_reading`/`TemperatureProfile.in_range()`
+check a reading against; a profile with both bounds blank never excursions (proven by
+`test_profile_with_no_configured_bounds_never_excursions`), and a specific package's own
+temperature profile (if it differs from the delivery request's default) is honored over the
+request-level default (`test_record_reading_per_package_uses_the_packages_own_temperature_profile`).
+
+### 9. Custody-event emission wired into every phase's existing service functions, not just Phase 6's own new code
+
+Beyond the purely-Phase-6 event types (proof capture, condition checks, incidents, returns,
+corrections), this phase also retrofit real custody-event emission into several **existing**
+service functions from earlier phases, so the custody timeline is a genuinely complete record of a
+delivery's life, not just its final chapter: `apps.deliveries.services.create_delivery_request`
+(`REQUEST_CREATED`, the genesis event), `apps.dispatch.services.assign_delivery`
+(`COURIER_ASSIGNED`), `apps.cargo.services.confirm_package_scan` (`PICKUP_SCAN`), and
+`apps.couriers.services.advance_delivery_status` (`COURIER_ARRIVED`/`ROUTE_STARTED`/
+`FACILITY_ARRIVAL` for the corresponding pickup/transit steps). This was a deliberate scope
+decision — it touches Phase 2/4/5 code, which is exactly the kind of change that risks regressing
+previously-passing tests, so the full Phase 0-5 suite was re-run after each such change and stayed
+green throughout (see "Quality gate results" below). `DELIVERY_SCAN` and `CUSTODY_TRANSFERRED`
+remain defined in `CustodyEventType`'s vocabulary (per docs/PRODUCT_REQUIREMENTS.md section 10's
+required event-type list) but have no automatic emission trigger this phase — an honest, explicitly
+flagged gap (see below), not a silent omission.
+
+### 10. Return-to-sender: reachable both via incident resolution and directly
+
+`docs/IMPLEMENTATION_ROADMAP.md`'s framing ("RETURNING -> RETURNED as one path out of
+INCIDENT_HOLD (or from other applicable states per the state diagram)") was read as permission to
+allow `RETURNING` from every active courier state, not only from `INCIDENT_HOLD` —
+`apps.incidents.services.initiate_return` can be called directly (e.g. "wrong destination,
+returning now" with no formal incident ever opened; `ReturnResolution.incident` is nullable for
+exactly this case) or automatically by `resolve_incident` when an incident is resolved with
+`resolution_type=RETURN_TO_SENDER`. `complete_return` then drives the final `RETURNING -> RETURNED`
+step. Both paths are covered by real tests
+(`test_initiate_return_without_incident_is_allowed`,
+`test_resolve_incident_return_to_sender_initiates_return_flow`, `test_complete_return_transitions_to_returned`).
+
+## Data minimization checked
+
+Every field added this phase was reviewed against docs/SECURITY_COMPLIANCE_BOUNDARIES.md section 2:
+`CustodyEvent.payload`/`device_metadata` store only operational JSON (event-specific IDs, statuses,
+free-text operational notes) — the same "never diagnosis/clinical/SSN/insurance content" convention
+every prior phase's free-text fields already followed. `RecipientVerification.pin_hash` is a salted
+hash, never plaintext; `ProofOfPickup`/`ProofOfDelivery` signature fields are a drawn squiggle or a
+typed name, never a real identity document or biometric. `Incident.summary`/`resolution_note` and
+`IncidentAction.note` are operational descriptions (what happened, what was done about it), with
+the same "never clinical content" expectation as `Package.description`/`PackagingAttestation.notes`
+established in Phase 2. `TemperatureReading.temperature_c` is a synthetic sensor value, never
+attached to any patient/clinical context.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. No `uv lock`/`uv sync` re-run was needed — **zero new
+runtime or dev dependencies were added this phase** (see "Exact files created/changed" above).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+205 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 205 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/cargo/migrations/0006_temperatureprofile_max_temp_c_and_more.py`,
+`0007_packageconditioncheck_custody_event_and_more.py`, `0008_seed_temperature_ranges.py`,
+`apps/custody/migrations/0001_initial.py`, `apps/incidents/migrations/0001_initial.py`, and
+`apps/temperature/migrations/0001_initial.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+419 passed in 17.82s
+```
+Coverage: 95% overall (3825 statements, 185 missed) for the whole project including Phase 0-5 code —
+all 350 pre-Phase-6 tests still pass, plus 69 new Phase 6 tests across `apps/custody` (+23),
+`apps/incidents` (+29 across services/views), `apps/temperature` (+13 across services/management
+commands), `apps/cargo` (+9), `apps/couriers` (+8), and `apps/deliveries` (+5 state-machine, +2
+view). New-app coverage: `apps/custody/services.py`/`verification.py` 100%, `apps/custody/models.py`
+96%, `apps/custody/hashing.py` 89% (one defensive `_json_default` branch for an exotic type not
+exercised — every value this codebase's models actually store is covered), `apps/incidents/
+services.py`/`views.py` 100%, `apps/incidents/models.py` 93% (`__str__`/property defensive lines),
+`apps/temperature/services.py` 100%, `apps/temperature/models.py` 93%. The remaining project-wide
+misses are the pre-existing Phase 0 environment-entrypoint gaps (`config/asgi.py`, `config/celery.py`,
+`config/wsgi.py`, `config/settings/{dev,prod}.py`) plus a handful of defensive branches elsewhere —
+none of it load-bearing Phase 6 logic.
+
+**Phase 4 concurrency test stability, observed honestly**: `apps.dispatch.tests.test_concurrency::
+test_concurrent_assign_delivery_exactly_one_wins` was re-run in isolation 35 times total across two
+batches (15 + 20) this session: **2 failures out of 35 runs (~6%)**, both with the same signature —
+*both* threads received `AssignmentConflictError` (0 successes, not a crash) rather than the
+expected exactly-one-succeeds outcome. This is a **higher** flake rate than Phase 5's own
+observation ("flaky exactly once... not reproducible in ~25 reruns since"), and the likely cause is
+identified, not just guessed: `assign_delivery` now also calls `apps.custody.services.record_event`
+(a `COURIER_ASSIGNED` custody event) inside its own `transaction.atomic()` block, which does its own
+`select_for_update()` + lookup + `INSERT` before the outer transaction commits — widening the window
+during which SQLite's single whole-database writer lock is held, making it more likely a concurrent
+writer's own `BEGIN` times out with `OperationalError: database is locked` (mapped to
+`AssignmentConflictError` by existing Phase 4 code, exactly as designed) rather than losing a real
+row-lock race. This is not a new failure *mode* (Phase 4's own module docstring already documents
+and handles exactly this `OperationalError` class), just a higher *frequency* of an
+already-anticipated, already-handled SQLite coarse-locking artifact — the underlying correctness
+guarantee (the partial `UniqueConstraint` on `DeliveryAssignment` making a genuine double-assignment
+impossible) is completely unaffected; no delivery was ever assigned to two couriers in any of these
+runs. Per this task's own explicit framing ("not something to fix, just mention what you observed"),
+this was not changed further this session, but is flagged as a real, quantified, honestly-explained
+regression in test *stability* (not correctness) for whoever picks this up next — a reasonable
+mitigation would be moving the custody-event append outside `assign_delivery`'s critical locked
+section (e.g. after the `DeliveryAssignment` INSERT's own nested savepoint commits) if this needs
+tightening later.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 22 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is unchanged at 22 — Phase 6 added zero new packages (hashlib/secrets/json are
+stdlib; PIN hashing reuses Django's own `django.contrib.auth.hashers`; signature capture is plain
+HTML5 canvas + base64, no new JS dependency).
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from prior phases (`.secrets.baseline` still has empty
+`results: {}`). Run after `git add -A` so every new Phase 6 file was actually scanned. No new
+secret-shaped string was introduced this phase (the synthetic demo PIN is generated at runtime via
+`secrets.choice`, never a hard-coded literal).
+
+## Known gaps / deviations (honest list)
+
+- **`DELIVERY_SCAN`/`CUSTODY_TRANSFERRED` custody event types are defined but not automatically
+  emitted** — the full required vocabulary from docs/PRODUCT_REQUIREMENTS.md section 10 exists on
+  `CustodyEventType`, but this phase did not add a delivery-side package scan step (only the
+  Phase 5 pickup-side scan exists) or a distinct "custody transferred" trigger separate from
+  `custody_accepted`/`delivery_completed`. `PACKAGE_PREPARED` is similarly defined but not
+  automatically emitted (packaging attestation creation happens via the wizard form/admin, not a
+  single service function this phase touched).
+- **No dedicated multi-threaded concurrency test for `apps.custody.services.record_event`** — unlike
+  `apps.dispatch.tests.test_concurrency`'s real multi-threaded test for `assign_delivery`, the
+  sequence/previous-hash race window in `record_event` is protected by the same row-lock + partial
+  `UniqueConstraint` pattern but is not separately exercised by concurrent threads this phase — a
+  reasonable follow-up given this mechanism's importance.
+- **Increased (but still low, ~6%) flakiness observed in the pre-existing Phase 4 concurrency test**,
+  attributable to this phase's own change (custody-event emission inside `assign_delivery`'s
+  transaction) — see the "Quality gate results" section above for the full honest write-up and a
+  suggested mitigation. Not fixed this session per the task's explicit framing.
+- **Signature images are stored as inline base64 text**, not through a real object-storage adapter —
+  a deliberate demo-scale simplification (see design decision 4), fine at this prototype's synthetic
+  data volumes but not how a real deployment should do it.
+- **PIN delivery to the recipient is fully manual/out-of-band** — no real recipient
+  portal/SMS/email channel exists yet (explicitly Phase 7 territory); the plaintext PIN surfaces
+  once via a flash message on the existing customer delivery-detail page for an authorized
+  customer-org user to relay by phone/in person.
+- **No incident category/severity restriction by actor role** — a courier reporting an incident via
+  `ReportIncidentView` can select any of the twelve categories and any severity; a real deployment
+  might want to restrict couriers from self-declaring, say, `suspected_tampering` at `CRITICAL`
+  without an ops review step. Not restricted this phase — every open severity is treated uniformly
+  by the hold-placement rule.
+- **`IncidentStatus` is a simple `OPEN`/`RESOLVED` binary** — no intermediate "investigating"/
+  "escalated" workflow stage, even though `IncidentActionType.ESCALATED` exists as a loggable action
+  type. Kept minimal per the phase's own "reasonably minimal but real" framing for the incident
+  console.
+- **No real background job flips a stale `JobOffer` to `EXPIRED`, no scheduled job runs
+  `simulate_temperature_readings` automatically** — both remain manually/explicitly invoked, exactly
+  as Phase 4/5 already scoped for the former and as this phase explicitly scopes the latter (a
+  management command, not a Celery beat schedule — no Celery task wiring was added this phase).
+- Coverage is 95%, not 100% (see gate output above) — no hard coverage threshold is a gate; the
+  uncovered lines are concentrated in defensive/early-return branches and `__str__`/property methods,
+  plus the pre-existing Phase 0 environment-entrypoint gaps.
+- Not yet built (correctly out of scope for Phase 6, per the roadmap): notifications, recipient
+  tracking/short-lived links, billing/invoicing, reporting/exports — all Phase 7 work.
+
+## Commit history for this phase
+
+(Recorded after the commit lands — see `git log --oneline` for the definitive, current history.)

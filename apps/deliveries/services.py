@@ -97,6 +97,23 @@ def create_delivery_request(
     delivery_request.full_clean()
     delivery_request.save()
 
+    # Phase 6: the genesis event of this delivery's custody hash chain. Lazy
+    # import — apps.custody does not need apps.deliveries at module scope,
+    # but this keeps the dependency direction explicit (see
+    # apps.deliveries.state_machine's module docstring for the same
+    # "one real import direction, one lazy" convention used across this
+    # codebase).
+    from apps.custody.models import CustodyActorType, CustodyEventType
+    from apps.custody.services import record_event
+
+    record_event(
+        delivery_request,
+        CustodyEventType.REQUEST_CREATED,
+        actor_type=CustodyActorType.CUSTOMER,
+        actor_user=created_by,
+        payload={"service_level": service_level, "package_count": package_count},
+    )
+
     DeliveryStop.objects.create(
         delivery_request=delivery_request,
         stop_type=StopType.PICKUP,

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Incident {{ incident.pk|truncatechars:8 }} — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <p><a href="{% url 'incident-list' %}">&larr; Open Incidents</a></p>
+    <h1>{{ incident.get_category_display }} ({{ incident.get_severity_display }})</h1>
+    <p>Delivery: <a href="{% url 'deliveryrequest-detail' incident.delivery_request_id %}">{{ incident.delivery_request_id }}</a></p>
+    <p>Status: <strong>{{ incident.get_status_display }}</strong>
+        {% if incident.placed_delivery_on_hold %} &mdash; placed delivery on INCIDENT_HOLD (was {{ incident.delivery_status_before_hold }}){% endif %}</p>
+    <p>Summary: {{ incident.summary }}</p>
+    <p>Opened by {{ incident.opened_by|default:"(system)" }} at {{ incident.opened_at }}.</p>
+
+    {% if incident.is_open %}
+    <div style="border:1px solid #7a1f1f;background:#fdecea;padding:0.75rem;margin:1rem 0;">
+        <h2>Resolve this incident</h2>
+        <p>Per docs/PRODUCT_REQUIREMENTS.md section 13: severe incidents suspend normal delivery
+           completion until an authorized resolution is recorded here.</p>
+        <form method="post" action="{% url 'incident-resolve' incident.pk %}">
+            {% csrf_token %}
+            <p>
+                <label>Resolution:
+                    <select name="resolution_type" required>
+                        <option value="resumed">Resume normal delivery</option>
+                        <option value="return_to_sender">Return to sender</option>
+                        <option value="cancelled">Cancel delivery</option>
+                        <option value="other">Other</option>
+                    </select>
+                </label>
+            </p>
+            <p>
+                <label>Resolution note (required):<br>
+                    <textarea name="resolution_note" rows="3" style="width:100%;" required></textarea>
+                </label>
+            </p>
+            <button type="submit">Resolve incident</button>
+        </form>
+    </div>
+    {% else %}
+    <p>Resolved by {{ incident.resolved_by|default:"(unknown)" }} at {{ incident.resolved_at }}
+        ({{ incident.get_resolution_type_display }}): {{ incident.resolution_note }}</p>
+    {% endif %}
+
+    <h2>Action history (append-only)</h2>
+    <ul>
+        {% for action in incident.actions.all %}
+        <li>{{ action.created_at }} — {{ action.get_action_type_display }}
+            {% if action.actor %}(by {{ action.actor }}){% endif %}: {{ action.note }}</li>
+        {% empty %}
+        <li>No actions recorded yet.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

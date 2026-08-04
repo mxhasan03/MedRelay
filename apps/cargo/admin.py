@@ -8,6 +8,7 @@ from apps.cargo.models import (
     CargoClass,
     CargoPolicy,
     Package,
+    PackageConditionCheck,
     PackageIdentifier,
     PackagingAttestation,
     TemperatureProfile,
@@ -30,7 +31,7 @@ class CargoClassAdmin(admin.ModelAdmin):
 
 @admin.register(TemperatureProfile)
 class TemperatureProfileAdmin(admin.ModelAdmin):
-    list_display = ["code", "name", "is_active"]
+    list_display = ["code", "name", "min_temp_c", "max_temp_c", "is_active"]
     list_filter = ["is_active"]
     search_fields = ["code", "name"]
 
@@ -71,3 +72,19 @@ class PackagingAttestationAdmin(admin.ModelAdmin):
     list_filter = ["packaging_confirmed", "classification_confirmed"]
     search_fields = ["delivery_request__id"]
     autocomplete_fields = ["attested_by"]
+
+
+@admin.register(PackageConditionCheck)
+class PackageConditionCheckAdmin(admin.ModelAdmin):
+    list_display = [
+        "package",
+        "stage",
+        "seal_status",
+        "physical_damage_observed",
+        "temperature_indicator_status",
+        "checked_at",
+    ]
+    list_filter = ["stage", "seal_status", "temperature_indicator_status"]
+    search_fields = ["package__delivery_request__id"]
+    autocomplete_fields = ["package", "checked_by", "custody_event"]
+    readonly_fields = ["checked_at"]

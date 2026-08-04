@@ -30,22 +30,31 @@ import json
 from typing import Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 from django.views.generic import DetailView, TemplateView
 
 from apps.accounts.models import User
-from apps.cargo.services import PackageScanError, confirm_package_scan
+from apps.cargo.models import Package
+from apps.cargo.services import PackageScanError, confirm_package_scan, record_condition_check
 from apps.couriers.idempotency import idempotent_call
 from apps.couriers.services import (
     COURIER_ADVANCE_SEQUENCE,
     advance_delivery_status,
     can_access_courier_portal,
 )
+from apps.custody.services import (
+    PinVerificationError,
+    ProofAlreadyCapturedError,
+    capture_proof_of_delivery,
+    capture_proof_of_pickup,
+    verify_recipient_pin,
+)
 from apps.deliveries.exceptions import InvalidTransitionError
-from apps.deliveries.models import DeliveryRequest
+from apps.deliveries.models import DeliveryRequest, RecipientVerificationMethod
+from apps.deliveries.state_machine import transition_delivery_request
 from apps.dispatch.exceptions import (
     AssignmentConflictError,
     IneligibleCourierError,
@@ -53,6 +62,7 @@ from apps.dispatch.exceptions import (
 )
 from apps.dispatch.models import AssignmentStatus, DeliveryAssignment, JobOffer, JobOfferStatus
 from apps.dispatch.services import accept_job_offer, decline_job_offer
+from apps.incidents.services import open_incident
 
 
 def _actor(request: HttpRequest) -> User:
@@ -202,12 +212,22 @@ class ActiveDeliveryView(CourierPermissionMixin, DetailView):
         return delivery_request
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        from apps.deliveries.models import DeliveryStatus
+        from apps.incidents.models import IncidentCategory, IncidentSeverity
+
         context = super().get_context_data(**kwargs)
         delivery_request = self.object
         context["active_assignment"] = self.active_assignment
         context["next_status"] = COURIER_ADVANCE_SEQUENCE.get(delivery_request.status)
         context["transitions"] = delivery_request.status_transitions.all()
         context["packages"] = delivery_request.packages.all()
+        # Phase 6: proof/condition/incident capture context.
+        context["has_proof_of_pickup"] = hasattr(delivery_request, "proof_of_pickup")
+        context["has_proof_of_delivery"] = hasattr(delivery_request, "proof_of_delivery")
+        context["at_destination"] = delivery_request.status == DeliveryStatus.AT_DESTINATION
+        context["recipient_verification_method"] = delivery_request.recipient_verification_method
+        context["incident_categories"] = IncidentCategory.choices
+        context["incident_severities"] = IncidentSeverity.choices
         return context
 
 
@@ -270,4 +290,174 @@ class PackageScanView(CourierPermissionMixin, View):
             )
         except PackageScanError as exc:
             return JsonResponse({"error": str(exc)}, status=422)
+        return JsonResponse(data, status=status_code)
+
+
+def _assigned_delivery_or_403(pk: Any, courier: Any) -> DeliveryRequest:
+    """Fetch `pk`'s `DeliveryRequest` and confirm `courier` currently holds its
+    ACTIVE assignment — the same ownership check every Phase 6 courier proof/
+    condition/incident endpoint below needs, factored out of `PackageScanView`'s
+    inline version (Phase 5) since four more views now need it too."""
+    delivery_request = get_object_or_404(DeliveryRequest, pk=pk)
+    active_assignment = DeliveryAssignment.objects.filter(
+        delivery_request=delivery_request, status=AssignmentStatus.ACTIVE
+    ).first()
+    if active_assignment is None or active_assignment.courier_id != courier.pk:
+        raise PermissionDenied("This delivery is not currently assigned to you.")
+    return delivery_request
+
+
+class CapturePickupProofView(CourierPermissionMixin, View):
+    """Phase 6: sender hand-off proof capture at pickup (signature/typed-name
+    only — see apps.custody.models module docstring for why no PIN here)."""
+
+    def post(self, request: HttpRequest, pk: Any) -> HttpResponse:
+        courier = _actor(request).courier_profile
+        delivery_request = _assigned_delivery_or_403(pk, courier)
+        payload = _json_body(request)
+        key = _idempotency_key(request, payload)
+        if not key:
+            return JsonResponse({"error": "An Idempotency-Key is required."}, status=400)
+
+        def _do() -> dict[str, Any]:
+            proof = capture_proof_of_pickup(
+                delivery_request,
+                actor=_actor(request),
+                sender_name=payload.get("sender_name", ""),
+                sender_role=payload.get("sender_role", ""),
+                signature_data_url=payload.get("signature_data_url", ""),
+                typed_signature_name=payload.get("typed_signature_name", ""),
+            )
+            return {"proof_of_pickup_id": proof.pk}
+
+        try:
+            data, status_code = idempotent_call(
+                courier=courier, endpoint="pickup_proof_capture", key=key, fn=_do, status_code=201
+            )
+        except ProofAlreadyCapturedError as exc:
+            return JsonResponse({"error": str(exc)}, status=409)
+        return JsonResponse(data, status=status_code)
+
+
+class CaptureConditionCheckView(CourierPermissionMixin, View):
+    """Phase 6: package condition/seal checklist, at pickup or delivery."""
+
+    def post(self, request: HttpRequest, pk: Any) -> HttpResponse:
+        courier = _actor(request).courier_profile
+        delivery_request = _assigned_delivery_or_403(pk, courier)
+        payload = _json_body(request)
+        key = _idempotency_key(request, payload)
+        if not key:
+            return JsonResponse({"error": "An Idempotency-Key is required."}, status=400)
+        package = get_object_or_404(
+            Package,
+            pk=payload.get("package_id") or request.POST.get("package_id"),
+            delivery_request=delivery_request,
+        )
+        stage = payload.get("stage") or request.POST.get("stage", "")
+        if not stage:
+            return JsonResponse({"error": "stage is required."}, status=400)
+
+        def _do() -> dict[str, Any]:
+            check = record_condition_check(
+                package,
+                stage=stage,
+                actor=_actor(request),
+                seal_status=payload.get("seal_status", "not_applicable"),
+                physical_damage_observed=bool(payload.get("physical_damage_observed", False)),
+                damage_description=payload.get("damage_description", ""),
+                temperature_indicator_status=payload.get(
+                    "temperature_indicator_status", "not_applicable"
+                ),
+                notes=payload.get("notes", ""),
+            )
+            return {"condition_check_id": check.pk, "has_any_concern": check.has_any_concern}
+
+        data, status_code = idempotent_call(
+            courier=courier, endpoint="condition_check", key=key, fn=_do, status_code=201
+        )
+        return JsonResponse(data, status=status_code)
+
+
+class CompleteDeliveryView(CourierPermissionMixin, View):
+    """Phase 6: capture recipient proof of delivery (PIN and/or signature, per
+    `delivery_request.recipient_verification_method`) and attempt the
+    `AT_DESTINATION -> DELIVERED` transition in one action — the courier
+    endpoint that finally completes the delivery lifecycle Phase 5 stopped
+    short of. See `apps.deliveries.state_machine.validate_delivered` for the
+    hard gate this transition goes through (proof of delivery must exist,
+    no open severe incident)."""
+
+    def post(self, request: HttpRequest, pk: Any) -> HttpResponse:
+        courier = _actor(request).courier_profile
+        delivery_request = _assigned_delivery_or_403(pk, courier)
+        payload = _json_body(request)
+        key = _idempotency_key(request, payload)
+        if not key:
+            return JsonResponse({"error": "An Idempotency-Key is required."}, status=400)
+
+        def _do() -> dict[str, Any]:
+            actor = _actor(request)
+            if delivery_request.recipient_verification_method == RecipientVerificationMethod.PIN:
+                verify_recipient_pin(delivery_request, payload.get("pin", ""), actor=actor)
+            capture_proof_of_delivery(
+                delivery_request,
+                actor=actor,
+                delivered_to_name=payload.get("delivered_to_name", ""),
+                signature_data_url=payload.get("signature_data_url", ""),
+                typed_signature_name=payload.get("typed_signature_name", ""),
+            )
+            updated = transition_delivery_request(
+                delivery_request, "delivered", actor=actor, reason="Recipient proof captured."
+            )
+            return {"status": updated.status}
+
+        try:
+            data, status_code = idempotent_call(
+                courier=courier, endpoint="delivery_complete", key=key, fn=_do
+            )
+        except PinVerificationError as exc:
+            return JsonResponse({"error": str(exc)}, status=422)
+        except ProofAlreadyCapturedError as exc:
+            return JsonResponse({"error": str(exc)}, status=409)
+        except (InvalidTransitionError, ValidationError) as exc:
+            message = "; ".join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
+            return JsonResponse({"error": message}, status=409)
+        return JsonResponse(data, status=status_code)
+
+
+class ReportIncidentView(CourierPermissionMixin, View):
+    """Phase 6: courier-initiated incident report from the active-delivery page."""
+
+    def post(self, request: HttpRequest, pk: Any) -> HttpResponse:
+        courier = _actor(request).courier_profile
+        delivery_request = _assigned_delivery_or_403(pk, courier)
+        payload = _json_body(request)
+        key = _idempotency_key(request, payload)
+        category = payload.get("category") or request.POST.get("category", "")
+        severity = payload.get("severity") or request.POST.get("severity", "")
+        summary = payload.get("summary") or request.POST.get("summary", "")
+        if not key:
+            return JsonResponse({"error": "An Idempotency-Key is required."}, status=400)
+        if not (category and severity and summary):
+            return JsonResponse(
+                {"error": "category, severity, and summary are required."}, status=400
+            )
+
+        def _do() -> dict[str, Any]:
+            incident = open_incident(
+                delivery_request,
+                category=category,
+                severity=severity,
+                summary=summary,
+                actor=_actor(request),
+            )
+            return {
+                "incident_id": str(incident.pk),
+                "placed_on_hold": incident.placed_delivery_on_hold,
+            }
+
+        data, status_code = idempotent_call(
+            courier=courier, endpoint="incident_report", key=key, fn=_do, status_code=201
+        )
         return JsonResponse(data, status=status_code)

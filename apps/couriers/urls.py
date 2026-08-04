@@ -35,4 +35,24 @@ urlpatterns = [
         views.PackageScanView.as_view(),
         name="courier-package-scan",
     ),
+    path(
+        "deliveries/<uuid:pk>/pickup-proof/",
+        views.CapturePickupProofView.as_view(),
+        name="courier-pickup-proof",
+    ),
+    path(
+        "deliveries/<uuid:pk>/condition-check/",
+        views.CaptureConditionCheckView.as_view(),
+        name="courier-condition-check",
+    ),
+    path(
+        "deliveries/<uuid:pk>/complete/",
+        views.CompleteDeliveryView.as_view(),
+        name="courier-delivery-complete",
+    ),
+    path(
+        "deliveries/<uuid:pk>/incidents/",
+        views.ReportIncidentView.as_view(),
+        name="courier-report-incident",
+    ),
 ]
