@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Incident {{ incident.pk|truncatechars:8 }} — MedRelay (Demo Prototype){% endblock %}
 {% block content %}
-<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+<div class="max-w-5xl mx-auto p-4">
     <p><a href="{% url 'incident-list' %}">&larr; Open Incidents</a></p>
     <h1>{{ incident.get_category_display }} ({{ incident.get_severity_display }})</h1>
     <p>Delivery: <a href="{% url 'deliveryrequest-detail' incident.delivery_request_id %}">{{ incident.delivery_request_id }}</a></p>
@@ -11,7 +11,7 @@
     <p>Opened by {{ incident.opened_by|default:"(system)" }} at {{ incident.opened_at }}.</p>
 
     {% if incident.is_open %}
-    <div style="border:1px solid #7a1f1f;background:#fdecea;padding:0.75rem;margin:1rem 0;">
+    <div class="border border-red-800 bg-red-50 text-red-900 rounded-md p-3 my-4" role="alert">
         <h2>Resolve this incident</h2>
         <p>Per docs/PRODUCT_REQUIREMENTS.md section 13: severe incidents suspend normal delivery
            completion until an authorized resolution is recorded here.</p>
@@ -29,7 +29,7 @@
             </p>
             <p>
                 <label>Resolution note (required):<br>
-                    <textarea name="resolution_note" rows="3" style="width:100%;" required></textarea>
+                    <textarea name="resolution_note" rows="3" required></textarea>
                 </label>
             </p>
             <button type="submit">Resolve incident</button>

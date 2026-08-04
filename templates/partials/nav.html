@@ -1,0 +1,48 @@
+{# Shared top navigation — Phase 8 unified design system.
+
+Role-aware via the `nav_*` context variables from
+`config.context_processors.nav` (computed once per request). This nav is
+used by the customer-organization portal and internal ops/dispatch console
+pages; the courier PWA (`templates/couriers/base.html`) intentionally uses
+its own compact, mobile-first shell instead (docs/PRODUCT_REQUIREMENTS.md
+section 6 — the courier UI is a phone-first tool, not a desktop console),
+and the anonymous recipient tracking page
+(`templates/recipient/tracking.html`) renders no nav at all since it has no
+account to navigate from. #}
+<nav aria-label="Main navigation" class="bg-rose-900 text-white">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <a href="{% url 'organization-list' %}" class="font-bold text-lg tracking-tight">MedRelay</a>
+        {% if request.user.is_authenticated %}
+        <ul class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <li><a class="hover:underline focus:underline" href="{% url 'organization-list' %}">Organizations</a></li>
+            <li><a class="hover:underline focus:underline" href="{% url 'facility-list' %}">Facilities</a></li>
+            {% if nav_can_dispatch %}
+            <li><a class="hover:underline focus:underline" href="{% url 'dispatch-board' %}">Dispatch Board</a></li>
+            {% endif %}
+            {% if nav_is_internal_staff %}
+            <li><a class="hover:underline focus:underline" href="{% url 'incident-list' %}">Incidents</a></li>
+            {% endif %}
+            {% if nav_is_courier %}
+            <li><a class="hover:underline focus:underline" href="{% url 'courier-home' %}">Courier App</a></li>
+            {% endif %}
+            <li><a class="hover:underline focus:underline" href="{% url 'notification-inbox' %}">Notifications</a></li>
+            {% if nav_can_view_audit %}
+            <li><a class="hover:underline focus:underline" href="{% url 'audit-event-list' %}">Audit Log</a></li>
+            {% endif %}
+        </ul>
+        <div class="ml-auto flex items-center gap-3 text-sm">
+            <span aria-hidden="true">{{ request.user }}</span>
+            <form method="post" action="{% url 'logout' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="underline hover:no-underline focus:no-underline bg-transparent border-0 text-white cursor-pointer p-0 text-sm">
+                    Log out
+                </button>
+            </form>
+        </div>
+        {% else %}
+        <div class="ml-auto text-sm">
+            <a class="underline hover:no-underline" href="{% url 'login' %}">Log in</a>
+        </div>
+        {% endif %}
+    </div>
+</nav>

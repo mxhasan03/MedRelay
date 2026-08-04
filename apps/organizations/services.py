@@ -248,3 +248,25 @@ def scope_organizations_to_user(
 def organizations_for_user(user: AnyUser) -> QuerySet[Organization]:
     """Convenience wrapper: `Organization.objects.for_user(user)`."""
     return Organization.objects.for_user(user)
+
+
+# Internal ops roles allowed to view the audit viewer (apps.audit, Phase 8).
+# Scoped narrowly to the roles docs/PRODUCT_REQUIREMENTS.md section 4 and
+# docs/SECURITY_COMPLIANCE_BOUNDARIES.md section 6 actually name for this
+# job — "compliance reviewer" explicitly, plus the two roles that already
+# hold the broadest cross-org management access. Deliberately excludes
+# `customer_support`/`finance`/`dispatcher`, which have cross-org *read*
+# access to organizations/facilities/billing for their own work but no
+# stated auditability/compliance responsibility.
+AUDIT_VIEWER_ROLES = frozenset(
+    {
+        InternalRole.COMPLIANCE_REVIEWER,
+        InternalRole.OPERATIONS_MANAGER,
+        InternalRole.SYSTEM_ADMINISTRATOR,
+    }
+)
+
+
+def can_view_audit_log(user: AnyUser) -> bool:
+    """Can the user view the internal audit viewer (apps.audit)?"""
+    return get_internal_role(user) in AUDIT_VIEWER_ROLES

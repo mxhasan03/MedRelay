@@ -1,22 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Dispatch Board — MedRelay (Demo Prototype){% endblock %}
 {% block content %}
-<div style="max-width:70rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+<div class="max-w-5xl mx-auto p-4">
     <h1>Dispatch Board</h1>
     <p>Minimal control-tower dashboard (docs/PRODUCT_REQUIREMENTS.md section 7) — no live map this
         phase; see docs/CURRENT_STATUS.md "Phase 4" for the scoping note.</p>
     <p><a href="{% url 'incident-list' %}">Incident console (open incidents) &rarr;</a></p>
 
-    {% if messages %}
-    <ul>
-        {% for message in messages %}
-        <li>{{ message }}</li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-
     <h2>Unassigned / offered deliveries</h2>
-    <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+    <table>
         <thead>
             <tr>
                 <th>Delivery</th>
@@ -30,7 +22,7 @@
         </thead>
         <tbody>
             {% for delivery_request in unassigned_deliveries %}
-            <tr{% if delivery_request.pk in at_risk_ids %} style="background:#fdecea;"{% endif %}>
+            <tr{% if delivery_request.pk in at_risk_ids %} class="bg-red-50"{% endif %}>
                 <td>{{ delivery_request.pk|truncatechars:8 }}</td>
                 <td>{{ delivery_request.organization.name }}</td>
                 <td>{{ delivery_request.get_service_level_display }}</td>
@@ -46,7 +38,7 @@
     </table>
 
     <h2>Assigned deliveries</h2>
-    <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+    <table>
         <thead>
             <tr>
                 <th>Delivery</th>

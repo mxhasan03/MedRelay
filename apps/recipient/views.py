@@ -50,9 +50,7 @@ def ratelimited_view(request: HttpRequest, exception: Ratelimited) -> HttpRespon
     )
 
 
-@method_decorator(
-    ratelimit(key="ip", rate="30/m", method="GET", block=True), name="get"
-)
+@method_decorator(ratelimit(key="ip", rate="30/m", method="GET", block=True), name="get")
 @method_decorator(
     # Keyed on IP + the token itself: this is the actual PIN-guessing defense
     # (docs/SECURITY_COMPLIANCE_BOUNDARIES.md section 4) — a low, per-token

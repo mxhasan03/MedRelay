@@ -16,26 +16,26 @@
 {% if next_status %}
 <div class="card">
   <h2>Advance status</h2>
-  <button id="advance-btn"
+  <button id="advance-btn" class="btn"
           data-advance-url="{% url 'courier-delivery-advance' delivery_request.pk %}"
           data-next-status="{{ next_status }}"
           onclick="advanceStatus(this)">Mark {{ next_status }}</button>
-  <p id="advance-status"></p>
+  <p id="advance-status" role="status" aria-live="polite" class="text-sm mt-1"></p>
 </div>
 {% endif %}
 
 <div class="card">
   <h2>Scan package</h2>
-  <video id="scan-video" style="width:100%;display:none;" playsinline muted></video>
-  <button id="camera-scan-btn"
+  <video id="scan-video" class="w-full hidden" playsinline muted aria-label="Live camera preview for barcode scanning"></video>
+  <button id="camera-scan-btn" class="btn secondary"
           data-scan-url="{% url 'courier-package-scan' delivery_request.pk %}"
           onclick="tryCameraScan(this)">Use camera</button>
   <label>Manual code entry (always available):
     <input type="text" id="scan-code" placeholder="e.g. PKG-ABCDEF012345">
   </label>
-  <button data-scan-url="{% url 'courier-package-scan' delivery_request.pk %}"
+  <button class="btn" data-scan-url="{% url 'courier-package-scan' delivery_request.pk %}"
           onclick="submitScan(this)">Confirm scan</button>
-  <p id="scan-status"></p>
+  <p id="scan-status" role="status" aria-live="polite" class="text-sm mt-1"></p>
   <ul>
     {% for package in packages %}
     <li>Package {{ package.sequence_number }} &mdash;
@@ -51,11 +51,11 @@
   <label>Sender name: <input type="text" id="pickup-sender-name"></label>
   <label>Sender role: <input type="text" id="pickup-sender-role"></label>
   <p>Signature:</p>
-  <canvas id="pickup-signature-pad" width="300" height="100" style="border:1px solid #999;touch-action:none;"></canvas>
-  <button type="button" onclick="document.getElementById('pickup-signature-pad').getContext('2d').clearRect(0,0,300,100);">Clear</button>
+  <canvas id="pickup-signature-pad" width="300" height="100" class="border border-slate-400 touch-none w-full max-w-xs" role="img" aria-label="Signature drawing pad"></canvas>
+  <button type="button" class="btn secondary" onclick="document.getElementById('pickup-signature-pad').getContext('2d').clearRect(0,0,300,100);">Clear signature</button>
   <label>Or typed name (fallback): <input type="text" id="pickup-typed-name"></label>
-  <button data-url="{% url 'courier-pickup-proof' delivery_request.pk %}" onclick="submitPickupProof(this)">Confirm pickup proof</button>
-  <p id="pickup-proof-status"></p>
+  <button class="btn" data-url="{% url 'courier-pickup-proof' delivery_request.pk %}" onclick="submitPickupProof(this)">Confirm pickup proof</button>
+  <p id="pickup-proof-status" role="status" aria-live="polite" class="text-sm mt-1"></p>
 </div>
 {% endif %}
 
@@ -90,8 +90,8 @@
       <option value="unknown">Unknown/Unreadable</option>
     </select>
   </label>
-  <button data-url="{% url 'courier-condition-check' delivery_request.pk %}" onclick="submitConditionCheck(this)">Confirm condition check</button>
-  <p id="condition-check-status"></p>
+  <button class="btn" data-url="{% url 'courier-condition-check' delivery_request.pk %}" onclick="submitConditionCheck(this)">Confirm condition check</button>
+  <p id="condition-check-status" role="status" aria-live="polite" class="text-sm mt-1"></p>
 </div>
 
 {% if at_destination and not has_proof_of_delivery %}
@@ -102,11 +102,11 @@
   <label>Recipient PIN: <input type="text" id="delivery-pin" inputmode="numeric"></label>
   {% endif %}
   <p>Signature:</p>
-  <canvas id="delivery-signature-pad" width="300" height="100" style="border:1px solid #999;touch-action:none;"></canvas>
-  <button type="button" onclick="document.getElementById('delivery-signature-pad').getContext('2d').clearRect(0,0,300,100);">Clear</button>
+  <canvas id="delivery-signature-pad" width="300" height="100" class="border border-slate-400 touch-none w-full max-w-xs" role="img" aria-label="Signature drawing pad"></canvas>
+  <button type="button" class="btn secondary" onclick="document.getElementById('delivery-signature-pad').getContext('2d').clearRect(0,0,300,100);">Clear signature</button>
   <label>Or typed name (fallback): <input type="text" id="delivery-typed-name"></label>
-  <button data-url="{% url 'courier-delivery-complete' delivery_request.pk %}" onclick="submitCompleteDelivery(this)">Mark delivered</button>
-  <p id="complete-delivery-status"></p>
+  <button class="btn" data-url="{% url 'courier-delivery-complete' delivery_request.pk %}" onclick="submitCompleteDelivery(this)">Mark delivered</button>
+  <p id="complete-delivery-status" role="status" aria-live="polite" class="text-sm mt-1"></p>
 </div>
 {% endif %}
 
@@ -127,8 +127,8 @@
     </select>
   </label>
   <label>Summary: <textarea id="incident-summary" rows="2"></textarea></label>
-  <button data-url="{% url 'courier-report-incident' delivery_request.pk %}" onclick="submitIncidentReport(this)">Report incident</button>
-  <p id="incident-report-status"></p>
+  <button class="btn" data-url="{% url 'courier-report-incident' delivery_request.pk %}" onclick="submitIncidentReport(this)">Report incident</button>
+  <p id="incident-report-status" role="status" aria-live="polite" class="text-sm mt-1"></p>
 </div>
 
 <div class="card">

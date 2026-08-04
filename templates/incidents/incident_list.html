@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Open Incidents — MedRelay (Demo Prototype){% endblock %}
 {% block content %}
-<div style="max-width:70rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+<div class="max-w-5xl mx-auto p-4">
     <h1>Incident Console — Open Incidents</h1>
-    <table style="width:100%;border-collapse:collapse;">
+    <table>
         <thead>
-            <tr style="text-align:left;border-bottom:2px solid #ccc;">
+            <tr>
                 <th>Delivery</th>
                 <th>Category</th>
                 <th>Severity</th>
@@ -16,7 +16,7 @@
         </thead>
         <tbody>
             {% for incident in incidents %}
-            <tr style="border-bottom:1px solid #eee;">
+            <tr>
                 <td><a href="{% url 'deliveryrequest-detail' incident.delivery_request_id %}">{{ incident.delivery_request_id|truncatechars:8 }}</a></td>
                 <td>{{ incident.get_category_display }}</td>
                 <td>{{ incident.get_severity_display }}</td>

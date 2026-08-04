@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto p-4">
+    <h1>Audit Log</h1>
+    <p class="text-sm text-slate-500 mb-4">
+        Authentication and role/membership-change events (see
+        <code>apps.audit.models.AuditEvent</code>'s module docstring for the "generic log for
+        auth/membership + links into existing per-domain logs" architecture decision). Scoped to
+        compliance-reviewer / operations-manager / system-administrator internal roles.
+    </p>
+
+    <form method="get" class="flex flex-wrap items-end gap-4 mb-6" aria-label="Filter audit events">
+        <div>
+            <label for="id_event_type">Event type</label>
+            <select id="id_event_type" name="event_type">
+                <option value="">All event types</option>
+                {% for value, label in event_types %}
+                <option value="{{ value }}" {% if value == selected_event_type %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="id_organization">Organization</label>
+            <select id="id_organization" name="organization">
+                <option value="">All organizations</option>
+                {% for organization in organizations %}
+                <option value="{{ organization.pk }}" {% if selected_organization == organization.pk|stringformat:"s" %}selected{% endif %}>{{ organization.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit">Filter</button>
+    </form>
+
+    <table>
+        <caption class="sr-only">Audit events</caption>
+        <thead>
+            <tr>
+                <th>Occurred</th>
+                <th>Event type</th>
+                <th>Actor</th>
+                <th>Organization</th>
+                <th>Summary</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td>{{ event.occurred_at }}</td>
+                <td>{{ event.get_event_type_display }}</td>
+                <td>{{ event.actor_label|default:"—" }}</td>
+                <td>{{ event.organization.name|default:"—" }}</td>
+                <td>{{ event.summary }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No audit events recorded yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if is_paginated %}
+    <nav class="mt-4 flex gap-4 text-sm" aria-label="Audit log pagination">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}">&larr; Newer</a>
+        {% endif %}
+        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}">Older &rarr;</a>
+        {% endif %}
+    </nav>
+    {% endif %}
+
+    <h2>Domain-specific event logs</h2>
+    <p class="text-sm text-slate-500 mb-2">
+        These logs already exist elsewhere in the codebase and are not duplicated here — see
+        <code>apps.audit.models.AuditEvent</code>'s docstring.
+    </p>
+    <ul class="list-disc list-inside space-y-1">
+        <li>Delivery state transitions and chain-of-custody events — open any
+            <a href="{% url 'deliveryrequest-list' %}">delivery request</a> for its "Status history"
+            and "Chain of custody" sections.</li>
+        <li>Dispatch assignment overrides — the <a href="{% url 'dispatch-board' %}">dispatch board</a>
+            records the reason for every non-top-ranked assignment.</li>
+        <li>Incident actions — the <a href="{% url 'incident-list' %}">incident console</a> shows each
+            incident's append-only action history.</li>
+        <li>Export creation — each organization's
+            <a href="{% url 'organization-list' %}">reports page</a> lists its recent export jobs.</li>
+    </ul>
+</div>
+{% endblock %}

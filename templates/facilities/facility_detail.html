@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ facility.name }} — MedRelay (Demo Prototype){% endblock %}
 {% block content %}
-<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+<div class="max-w-5xl mx-auto p-4">
     <p><a href="{% url 'facility-list' %}">&larr; Facilities</a></p>
     <h1>{{ facility.name }}</h1>
     <p>Organization: <a href="{% url 'organization-detail' facility.organization.pk %}">{{ facility.organization.name }}</a></p>

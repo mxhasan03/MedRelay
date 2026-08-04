@@ -1,19 +1,94 @@
 {% load static %}<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-50">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MedRelay (Demo Prototype){% endblock %}</title>
+    <link rel="icon" href="{% static 'icons/icon.svg' %}" type="image/svg+xml">
+    {# Tailwind CSS via the CDN "Play" build — Phase 8 design-system decision.
+       docs/TECH_STACK_AND_ZERO_COST_POLICY.md names Tailwind as the design
+       system and explicitly allows the CDN build for zero-build-step
+       simplicity. This repository's Dockerfile/compose stack has no Node.js
+       runtime dependency at all (Python/uv only); adding a Tailwind
+       CLI/PostCSS build step would newly require Node.js to *build* the
+       image, which is a real, avoidable increase in required tooling for a
+       project whose zero-cost/zero-Node posture has held since Phase 0. The
+       CDN script is free, requires no API key, and is loaded only by the
+       browser rendering the page (never a server-side dependency) — see
+       docs/CURRENT_STATUS.md "Phase 8" for the full write-up of this
+       decision, including the one honest tradeoff: pages depend on
+       cdn.tailwindcss.com being reachable, exactly like any other
+       CDN-hosted demo asset already accepted for this prototype (see
+       docs/TECH_STACK_AND_ZERO_COST_POLICY.md's OpenStreetMap-derived data
+       note for the same class of tradeoff elsewhere in the stack). #}
+    <script src="https://cdn.tailwindcss.com"></script>
+    {# Project-wide base-layer defaults, processed by the Tailwind CDN's
+       client-side `text/tailwindcss` handling (same mechanism used by
+       templates/couriers/base.html). Putting these in Tailwind's `base`
+       layer (rather than plain CSS) means any element-level utility class
+       used directly in a template (e.g. nav.html's `text-white`) still wins
+       the cascade, per Tailwind's documented layer-precedence order
+       (base < components < utilities) — these are *defaults* a template can
+       always override, not a competing styling system. This is what makes
+       "consistent form styling, consistent table/list styling" (Phase 8)
+       apply across every existing plain-HTML template without hand-editing
+       every element in every file. #}
+    <style type="text/tailwindcss">
+      @layer base {
+        h1 { @apply text-2xl font-bold text-slate-900 mb-4; }
+        h2 { @apply text-xl font-semibold text-slate-900 mb-3 mt-6; }
+        h3 { @apply text-lg font-semibold text-slate-900 mb-2; }
+        a { @apply text-rose-800 underline hover:no-underline; }
+        table { @apply w-full border-collapse text-sm bg-white; }
+        th { @apply text-left border-b-2 border-slate-300 px-3 py-2 bg-slate-100 font-semibold text-slate-700; }
+        td { @apply border-b border-slate-200 px-3 py-2 align-top; }
+        label { @apply block text-sm font-medium text-slate-700 mt-3 mb-1; }
+        input[type="text"], input[type="number"], input[type="email"], input[type="password"],
+        input[type="date"], input[type="datetime-local"], input[type="tel"], input[type="search"],
+        select, textarea {
+          @apply w-full max-w-xl border border-slate-300 rounded-md px-3 py-2 text-base mb-2 bg-white
+                 focus:outline-none focus:ring-2 focus:ring-rose-700 focus:border-rose-700;
+        }
+        input[type="checkbox"], input[type="radio"] { @apply w-4 h-4 align-middle mr-2 accent-rose-800; }
+        button, .btn {
+          @apply inline-flex items-center justify-center rounded-md bg-rose-800 text-white px-4 py-2
+                 text-sm font-medium no-underline hover:bg-rose-900 focus:outline-none focus:ring-2
+                 focus:ring-offset-2 focus:ring-rose-700 cursor-pointer border border-rose-800;
+        }
+        button.secondary, .btn.secondary { @apply bg-white text-rose-800; }
+        button:disabled, .btn:disabled { @apply opacity-50 cursor-not-allowed; }
+      }
+    </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body>
-    <div role="banner" style="background:#7a1f1f;color:#fff;padding:0.75rem 1rem;font-size:0.9rem;text-align:center;">
+<body class="min-h-full flex flex-col bg-slate-50 text-slate-900">
+    <div role="banner" class="bg-red-800 text-white text-center text-sm px-4 py-2">
         <strong>{{ APP_MODE }}</strong> &mdash; {{ DEMO_DISCLAIMER }}
     </div>
 
-    <main>
+    {% block nav %}{% include "partials/nav.html" %}{% endblock %}
+
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:text-rose-900 focus:px-4 focus:py-2 focus:m-2 focus:rounded">
+        Skip to main content
+    </a>
+
+    {% if messages %}
+    <div class="max-w-5xl mx-auto w-full px-4 pt-4" role="status">
+        {% for message in messages %}
+        <div class="rounded-md border px-4 py-2 mb-2 text-sm {% if message.tags == 'error' %}bg-red-50 border-red-300 text-red-800{% elif message.tags == 'success' %}bg-green-50 border-green-300 text-green-800{% else %}bg-blue-50 border-blue-300 text-blue-800{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <main id="main-content" class="flex-1 w-full">
         {% block content %}{% endblock %}
     </main>
+
+    <footer class="text-center text-xs text-slate-400 py-6">
+        MedRelay — synthetic-data demo prototype. Not for real medical delivery operations.
+    </footer>
 
     {% block extra_scripts %}{% endblock %}
 </body>

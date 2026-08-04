@@ -1,17 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Invoice {{ invoice.invoice_number }} — MedRelay (Demo Prototype){% endblock %}
 {% block content %}
-<div style="max-width:50rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+<div class="max-w-5xl mx-auto p-4">
     <h1>Invoice {{ invoice.invoice_number }}</h1>
     <p>Organization: {{ invoice.organization.name }}</p>
     <p>Delivery: {{ invoice.delivery_request_id }}</p>
     <p>Payment status: <strong>{{ invoice.get_payment_status_display }}</strong> (synthetic mock — no real payment processor)</p>
 
-    {% if messages %}
-    <ul>{% for message in messages %}<li>{{ message }}</li>{% endfor %}</ul>
-    {% endif %}
-
-    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">
+    <table>
         <thead><tr><th>#</th><th>Description</th><th>Amount</th></tr></thead>
         <tbody>
             {% for line in invoice.lines.all %}

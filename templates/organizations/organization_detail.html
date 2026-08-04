@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ organization.name }} — MedRelay (Demo Prototype){% endblock %}
 {% block content %}
-<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+<div class="max-w-5xl mx-auto p-4">
     <p><a href="{% url 'organization-list' %}">&larr; Organizations</a></p>
     <h1>{{ organization.name }}</h1>
     <p>Type: {{ organization.get_org_type_display }} &middot; Active: {{ organization.is_active|yesno:"yes,no" }}</p>
@@ -12,23 +12,23 @@
     {% endif %}
 
     <h2>Memberships</h2>
-    <table style="width:100%;border-collapse:collapse;">
+    <table>
         <thead>
-            <tr style="text-align:left;border-bottom:2px solid #ccc;">
-                <th style="padding:0.4rem;">User</th>
-                <th style="padding:0.4rem;">Role</th>
-                <th style="padding:0.4rem;">Active</th>
+            <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Active</th>
             </tr>
         </thead>
         <tbody>
             {% for membership in memberships %}
-            <tr style="border-bottom:1px solid #eee;">
-                <td style="padding:0.4rem;">{{ membership.user }}</td>
-                <td style="padding:0.4rem;">{{ membership.get_role_display }}</td>
-                <td style="padding:0.4rem;">{{ membership.is_active|yesno:"yes,no" }}</td>
+            <tr>
+                <td>{{ membership.user }}</td>
+                <td>{{ membership.get_role_display }}</td>
+                <td>{{ membership.is_active|yesno:"yes,no" }}</td>
             </tr>
             {% empty %}
-            <tr><td colspan="3" style="padding:0.4rem;">No memberships.</td></tr>
+            <tr><td colspan="3">No memberships.</td></tr>
             {% endfor %}
         </tbody>
     </table>

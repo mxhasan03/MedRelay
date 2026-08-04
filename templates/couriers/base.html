@@ -1,45 +1,42 @@
 {% extends "base.html" %}
 {% load static %}
+{% block nav %}{% endblock %}
 {% block extra_head %}
 <meta name="theme-color" content="#7a1f1f">
 <meta name="csrf-token" content="{{ csrf_token }}">
 <link rel="manifest" href="{% url 'web-manifest' %}">
-<link rel="icon" href="{% static 'icons/icon.svg' %}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{% static 'icons/icon.svg' %}">
-<style>
-  /* Mobile-first: this is explicitly the courier's phone-based tool
-     (docs/CURRENT_STATUS.md "Phase 5") — large touch targets (44px minimum
-     per common mobile-accessibility guidance), a single-column layout that
-     never needs horizontal scrolling, and no fixed pixel widths wider than a
-     narrow phone viewport. A real design system is still Phase 8's job. */
-  * { box-sizing: border-box; }
-  body { font-family: sans-serif; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
-  .courier-container { max-width: 32rem; margin: 0 auto; padding: 1rem; }
-  .courier-nav {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 0.75rem 1rem; background: #f4f4f4; border-bottom: 1px solid #ddd;
+{# Mobile-first: this is explicitly the courier's phone-based tool
+   (docs/PRODUCT_REQUIREMENTS.md section 6) — large touch targets (44px
+   minimum per common mobile-accessibility guidance), a single-column layout
+   that never needs horizontal scrolling. Reusable `.btn`/`.card` component
+   classes are defined with Tailwind's `@apply` via a `text/tailwindcss`
+   style block, which the Tailwind CDN "Play" build processes client-side
+   (see templates/base.html's docstring on the CDN-vs-build-step decision). #}
+<style type="text/tailwindcss">
+  .btn {
+    @apply inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-base font-medium rounded-lg border border-rose-900 bg-rose-900 text-white px-4 py-2 no-underline m-1 ml-0;
   }
-  .courier-nav a { color: #7a1f1f; text-decoration: none; font-weight: bold; }
-  button, .btn {
-    display: inline-block; min-height: 44px; min-width: 44px; font-size: 1rem;
-    padding: 0.6rem 1rem; border-radius: 0.5rem; border: 1px solid #7a1f1f;
-    background: #7a1f1f; color: #fff; text-decoration: none; margin: 0.25rem 0.25rem 0.25rem 0;
+  .btn.secondary {
+    @apply bg-white text-rose-900;
   }
-  button.secondary { background: #fff; color: #7a1f1f; }
-  input[type="text"], input[type="number"], select, textarea {
-    font-size: 1rem; padding: 0.6rem; width: 100%; margin-bottom: 0.5rem;
+  .btn:disabled {
+    @apply opacity-50 cursor-not-allowed;
   }
-  .card { border: 1px solid #ddd; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; }
-  .timeline { padding-left: 1.2rem; }
-  .timeline li { margin-bottom: 0.4rem; }
+  .card {
+    @apply border border-slate-200 rounded-lg p-4 mb-4 bg-white shadow-sm;
+  }
+  input[type="text"], input[type="number"], input[type="tel"], select, textarea {
+    @apply text-base p-3 w-full mb-2 border border-slate-300 rounded-md;
+  }
 </style>
 {% endblock %}
 {% block content %}
-<nav class="courier-nav">
-  <a href="{% url 'courier-home' %}">MedRelay Courier</a>
-  <a href="{% url 'courier-job-offer-list' %}">Job Offers</a>
+<nav class="courier-nav flex justify-between items-center px-4 py-3 bg-slate-100 border-b border-slate-300" aria-label="Courier navigation">
+  <a href="{% url 'courier-home' %}" class="text-rose-900 font-bold no-underline">MedRelay Courier</a>
+  <a href="{% url 'courier-job-offer-list' %}" class="text-rose-900 font-bold no-underline">Job Offers</a>
 </nav>
-<div class="courier-container">
+<div class="courier-container max-w-md mx-auto p-4">
   {% block courier_content %}{% endblock %}
 </div>
 {% endblock %}
