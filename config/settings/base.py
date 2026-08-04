@@ -45,6 +45,9 @@ INSTALLED_APPS = [
     # Third-party
     "rest_framework",
     "drf_spectacular",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "django_ratelimit",
     # MedRelay modular monolith apps (Phase 0: no domain models yet).
     "apps.accounts",
     "apps.organizations",
@@ -71,8 +74,16 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # django-otp: must come after AuthenticationMiddleware (needs request.user)
+    # and before anything that checks request.user.is_verified(). See
+    # apps/accounts/mfa.py for the TOTP enrollment/verification views this
+    # enables (Phase 8).
+    "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Converts a raised django_ratelimit.exceptions.Ratelimited into the
+    # RATELIMIT_VIEW response (429) below, instead of an unhandled 403.
+    "django_ratelimit.middleware.RatelimitMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -203,3 +214,30 @@ SPECTACULAR_SETTINGS = {
 
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
+
+# --------------------------------------------------------------------------
+# Upload / input limits (Phase 8 — docs/SECURITY_COMPLIANCE_BOUNDARIES.md
+# section 4). This codebase has no real FileField/ImageField anywhere (the
+# Phase 6 "signature capture" is a base64 PNG data: URL stored as a TextField
+# — see apps/custody/models.py's module docstring, and
+# apps/custody/validators.py for the length cap enforced on it in
+# application code, since Django's per-field max_length is the only knob
+# available for TextField). These settings are still real, load-bearing caps
+# on the overall request body / in-memory upload size and form field count,
+# defending against a large-body denial-of-service attempt against any POST
+# endpoint (delivery-request wizard, custody event capture, etc.), not just a
+# hypothetical future file upload.
+# --------------------------------------------------------------------------
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5 MB — comfortably covers a signature PNG data URL
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 200
+
+# --------------------------------------------------------------------------
+# Rate limiting (Phase 8 — django-ratelimit, cache-backed via the existing
+# Valkey/Redis-protocol CACHES["default"], no new infrastructure). See
+# apps/recipient/views.py for the recipient token-resolution/PIN-verification
+# views this protects — the one genuinely public, unauthenticated surface in
+# this codebase and the only meaningful PIN-guessing target.
+# --------------------------------------------------------------------------
+RATELIMIT_USE_CACHE = "default"
+RATELIMIT_VIEW = "apps.recipient.views.ratelimited_view"

@@ -51,6 +51,8 @@ ALLOWED_PACKAGES: set[str] = {
     "detect-secrets",
     "hypothesis",
     "playwright",
+    "django-otp",
+    "django-ratelimit",
 }
 
 # ---------------------------------------------------------------------------

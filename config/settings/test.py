@@ -26,6 +26,15 @@ CACHES = {
     }
 }
 
+# django-ratelimit's system checks (django_ratelimit.E003/W001) flag
+# LocMemCache as "not a shared cache" — true in a real multi-process
+# deployment, but irrelevant here: the test suite runs single-process, and
+# dev/prod settings use the real Valkey/Redis-protocol cache (see
+# config/settings/base.py's CACHES), which is a shared backend. Silencing
+# this check only in test settings, not base/dev/prod, keeps the real
+# deployment configuration honestly checked.
+SILENCED_SYSTEM_CHECKS = ["django_ratelimit.E003", "django_ratelimit.W001"]
+
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_BROKER_URL = "memory://"
 CELERY_RESULT_BACKEND = "cache+memory://"

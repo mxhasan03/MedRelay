@@ -18,10 +18,13 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.views import View
+from django_ratelimit.decorators import ratelimit
+from django_ratelimit.exceptions import Ratelimited
 
 from apps.custody.services import PinVerificationError, verify_recipient_pin
 from apps.recipient.models import RecipientLinkAccessOutcome
@@ -33,6 +36,42 @@ from apps.recipient.tokens import (
 )
 
 
+def ratelimited_view(request: HttpRequest, exception: Ratelimited) -> HttpResponse:
+    """`settings.RATELIMIT_VIEW` — turns django-ratelimit's raised
+    `Ratelimited` (a `PermissionDenied` subclass, which Django would
+    otherwise render as a plain 403) into an explicit 429 response, on the
+    one genuinely public/anonymous surface in this codebase
+    (docs/SECURITY_COMPLIANCE_BOUNDARIES.md section 4: "rate limiting for
+    public/recipient endpoints"). Used for both the token-resolution GET and
+    the PIN-verification POST below.
+    """
+    return JsonResponse(
+        {"detail": "Too many requests. Please wait before trying again."}, status=429
+    )
+
+
+@method_decorator(
+    ratelimit(key="ip", rate="30/m", method="GET", block=True), name="get"
+)
+@method_decorator(
+    # Keyed on IP + the token itself: this is the actual PIN-guessing defense
+    # (docs/SECURITY_COMPLIANCE_BOUNDARIES.md section 4) — a low, per-token
+    # rate limit means an attacker who somehow obtained one valid tracking
+    # token still cannot brute-force a 4-6 digit PIN in any useful time
+    # window, and a shared-IP false-positive (e.g. an office NAT) cannot
+    # lock out every *other* token's legitimate recipient.
+    ratelimit(key="ip", rate="10/m", method="POST", block=True),
+    name="post",
+)
+@method_decorator(
+    ratelimit(
+        key=lambda group, request: request.resolver_match.kwargs.get("token", ""),
+        rate="5/m",
+        method="POST",
+        block=True,
+    ),
+    name="post",
+)
 class RecipientTrackingView(View):
     """No `LoginRequiredMixin` here by design — see module docstring."""
 
