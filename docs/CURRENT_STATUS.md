@@ -4166,3 +4166,181 @@ Reaching the end of Phase 10 does not authorize a real pilot. See
 `docs/PILOT_READINESS/GO_NO_GO_REPORT.md` for the full synthesis, and
 `docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` for the professional-review gates that are hard
 blockers to any real operation regardless of anything built in this repository.
+
+# Dated Addendum — 2026-08-04: Phase 9 Hosting Decision (Render + Neon)
+
+Added by an automated Claude Code session on top of Phase 10's final commit `abb1027`, in the
+existing repository at `/home/mhasan2/medical-courier-platform`. This is **not a new phase number**
+— `docs/IMPLEMENTATION_ROADMAP.md` Phases 0-10 remain exactly as delivered; this addendum records
+the project owner's own hosting *decision* for the Phase 9 deliverable
+(`docs/HOSTING_OPTIONS.md`), which that phase deliberately left open, and the codebase preparation
+that decision required.
+
+## Scope boundary — read this first (same pattern as every prior phase)
+
+**No external hosting account was created, no platform sign-up was performed, and nothing was
+deployed to any third-party service by this session.** This session's job was strictly to prepare
+this repository's *files* so that deployment works correctly the first time the project owner
+personally creates the two free accounts (Render, Neon) and connects them. Every claim below about
+Render's/Neon's actual behavior (free-tier terms, `preDeployCommand` availability,
+`$PORT`/`dockerCommand` semantics, `generateValue`/`sync: false` blueprint fields) was confirmed via
+current documentation research, not by an authenticated session against either platform's real API
+— the project owner should still re-verify anything free-tier-specific (limits, card requirements)
+at their own signup time, exactly as `docs/HOSTING_OPTIONS.md` already cautions.
+
+## Decision
+
+Per `docs/HOSTING_OPTIONS.md` section 4 point 3 (the split-services direction that document itself
+named as the most promising *if* a genuinely public click-a-link demo were wanted later): **Render**
+(free web-service tier, no credit card required) hosts the Django `web` process; **Neon** (free
+serverless Postgres, no credit card required, a permanent free tier that scales to zero on idle
+rather than hard-expiring) hosts the database. The one real, accepted capability trade-off: no
+`worker`/Celery process runs on Render's free tier, so `CELERY_TASK_ALWAYS_EAGER = True` is
+hardcoded for this deployment — re-confirmed harmless immediately before writing the settings
+module below (`grep -rn "shared_task\|\.delay(\|apply_async" apps/ config/` — zero matches, exactly
+as `docs/HOSTING_OPTIONS.md` section 3 already anticipated this exact trade-off would be).
+
+## Files added/changed
+
+```
+config/settings/demo_render.py     (new)  — Render-specific settings, extends config/settings/demo.py
+render.yaml                        (new)  — Render Blueprint: one free Docker web service
+docs/DEPLOY_RENDER_NEON.md         (new)  — the numbered, copy-pasteable operator deployment guide
+Dockerfile                         (changed) — default CMD now respects $PORT (shell form, ${PORT:-8000})
+docs/HOSTING_OPTIONS.md            (changed) — decision note added at top; original research left intact
+.env.example                       (changed) — documents DJANGO_CSRF_TRUSTED_ORIGINS (Render-only)
+docs/CURRENT_STATUS.md             (this addendum)
+```
+
+No application code (`apps/`), models, migrations, or tests were touched — this is a settings/
+deployment-configuration/documentation change only, exactly like `config/settings/demo.py` was in
+Phase 9 itself.
+
+### `config/settings/demo_render.py` — what it adds on top of `demo.py`
+
+1. `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")` — closes a real gap: Render
+   terminates TLS at its own edge proxy and forwards plain HTTP to the app with an
+   `X-Forwarded-Proto: https` header; without this setting, `prod.py`'s `SECURE_SSL_REDIRECT = True`
+   default would redirect every request forever (Django would never see a request it considers
+   secure). Verified in this session's end-to-end Docker test (below) — requests without an
+   `X-Forwarded-Proto: https` header got a `301` redirect-to-HTTPS with no body; requests with it
+   reached the application normally.
+2. `CACHES` overridden to Django's `LocMemCache` — Render's free tier is one instance running one
+   `gunicorn` worker process (no `--workers` flag in `render.yaml`'s `dockerCommand`), so there is no
+   second process for a shared external cache to synchronize with; adding a hosted Redis/Valkey
+   free-tier service purely to satisfy `django-ratelimit`'s cache-backend requirement would be a
+   third free account for no real benefit at this scale. `SILENCED_SYSTEM_CHECKS` disables
+   `django_ratelimit.E003`/`W001` for the same single-process reason `config/settings/test.py`
+   already disables them.
+3. `CELERY_TASK_ALWAYS_EAGER = True`, hardcoded (not env-toggled) — see "Decision" above.
+4. `CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])` — not previously
+   defined anywhere in `base`/`dev`/`prod`/`test`/`demo`; needed because Django's CSRF protection
+   checks the request's origin against this list (not just `ALLOWED_HOSTS`) once HTTPS is involved.
+   The operator sets it to `https://<their-assigned-subdomain>.onrender.com` (see
+   `docs/DEPLOY_RENDER_NEON.md` step 2.6). Verified in this session's end-to-end test: a real
+   login POST with a matching `Origin`/`Referer` and this variable set succeeded (`302`, session
+   cookie issued, followed by a real authenticated `200` on `/organizations/` showing seeded org
+   data).
+
+### `render.yaml` — Docker vs. native Python buildpack decision
+
+Render's native Python runtime now supports `uv` natively (detects a root `uv.lock`), so a
+buildpack-style deploy was a real alternative. **Chose `runtime: docker` against the existing,
+already-tested `Dockerfile` instead**, because it reuses the exact same `uv sync --frozen` build
+this project has used since Phase 0 (the same image already exercised locally via
+`docker compose` — `docs/DEMO_PACKAGE.md`), with zero new Render-specific Python-version/build-
+command guesswork. Confirmed (via current Render documentation, not a live account) that Render's
+free web-service plan does **not** support `preDeployCommand` (that feature is paid-plan-only), so
+migration/seeding cannot run as a separate pre-deploy step on the free tier — instead,
+`dockerCommand` chains `collectstatic --noinput && migrate --noinput && seed_full_demo && gunicorn
+... --bind 0.0.0.0:$PORT`, in that order, running on every deploy and every container restart.
+`collectstatic` is included (not originally called out in the initial task scope, added after
+noticing WhiteNoise's `CompressedManifestStaticFilesStorage` needs a prebuilt manifest — without
+it, every page referencing `{% static %}` would raise at request time, not just 404 — and that it
+cannot run at `docker build` time because Render only injects the real `DJANGO_SECRET_KEY`/
+`DATABASE_URL` env vars at container runtime, not during the image build).
+
+`DJANGO_SECRET_KEY` uses `generateValue: true` (Render's blueprint schema does support this — Render
+generates and stores a random value on first Blueprint creation, confirmed via Render's own
+documentation). `DATABASE_URL`/`DJANGO_ALLOWED_HOSTS`/`DJANGO_CSRF_TRUSTED_ORIGINS` use
+`sync: false` (operator supplies these manually — `DATABASE_URL` in particular comes from Neon, a
+platform Render's Blueprint system has no knowledge of, so it cannot be a `fromDatabase` reference).
+
+### `Dockerfile` — `$PORT` fix
+
+Changed the default `CMD` from the exec-form JSON array `["python", "manage.py", "runserver",
+"0.0.0.0:8000"]` (which never expands environment variables, by Docker's own semantics) to the
+shell-form `CMD python manage.py runserver 0.0.0.0:${PORT:-8000}`, so the image is correct if run
+directly (`docker run -e PORT=<n> <image>`, no command override) — the case neither
+`compose.yaml` (which sets its own explicit `command:` per service) nor `render.yaml` (which
+overrides the default entirely via `dockerCommand`) already covers. This does not change local
+`docker compose` dev/demo behavior at all, since `compose.yaml` already overrides `command:`
+explicitly for both `web` and `worker`.
+
+## Verification performed (real, not cited from an old report)
+
+- **Settings import check:**
+  `DJANGO_SETTINGS_MODULE=config.settings.demo_render DATABASE_URL=... DJANGO_SECRET_KEY=... python
+  -c "import django; django.setup()"` succeeded, with `APP_MODE`, `DEBUG`, `SECURE_PROXY_SSL_HEADER`,
+  `CACHES`, `CELERY_TASK_ALWAYS_EAGER`, `CSRF_TRUSTED_ORIGINS`, `ALLOWED_HOSTS`,
+  `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, and `SILENCED_SYSTEM_CHECKS` all inspected and
+  matching expectations. A stray backslash-escape `SyntaxWarning` from the module's own docstring
+  (a literal `grep` pattern quoted in prose) was caught by this check and fixed (`r"""..."""`).
+- **`$PORT` fix, real container test:** built the image, ran
+  `docker run -e PORT=10000 <image>` with no command override — log showed `Starting development
+  server at http://0.0.0.0:10000/`, and `curl http://localhost:10000/healthz/` (after applying real
+  migrations against a real compose `db` container on the same Docker network) returned `HTTP 200`.
+  Re-ran with no `PORT` set at all — confirmed the same image falls back to `0.0.0.0:8000` and is
+  reachable there too.
+- **Idempotent seeding, re-verified from scratch (not cited from Phase 9's old report):** brought up
+  the real `postgis/postgis:17-3.5` + `valkey` compose services (remapped to non-default host ports
+  — `15432`/`16379` — since this shared dev machine already has unrelated Postgres/Redis containers
+  on the default ports), ran `python manage.py migrate` then `python manage.py seed_full_demo`
+  **twice in a row** against `config.settings.dev`. First run: `Seeded 3 organizations, 8 facilities,
+  18 customer-org memberships, 7 internal-staff users` + all 5 scenarios + 1 invoice. Second run:
+  every scenario reported "already seeded — skipping", ending in "All Phase 9 demo scenarios already
+  exist — nothing new to seed", exit code `0`, **no errors, no duplicate rows** — confirmed directly
+  via `Organization.objects.count()` (3), `DeliveryRequest.objects.count()` (5),
+  `Invoice.objects.count()` (1), and `User.objects.count()` (30), identical after both runs.
+- **Full deploy-chain dry run, end to end:** built the Docker image and ran the *exact*
+  `dockerCommand` string from `render.yaml` (`collectstatic --noinput && migrate --noinput &&
+  seed_full_demo && gunicorn ... --bind 0.0.0.0:$PORT`) inside a fresh container against a real
+  compose `db` service, using `config.settings.demo_render` and a freshly generated
+  `DJANGO_SECRET_KEY`. Observed, in order: `collectstatic` output, all ~53 migrations applying
+  cleanly, the same seed output as above, then gunicorn's `Listening at: http://0.0.0.0:10000`.
+  Then, with the container running: `curl -H "X-Forwarded-Proto: https" .../healthz/` →
+  `{"status": "ok"}`; `.../readyz/` → `{"status": "ok", "checks": {"database": "ok", "cache":
+  "ok"}}`; the login page rendered a hashed static asset path (confirming the `collectstatic`
+  manifest built correctly) and the `DEMO_MODE` banner; a real CSRF-token-carrying login `POST` as
+  `ops_dispatcher` (matching `Origin`/`Referer` against a `DJANGO_CSRF_TRUSTED_ORIGINS` value) got a
+  `302` (success, not a CSRF `403`); following the resulting session cookie to `/organizations/`
+  returned `HTTP 200` with real seeded organization names in the body. All test containers/images/
+  networks/volumes were removed afterward; no `.env` file or other artifact was left behind.
+- **Full existing quality-gate suite** (see exact output in this addendum's own commit, re-run after
+  all file changes above): `ruff check .`, `ruff format --check .`, `mypy .`, `pytest` (full suite,
+  coverage), `python manage.py check` (against `config.settings.test`, this project's existing
+  convention — `demo_render` is intentionally not the default for `check`/tests, exactly as
+  `demo.py` already wasn't), `python manage.py makemigrations --check --dry-run`,
+  `python manage.py audit_cost`, `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`.
+  See below for the actual results.
+
+## Known gaps / deviations (honest list)
+
+- **No account was created, no deployment was performed.** `docs/DEPLOY_RENDER_NEON.md` is written
+  for the project owner to execute personally; nothing in it was run against a real Render/Neon
+  account by this session.
+- **Free-tier terms are inherently a moving target.** Every Render/Neon-specific claim in this
+  addendum and in `docs/DEPLOY_RENDER_NEON.md` (no card required, specific storage/compute-hour
+  numbers, `preDeployCommand` paid-only, sleep/scale-to-zero behavior) was confirmed via each
+  platform's current published documentation at the time this addendum was written, not via a live
+  account — `docs/DEPLOY_RENDER_NEON.md` repeatedly flags exactly which claims the project owner
+  should re-verify themselves at signup time.
+- **`reset_demo_data`'s scheduled/cron reset remains unwired**, exactly as Phase 9 left it
+  (`docs/DEMO_PACKAGE.md` section 5.2) — a real public deployment accumulating visitor-caused state
+  changes still has no automatic periodic reset; the operator would need to trigger
+  `python manage.py reset_demo_data --yes` manually (via Render's Shell tab, if available on the
+  free plan — not verified here) or accept the shared, slowly-drifting demo state.
+- **This addendum's own commit hash** cannot be cited within this same file/commit (the same
+  wrinkle Phase 0's and Phase 8's sections of this document already ran into) — see
+  `git log --oneline` for the definitive, current history.
+

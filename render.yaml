@@ -1,0 +1,110 @@
+# Render Blueprint — MedRelay public demo `web` service.
+#
+# Implements the Phase 9 hosting decision recorded in docs/CURRENT_STATUS.md
+# (dated addendum) and docs/HOSTING_OPTIONS.md section 4 point 3: a
+# split-services free public demo — Render (free web-service tier, no card
+# required) for this `web` process, paired with Neon (free serverless
+# Postgres, no card required) for the database. See
+# docs/DEPLOY_RENDER_NEON.md for the full, numbered, copy-pasteable operator
+# walkthrough this file supports. This file was authored and locally
+# validated (see docs/CURRENT_STATUS.md's verification section) but never
+# applied — no Render account was created and nothing was deployed by the
+# session that wrote it.
+#
+# --- Docker vs. native Python buildpack (a deliberate decision) -----------
+# Render's native Python runtime now natively supports `uv` (auto-detected
+# from a root `uv.lock` — see Render's changelog "Added uv to the Python
+# native runtime"), so a buildpack-style deploy was a real option. This file
+# uses `runtime: docker` against the repository's existing `Dockerfile`
+# instead, because that Dockerfile already builds this exact project the
+# exact same way (`uv sync --frozen`) it has been built since Phase 0, and
+# is the same image already exercised end-to-end locally via
+# `docker compose` (docs/DEMO_PACKAGE.md). Reusing it means zero new
+# Render-specific build-command/Python-version guesswork; only this file's
+# `dockerCommand` and the `config.settings.demo_render` settings module
+# (config/settings/demo_render.py) are genuinely Render-specific. The
+# Dockerfile's own default CMD was updated to respect a `$PORT` environment
+# variable (Render's Docker runtime injects `PORT` and expects the
+# container to bind to it — verified in this session with
+# `docker run -e PORT=10000 ...`), though `dockerCommand` below overrides
+# that default anyway with the real start sequence.
+#
+# --- Why collectstatic + migrate + seed all run inside dockerCommand, not
+#     preDeployCommand -----------------------------------------------------
+# Render's `preDeployCommand` (a dedicated pre-deploy step) is documented as
+# available for paid web services only, not the free tier used here — so
+# none of this can run as a separate pre-deploy step on this plan. Instead
+# all three run as `&&`-chained steps of `dockerCommand` below, ahead of
+# `gunicorn`, on every deploy *and every container restart* (Render's free
+# tier can restart/redeploy the single instance at any time):
+#
+# 1. `collectstatic --noinput` — `base.py`'s STORAGES["staticfiles"] uses
+#    whitenoise's CompressedManifestStaticFilesStorage, which requires a
+#    prebuilt hashed-filename manifest to serve *any* `{% static %}`
+#    reference; without this step, every page using one (effectively every
+#    page — see templates/base.html) would raise at request time, not just
+#    404. It cannot run as a `docker build`-time step instead, because the
+#    real `DJANGO_SECRET_KEY`/`DATABASE_URL` Render env vars below are only
+#    injected at container *runtime*, not during the Docker image build —
+#    running it here, before `gunicorn` starts, is the point in the
+#    lifecycle where those values actually exist. Safe to re-run on every
+#    restart: it only regenerates the same manifest from the same source
+#    files already baked into the image.
+# 2. `migrate --noinput` — schema must exist before `seed_full_demo`'s ORM
+#    calls can run.
+# 3. `seed_full_demo` — safe to run on every deploy/restart because it is
+#    genuinely idempotent, re-verified in this session by running it twice
+#    in a row against a real local Postgres/PostGIS database and confirming
+#    identical row counts and a clean, no-op second run (see
+#    docs/CURRENT_STATUS.md's dated Phase 9 hosting-decision addendum).
+#
+# Then, and only then, `gunicorn` starts — so the very first request any
+# deploy serves is never against unmigrated/unseeded/unbuilt-static state.
+#
+# --- Region / plan ----------------------------------------------------------
+# `oregon` is Render's own default region; named explicitly here for
+# clarity rather than left implicit. `plan: free` is the only plan this
+# file should ever specify per the roadmap's no-required-card constraint —
+# do not change this without the project owner's explicit approval.
+services:
+  - type: web
+    name: medrelay-demo
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    autoDeployTrigger: commit
+    healthCheckPath: /healthz/
+    dockerCommand: >-
+      python manage.py collectstatic --noinput &&
+      python manage.py migrate --noinput &&
+      python manage.py seed_full_demo &&
+      gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      # Selects config/settings/demo_render.py (see that module's own
+      # docstring for exactly what it adds on top of config/settings/demo.py
+      # and why).
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.demo_render
+
+      # Render generates and stores a random value for this on first
+      # deploy (never committed to this file or to git) — see
+      # https://render.com/docs/configure-environment-variables#generate-values.
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+
+      # The operator sets these manually in Render's dashboard after
+      # Blueprint creation (`sync: false` = "prompt for / require a manually
+      # supplied value, never auto-generate or store one in this file") —
+      # see docs/DEPLOY_RENDER_NEON.md for exactly what value each needs.
+      # DATABASE_URL comes from Neon (a separate platform Render's Blueprint
+      # system has no knowledge of), not from Render itself, so it cannot be
+      # a `fromDatabase` reference the way a Render-managed Postgres add-on
+      # would allow.
+      - key: DATABASE_URL
+        sync: false
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        sync: false

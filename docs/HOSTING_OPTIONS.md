@@ -4,7 +4,19 @@
 > medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
 > legal compliance.
 
-**This document is a recommendation, not a decision or an action.** No hosting account was
+> **Decision made (dated addendum, see `docs/CURRENT_STATUS.md`): the project owner selected the
+> split-services direction named in section 4 point 3 below — Render (free web-service tier) for
+> `web`, paired with Neon (free serverless Postgres) for the database, accepting the documented
+> Celery/worker trade-off (`CELERY_TASK_ALWAYS_EAGER = True`, harmless here since no code path in
+> this application uses Celery). The concrete, copy-pasteable execution guide is
+> `docs/DEPLOY_RENDER_NEON.md`; the settings module is `config/settings/demo_render.py`; the
+> Render Blueprint is `render.yaml`. This document's own research and recommendation below are
+> left intact as the record of *why* — no account was created and no deployment was performed by
+> the session that prepared those files; see `docs/DEPLOY_RENDER_NEON.md` for what remains a
+> manual step for the project owner.**
+
+**This document is a recommendation, not a decision or an action** (at the time it was written —
+see the decision note above for what has since changed). No hosting account was
 created, no platform was selected, and nothing was deployed anywhere as part of producing this
 document — per `docs/IMPLEMENTATION_ROADMAP.md` Phase 9's own text ("Do not select a hosting
 platform that requires payment or a credit card without owner approval") and this session's explicit
