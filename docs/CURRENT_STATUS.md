@@ -3665,6 +3665,18 @@ citing `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8's professional-review 
 
 ## Commit history for this phase
 
-(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.
-As with every prior phase, this doc cannot contain the hash of the commit that introduces its own
-final content, so a small follow-up commit records that hash here.)
+Commits for this phase, in order (all on top of Phase 7's final commit `80cd033`):
+
+1. `46d8e3f` — rate limiting for the recipient PIN endpoint, upload/input limits, django-otp wiring
+2. `9c45c7b` — unified Tailwind design system + generic audit-event log/viewer
+3. `ecbc0f7` — TOTP MFA for privileged demo accounts (django-otp)
+4. `57b91bf` — explicit upload/input size limits
+5. `8502bfa` — the SQLite concurrency-test flake investigation and fix
+6. `e353eee` — axe-core accessibility scans + a real Playwright critical-path test
+7. `4e97603` — backup/restore drill, threat model, PHI sweep, this section of `CURRENT_STATUS.md`
+8. `20ee2e0` — this line, recording commit (7)'s hash (see below for why this is always a
+   one-commit lag)
+
+A doc file can never contain the hash of the commit that introduces its own final content — this
+line, added in a small follow-up commit, is the account of that. Run `git log --oneline` in the
+repository for the definitive, current history.
