@@ -3233,4 +3233,11 @@ empty `results: {}`). Run after `git add -A` so every new Phase 7 file was actua
 
 ## Commit history for this phase
 
-(Recorded after the commits land — see `git log --oneline` for the definitive, current history.)
+1. `d9d06ac` — "Phase 7: notifications, recipient tracking, billing, and reports" — the main
+   Phase 7 commit (all four apps' models, migrations, admin, services, providers, views/urls,
+   templates, and the full Phase 7 test suite).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag every prior phase called out), so this line was added in a small
+follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
+history.
