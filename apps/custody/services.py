@@ -26,6 +26,7 @@ from apps.custody.models import (
     ProofOfPickup,
     RecipientVerification,
 )
+from apps.custody.validators import check_signature_data_url_length
 
 if TYPE_CHECKING:
     import datetime
@@ -229,6 +230,7 @@ def capture_proof_of_pickup(
         raise ProofAlreadyCapturedError(
             f"Proof of pickup was already captured for delivery {delivery_request.pk}."
         )
+    check_signature_data_url_length(signature_data_url)
 
     with transaction.atomic():
         proof = ProofOfPickup.objects.create(
@@ -270,6 +272,7 @@ def capture_proof_of_delivery(
         raise ProofAlreadyCapturedError(
             f"Proof of delivery was already captured for delivery {delivery_request.pk}."
         )
+    check_signature_data_url_length(signature_data_url)
 
     recipient_verification = getattr(delivery_request, "recipient_verification", None)
 

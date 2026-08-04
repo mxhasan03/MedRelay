@@ -52,6 +52,7 @@ from apps.custody.services import (
     capture_proof_of_pickup,
     verify_recipient_pin,
 )
+from apps.custody.validators import SignatureTooLargeError
 from apps.deliveries.exceptions import InvalidTransitionError
 from apps.deliveries.models import DeliveryRequest, RecipientVerificationMethod
 from apps.deliveries.state_machine import transition_delivery_request
@@ -336,6 +337,8 @@ class CapturePickupProofView(CourierPermissionMixin, View):
             )
         except ProofAlreadyCapturedError as exc:
             return JsonResponse({"error": str(exc)}, status=409)
+        except SignatureTooLargeError as exc:
+            return JsonResponse({"error": str(exc)}, status=413)
         return JsonResponse(data, status=status_code)
 
 
@@ -420,6 +423,8 @@ class CompleteDeliveryView(CourierPermissionMixin, View):
             return JsonResponse({"error": str(exc)}, status=422)
         except ProofAlreadyCapturedError as exc:
             return JsonResponse({"error": str(exc)}, status=409)
+        except SignatureTooLargeError as exc:
+            return JsonResponse({"error": str(exc)}, status=413)
         except (InvalidTransitionError, ValidationError) as exc:
             message = "; ".join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
             return JsonResponse({"error": message}, status=409)
@@ -457,7 +462,11 @@ class ReportIncidentView(CourierPermissionMixin, View):
                 "placed_on_hold": incident.placed_delivery_on_hold,
             }
 
-        data, status_code = idempotent_call(
-            courier=courier, endpoint="incident_report", key=key, fn=_do, status_code=201
-        )
+        try:
+            data, status_code = idempotent_call(
+                courier=courier, endpoint="incident_report", key=key, fn=_do, status_code=201
+            )
+        except ValidationError as exc:
+            message = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+            return JsonResponse({"error": message}, status=400)
         return JsonResponse(data, status=status_code)

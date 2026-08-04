@@ -55,6 +55,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from apps.custody.validators import signature_data_url_length_validator
+
 
 class CustodyEventType(models.TextChoices):
     """The full required event-type vocabulary (docs/PRODUCT_REQUIREMENTS.md
@@ -240,6 +242,7 @@ class ProofOfPickup(models.Model):
     sender_role = models.CharField(max_length=120, blank=True)
     signature_data_url = models.TextField(
         blank=True,
+        validators=[signature_data_url_length_validator],
         help_text="Base64 data: URL PNG from the HTML5 canvas signature pad. Prototype only.",
     )
     typed_signature_name = models.CharField(
@@ -331,7 +334,9 @@ class ProofOfDelivery(models.Model):
         related_name="proofs_of_delivery",
     )
     delivered_to_name = models.CharField(max_length=200, blank=True)
-    signature_data_url = models.TextField(blank=True)
+    signature_data_url = models.TextField(
+        blank=True, validators=[signature_data_url_length_validator]
+    )
     typed_signature_name = models.CharField(max_length=200, blank=True)
     captured_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

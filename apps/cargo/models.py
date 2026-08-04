@@ -318,7 +318,9 @@ class PackagingAttestation(models.Model):
         help_text="Sender confirms the declared cargo class accurately reflects package contents.",
     )
     notes = models.TextField(
-        blank=True, help_text="Optional free-text notes. Never diagnosis/clinical content."
+        blank=True,
+        max_length=2000,
+        help_text="Optional free-text notes. Never diagnosis/clinical content.",
     )
     attested_at = models.DateTimeField(auto_now_add=True)
 

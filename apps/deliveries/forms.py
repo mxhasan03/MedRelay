@@ -64,7 +64,9 @@ class DeliveryRequestForm(forms.Form):
         initial=RecipientVerificationMethod.NONE,
     )
     facility_instructions = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 3}), required=False
+        widget=forms.Textarea(attrs={"rows": 3, "maxlength": 2000}),
+        required=False,
+        max_length=2000,
     )
 
     attest_packaging = forms.BooleanField(
@@ -72,8 +74,9 @@ class DeliveryRequestForm(forms.Form):
         label="I attest that packaging/classification/sealing meets MedRelay policy for this class",
     )
     attestation_notes = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 2}),
+        widget=forms.Textarea(attrs={"rows": 2, "maxlength": 2000}),
         required=False,
+        max_length=2000,
         label="Attestation notes (optional)",
     )
 

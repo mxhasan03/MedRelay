@@ -84,6 +84,13 @@ class Incident(models.Model):
     """One incident record for a delivery (and, when applicable, a specific
     package)."""
 
+    # Phase 8 upload/input-limits pass: `summary` is submitted directly by a
+    # courier's browser via JSON (apps.couriers.views.ReportIncidentView),
+    # so it gets an explicit, enforced cap
+    # (apps.incidents.services.open_incident) rather than the unbounded
+    # TextField default.
+    SUMMARY_MAX_LENGTH = 2000
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     delivery_request = models.ForeignKey(
         "deliveries.DeliveryRequest", on_delete=models.CASCADE, related_name="incidents"
@@ -100,7 +107,10 @@ class Incident(models.Model):
     status = models.CharField(
         max_length=16, choices=IncidentStatus.choices, default=IncidentStatus.OPEN
     )
-    summary = models.TextField(help_text="Operational description. Never diagnosis/clinical.")
+    summary = models.TextField(
+        max_length=SUMMARY_MAX_LENGTH,
+        help_text="Operational description. Never diagnosis/clinical.",
+    )
     placed_delivery_on_hold = models.BooleanField(
         default=False,
         help_text="True if opening this incident actually transitioned the delivery to "

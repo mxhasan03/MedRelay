@@ -76,6 +76,16 @@ def open_incident(
     """
     from apps.deliveries.models import DeliveryStatus
 
+    if len(summary) > Incident.SUMMARY_MAX_LENGTH:
+        raise ValidationError(
+            {
+                "summary": (
+                    f"Summary is too long (max {Incident.SUMMARY_MAX_LENGTH:,} characters) — "
+                    "this is an operational note, not a clinical record."
+                )
+            }
+        )
+
     locked_delivery_request = DeliveryRequest.objects.select_for_update().get(
         pk=delivery_request.pk
     )

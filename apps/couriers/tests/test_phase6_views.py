@@ -259,3 +259,48 @@ def test_report_incident_with_severe_severity_places_delivery_on_hold(client: Cl
     assert response.json()["placed_on_hold"] is True
     delivery_request.refresh_from_db()
     assert delivery_request.status == DeliveryStatus.INCIDENT_HOLD
+
+
+# --- Upload/input limits (Phase 8) --------------------------------------------
+
+
+def test_pickup_proof_rejects_an_oversized_signature_with_a_clean_413(client: Client) -> None:
+    from apps.custody.models import ProofOfPickup
+    from apps.custody.validators import MAX_SIGNATURE_DATA_URL_LENGTH
+
+    delivery_request, courier = _assigned_delivery_and_courier()
+    client.force_login(courier.user)
+    oversized = "data:image/png;base64," + "a" * MAX_SIGNATURE_DATA_URL_LENGTH
+
+    response = client.post(
+        reverse("courier-pickup-proof", kwargs={"pk": delivery_request.pk}),
+        content_type="application/json",
+        data=json.dumps({"signature_data_url": oversized}),
+        HTTP_IDEMPOTENCY_KEY="oversized-signature-key",
+    )
+
+    assert response.status_code == 413
+    assert "too large" in response.json()["error"]
+    assert ProofOfPickup.objects.filter(delivery_request=delivery_request).exists() is False
+
+
+def test_report_incident_rejects_an_oversized_summary_with_a_clean_400(client: Client) -> None:
+    from apps.incidents.models import Incident
+
+    delivery_request, courier = _assigned_delivery_and_courier()
+    _advance_to_at_destination(delivery_request)
+    client.force_login(courier.user)
+    oversized_summary = "x" * (Incident.SUMMARY_MAX_LENGTH + 1)
+
+    response = client.post(
+        reverse("courier-report-incident", kwargs={"pk": delivery_request.pk}),
+        content_type="application/json",
+        data=json.dumps(
+            {"category": "broken_seal", "severity": "minor", "summary": oversized_summary}
+        ),
+        HTTP_IDEMPOTENCY_KEY="oversized-summary-key",
+    )
+
+    assert response.status_code == 400
+    assert "too long" in response.json()["error"]
+    assert Incident.objects.filter(delivery_request=delivery_request).exists() is False

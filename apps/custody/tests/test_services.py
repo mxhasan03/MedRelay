@@ -16,6 +16,7 @@ from apps.custody.services import (
     generate_recipient_pin,
     verify_recipient_pin,
 )
+from apps.custody.validators import MAX_SIGNATURE_DATA_URL_LENGTH, SignatureTooLargeError
 from apps.deliveries.models import RecipientVerificationMethod
 from apps.deliveries.tests.factories import DeliveryRequestFactory
 
@@ -135,3 +136,30 @@ def test_capture_proof_of_delivery_twice_raises() -> None:
     capture_proof_of_delivery(delivery_request, actor=None, typed_signature_name="R")
     with pytest.raises(ProofAlreadyCapturedError):
         capture_proof_of_delivery(delivery_request, actor=None, typed_signature_name="R2")
+
+
+# --- Upload/input limits (Phase 8) --------------------------------------------
+
+
+def test_capture_proof_of_pickup_rejects_an_oversized_signature() -> None:
+    delivery_request = DeliveryRequestFactory()
+    oversized = "a" * (MAX_SIGNATURE_DATA_URL_LENGTH + 1)
+    with pytest.raises(SignatureTooLargeError):
+        capture_proof_of_pickup(delivery_request, actor=None, signature_data_url=oversized)
+    # Nothing was persisted — the oversized attempt is rejected cleanly, not
+    # partially written.
+    assert ProofOfPickup.objects.filter(delivery_request=delivery_request).exists() is False
+
+
+def test_capture_proof_of_delivery_rejects_an_oversized_signature() -> None:
+    delivery_request = DeliveryRequestFactory()
+    oversized = "a" * (MAX_SIGNATURE_DATA_URL_LENGTH + 1)
+    with pytest.raises(SignatureTooLargeError):
+        capture_proof_of_delivery(delivery_request, actor=None, signature_data_url=oversized)
+
+
+def test_capture_proof_of_pickup_accepts_a_signature_right_at_the_limit() -> None:
+    delivery_request = DeliveryRequestFactory()
+    at_limit = "a" * MAX_SIGNATURE_DATA_URL_LENGTH
+    proof = capture_proof_of_pickup(delivery_request, actor=None, signature_data_url=at_limit)
+    assert proof.has_signature is True

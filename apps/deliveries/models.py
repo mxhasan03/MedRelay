@@ -179,7 +179,9 @@ class DeliveryRequest(models.Model):
         default=RecipientVerificationMethod.NONE,
     )
     facility_instructions = models.TextField(
-        blank=True, help_text="Operational handling notes for couriers/facilities."
+        blank=True,
+        max_length=2000,
+        help_text="Operational handling notes for couriers/facilities.",
     )
 
     estimated_price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)

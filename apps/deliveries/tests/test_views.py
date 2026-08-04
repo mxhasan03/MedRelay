@@ -137,6 +137,38 @@ def test_wizard_creates_and_reaches_ready_for_dispatch_when_complete(client: Cli
     assert created.status == DeliveryStatus.READY_FOR_DISPATCH
 
 
+def test_wizard_rejects_oversized_facility_instructions_cleanly(client: Client) -> None:
+    """Phase 8 upload/input-limits acceptance criterion: an oversized
+    free-text field is rejected cleanly (a re-rendered form with a
+    validation error), not a 500 or a silently-truncated write."""
+    org = OrganizationFactory(name="HTTP Delivery Org Oversized Field (Demo)")
+    dispatcher = UserFactory(username="http_delivery_wizard_oversized")
+    OrganizationMembership.objects.create(
+        user=dispatcher, organization=org, role=CustomerRole.REQUESTER_DISPATCHER
+    )
+    pickup_facility = FacilityFactory(organization=org)
+    destination_facility = FacilityFactory()
+    cargo_class = CargoClassFactory(code=CargoClassCode.CLASS_2)
+    CargoPolicyFactory(cargo_class=cargo_class, allows_ambient=True, allows_refrigerated=True)
+    temperature_profile = TemperatureProfileFactory(code=TemperatureProfileCode.AMBIENT)
+
+    client.force_login(dispatcher)
+    data = _post_wizard_data(
+        pickup_facility, destination_facility, cargo_class, temperature_profile, attest=True
+    )
+    data["facility_instructions"] = "x" * 2001
+
+    response = client.post(
+        reverse("deliveryrequest-create", kwargs={"organization_pk": org.pk}), data
+    )
+
+    assert response.status_code == 200
+    assert "facility_instructions" in response.context["form"].errors
+    from apps.deliveries.models import DeliveryRequest
+
+    assert not DeliveryRequest.objects.filter(organization=org).exists()
+
+
 def test_wizard_blocks_dispatch_when_packaging_attestation_missing(client: Client) -> None:
     """The hard validation rule from docs/PRODUCT_REQUIREMENTS.md section 5:
     "The request must block dispatch when required cargo or packaging
