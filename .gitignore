@@ -37,3 +37,12 @@ coverage.xml
 
 # uv
 .python-version
+
+# Dev-only accessibility test tooling (tests/accessibility/package.json installs
+# axe-core locally for Playwright to inject into pages under test - see
+# tests/accessibility/test_axe_scans.py's module docstring). Never a runtime
+# dependency of the Django app; not shipped anywhere near static/.
+# package-lock.json IS committed (pins the exact axe-core version, same
+# reproducibility rationale as uv.lock) - only the regenerable node_modules/
+# tree is ignored.
+tests/accessibility/node_modules/

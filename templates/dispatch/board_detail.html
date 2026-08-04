@@ -54,7 +54,7 @@
         </thead>
         <tbody>
             {% for candidate in candidates %}
-            <tr{% if not candidate.eligible %} class="text-slate-400"{% endif %}>
+            <tr{% if not candidate.eligible %} class="text-slate-600"{% endif %}>
                 <td>{% if candidate.eligible %}<input type="checkbox" name="courier_ids" value="{{ candidate.courier.pk }}" form="offer-form" aria-label="Include {{ candidate.courier }} in job offer">{% endif %}</td>
                 <td>{{ candidate.courier }}</td>
                 <td>{{ candidate.eligible }}</td>

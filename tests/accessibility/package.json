@@ -1,0 +1,9 @@
+{
+  "name": "medrelay-accessibility-test-tooling",
+  "private": true,
+  "description": "Dev-only tooling: axe-core, used exclusively by Playwright-based accessibility tests (tests/accessibility/test_axe_scans.py). Never imported by, bundled into, or shipped with the running Django application - see that test file's module docstring for how it is loaded (a local file path injected via Playwright's add_script_tag, never a CDN reference from app code).",
+  "version": "0.0.0",
+  "devDependencies": {
+    "axe-core": "^4.10.0"
+  }
+}
