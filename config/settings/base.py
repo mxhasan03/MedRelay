@@ -242,3 +242,15 @@ DATA_UPLOAD_MAX_NUMBER_FIELDS = 200
 # --------------------------------------------------------------------------
 RATELIMIT_USE_CACHE = "default"
 RATELIMIT_VIEW = "apps.recipient.views.ratelimited_view"
+
+# --------------------------------------------------------------------------
+# Demo/abuse-safeguard quotas (Phase 9 — docs/IMPLEMENTATION_ROADMAP.md
+# "Quota/abuse safeguards"). A cap on how many DeliveryRequest rows a single
+# organization may create, enforced in
+# apps.deliveries.services.create_delivery_request (see
+# _enforce_delivery_request_quota there). Generous here (and in dev/test)
+# since this is not a real operational limit outside a public demo
+# deployment; config/settings/demo.py tightens it for a genuinely public,
+# unauthenticated-signup-adjacent deployment. See docs/DEMO_PACKAGE.md.
+# --------------------------------------------------------------------------
+DEMO_MAX_DELIVERY_REQUESTS_PER_ORG = env.int("DEMO_MAX_DELIVERY_REQUESTS_PER_ORG", default=500)

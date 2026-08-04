@@ -13,11 +13,12 @@ import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from django.conf import settings
 from django.db import transaction
 
 from apps.cargo.models import PackagingAttestation
 from apps.cargo.services import create_packages_for_delivery_request
-from apps.deliveries.exceptions import StaleDeliveryRequestError
+from apps.deliveries.exceptions import DeliveryRequestQuotaExceededError, StaleDeliveryRequestError
 from apps.deliveries.models import (
     DeliveryRequest,
     DeliveryStatus,
@@ -34,6 +35,32 @@ if TYPE_CHECKING:
     from apps.deliveries.models import RecurringRoute
     from apps.facilities.models import Facility
     from apps.organizations.models import Organization
+
+
+def _enforce_delivery_request_quota(organization: Organization) -> None:
+    """Phase 9 abuse safeguard (docs/IMPLEMENTATION_ROADMAP.md "Quota/abuse
+    safeguards"): cap how many `DeliveryRequest` rows a single organization
+    may accumulate in this DEMO_MODE-only prototype.
+
+    `settings.DEMO_MAX_DELIVERY_REQUESTS_PER_ORG` (set in
+    `config/settings/base.py`, tightened in `config/settings/demo.py` for a
+    genuinely public deployment) is the cap; counting every status (not just
+    active ones) is deliberate, since the realistic abuse vector for a
+    public, unauthenticated-signup-adjacent demo is sheer row volume, not
+    just currently-open requests. A missing/`None` setting disables the
+    check entirely (defensive default — this function must never be the
+    reason an existing deployment without the setting breaks).
+    """
+    cap = getattr(settings, "DEMO_MAX_DELIVERY_REQUESTS_PER_ORG", None)
+    if cap is None:
+        return
+    current_count = DeliveryRequest.objects.filter(organization=organization).count()
+    if current_count >= cap:
+        raise DeliveryRequestQuotaExceededError(
+            f"Organization {organization.pk} has reached its demo delivery-request cap "
+            f"({cap} requests). This is a Phase 9 public-demo abuse safeguard, not a real "
+            "operational limit — see docs/DEMO_PACKAGE.md 'Quota/abuse safeguards'."
+        )
 
 
 @transaction.atomic
@@ -69,7 +96,12 @@ def create_delivery_request(
     per-package `Package`/`PackageIdentifier` rows, and (optionally) its
     packaging attestation — the full wizard field set from
     docs/PRODUCT_REQUIREMENTS.md section 5, minus recurring-route fields.
+
+    Raises `DeliveryRequestQuotaExceededError` before creating anything if
+    `organization` has already reached its Phase 9 demo quota — see
+    `_enforce_delivery_request_quota`.
     """
+    _enforce_delivery_request_quota(organization)
     delivery_request = DeliveryRequest(
         organization=organization,
         created_by=created_by,

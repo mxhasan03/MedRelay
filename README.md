@@ -5,10 +5,17 @@
 > legal compliance.
 
 MedRelay is a portfolio/demo B2B healthcare-courier logistics platform prototype for New York City
-(Manhattan-Brooklyn zone). It is being built in phases; **this repository currently contains Phase
-0 (repository foundation) only** — no domain models, no real delivery workflow yet. See
-`docs/IMPLEMENTATION_ROADMAP.md` for the full plan and `docs/CURRENT_STATUS.md` for exactly what is
-done today.
+(Manhattan-Brooklyn zone). It is being built in phases; see `docs/IMPLEMENTATION_ROADMAP.md` for the
+full plan and `docs/CURRENT_STATUS.md` for exactly what is done today (as of this writing, Phases
+0-9 — the full operational domain, UX/accessibility/security hardening, and the local demo
+package described below are complete; Phase 10's pilot-readiness review has not run).
+
+**Want to try the whole thing end to end?** See `docs/DEMO_PACKAGE.md` for a real, tested
+walkthrough: `docker compose up --build`, run migrations, seed a full synthetic demo dataset
+(`python manage.py seed_full_demo`), and log in with one of several documented demo accounts
+covering every major role. `docs/HOSTING_OPTIONS.md` is a separate research/recommendation
+document about *public* hosting — no public deployment exists; platform selection is the project
+owner's decision, not something this repository has acted on.
 
 The project runs entirely on free, open-source, locally-hosted software (`DEMO_MODE`). See
 `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` and `docs/COST_AUDIT.md`.

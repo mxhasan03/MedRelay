@@ -3681,3 +3681,348 @@ Commits for this phase, in order (all on top of Phase 7's final commit `80cd033`
 A doc file can never contain the hash of the commit that introduces its own final content — this
 line, added in a small follow-up commit, is the account of that. Run `git log --oneline` in the
 repository for the definitive, current history.
+
+# Current Status — Phase 9 (Free Public Demonstration Option)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 9 on top of the
+Phase 8 foundation (starting point: commit `449ce36`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Scope boundary — read this first
+
+Per `docs/IMPLEMENTATION_ROADMAP.md` Phase 9's own text ("Do not select a hosting platform that
+requires payment or a credit card without owner approval") and this session's explicit
+instructions, **no external hosting account was created, no hosting platform was selected, and
+nothing was deployed to any third-party service in this phase.** Every deliverable below is
+local-only: files in this repository, a real (but local) Docker/compose validation, and real local
+test runs. Where the roadmap called for an actual deployment, `docs/HOSTING_OPTIONS.md` is a
+recommendation document for the project owner to act on later, not something this session acted on.
+
+## Summary
+
+Phase 9 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 9 — Free public demonstration
+option": a fourth settings module (`config/settings/demo.py`) for a future public demo deployment;
+a comprehensive, deterministic, end-to-end synthetic demo seed (`seed_full_demo`) covering couriers
+with varied credential/authorization states and five delivery-request scenarios spanning
+`READY_FOR_DISPATCH`/`ASSIGNED`/a fully `DELIVERED` real custody chain/a genuine temperature
+excursion left on `INCIDENT_HOLD`/a `RETURNED` recipient-unavailable return, plus a generated
+invoice; a documented, tested local-run walkthrough (`docs/DEMO_PACKAGE.md`); a concrete new
+quota/abuse safeguard (a per-organization delivery-request cap) with tests; a `reset_demo_data`
+cleanup/reset command; confirmation that the Phase 0 disclaimer/`DEMO_MODE` banner already renders
+on every page; and a hosting-options recommendation document
+(`docs/HOSTING_OPTIONS.md`) — explicitly a recommendation, not a deployment. All new/changed
+production code has full test coverage, all quality gates pass (see below), and no external
+deployment, account creation, or infrastructure provisioning of any kind was performed.
+
+## Design decisions
+
+### 1. Demo accounts: pre-seeded, not self-registration
+
+**Decision: a small set of pre-seeded demo login accounts covering each major role.** This
+application's most demo-worthy behavior is its state-mutating workflows (assign a courier, advance
+a delivery through pickup/transit, capture custody proof, resolve an incident, generate an
+invoice) — a visitor who logs in as a dispatcher and clicks "Assign" on a real `READY_FOR_DISPATCH`
+delivery sees far more than one who must first build a tenant from an empty signup form. A
+self-registration flow that creates real organizations/facilities/couriers would also need its own
+new abuse-safeguard surface (rate-limited signup, email verification via a real mail provider this
+project's zero-cost policy prohibits) for comparatively little demo value, since every role's
+interesting screens are already reachable through a pre-seeded account. This mirrors the exact
+reasoning `docs/CURRENT_STATUS.md`'s own Phase 1 section already gave for `seed_demo_data`
+("account provisioning is inherently an admin/sales-onboarding action... not a public signup
+flow") — Phase 9 extends, rather than reverses, that decision. Full account list and the honest
+trade-off (every visitor shares the same accounts/data) are in `docs/DEMO_PACKAGE.md` section 3.
+
+### 2. Quota safeguard: a per-organization `DeliveryRequest` cap, enforced at creation time
+
+`apps.deliveries.services._enforce_delivery_request_quota`, called at the top of the single
+delivery-request creation path (`create_delivery_request`), raises a new
+`DeliveryRequestQuotaExceededError` with a clear message once an organization has reached
+`settings.DEMO_MAX_DELIVERY_REQUESTS_PER_ORG` existing rows (counting every status — the realistic
+abuse vector for a public demo is row volume, not just open requests). Defaults: 500 in
+`base`/`dev`/`test` (generous — not a real operational limit outside a public deployment), 100 in
+the new `config/settings/demo.py`. A `None` setting value disables the check entirely (defensive
+default). Tested in `apps/deliveries/tests/test_services.py`:
+`test_create_delivery_request_raises_once_org_quota_is_reached`,
+`test_create_delivery_request_quota_is_per_organization_not_global` (confirms the cap is per-tenant,
+not global — matching every other tenant-scoping rule in this codebase),
+`test_create_delivery_request_quota_check_is_a_no_op_when_setting_is_none`. This is one concrete new
+safeguard, not the only imaginable one — see `docs/DEMO_PACKAGE.md` section 5.1 for what else a real
+public deployment would reasonably want and why it wasn't built here (mainly: there is no public
+organization/courier self-signup surface at all yet, so that specific abuse vector doesn't exist).
+
+A second safeguard, `reset_demo_data` (`apps/organizations/management/commands/reset_demo_data.py`),
+deletes every `@medrelay.demo` user and every `Organization` (in a dependency-safe order —
+`Invoice`/`DeliveryRequest` both `on_delete=models.PROTECT` their `Organization` FK, so they must be
+deleted first) and reseeds a fresh dataset via `seed_demo_data` + `seed_full_demo`. No cron is wired
+up (deliberately, per the roadmap's own "even if you don't wire up the actual cron here") — an
+operator of a real public deployment would point their own external cron at
+`python manage.py reset_demo_data --yes`. Tested in
+`apps/organizations/tests/test_reset_demo_data.py`, including a test that a non-demo
+`createsuperuser` account (no `@medrelay.demo` email) is never touched.
+
+Phase 8's existing safeguards (recipient PIN/token rate limiting, upload/input size limits) were
+reviewed and found still adequate for this phase's scope — no change was needed there; see
+`docs/THREAT_MODEL.md` for the existing write-up.
+
+### 3. `config/settings/demo.py`: builds on `prod.py`, adds nothing externally-reachable
+
+The new fourth settings module inherits `prod.py`'s hardening (HSTS, secure cookies, SSL redirect)
+and adds a hardcoded (not env-overridable) `APP_MODE = "DEMO_MODE"`, a 12-hour session cookie
+lifetime with `SESSION_EXPIRE_AT_BROWSER_CLOSE = True` (a deployment reachable by strangers
+shouldn't keep a stolen/left-open session valid for Django's 2-week default), and the tightened
+`DEMO_MAX_DELIVERY_REQUESTS_PER_ORG=100`. `CSRF_COOKIE_HTTPONLY` was deliberately **not** set to
+`True` — `static/js/courier.js`/`static/js/offline-queue.js` read the `csrftoken` cookie directly
+for the courier PWA's JSON fetch calls, a real, tested mechanism that setting would break. No new
+externally-reachable capability is added anywhere — see the module's own docstring for why "no real
+external network call" is true by construction in this codebase, not something newly disabled.
+
+### 4. Hosting recommendation: lead with the local package, not a PaaS free tier
+
+`docs/HOSTING_OPTIONS.md` surveys Render, Fly.io, Railway, PythonAnywhere, and
+Oracle/AWS/GCP "always free" VM tiers against this stack's actual requirements (a background worker
+process, persistent Postgres, Valkey/Redis, no required card). Every PaaS-style free tier surveyed
+fails at least one hard requirement — most commonly no free background-worker support, no
+persistent free Postgres, or (for the tiers that would otherwise fit) a credit-card-at-signup
+requirement. The document's recommendation: lead with the roadmap's own explicitly-allowed
+alternative — the local-run package (`docs/DEMO_PACKAGE.md`, already built and tested this phase) +
+screenshots/a short video + a static marketing page — since it requires no platform decision, no
+ongoing cost, and no functional compromise to the application. If a genuinely public deployment is
+wanted later, the document names two directions to re-research at decision time (a split
+managed-Postgres-plus-free-web-host approach accepting a documented Celery/worker trade-off, or a
+single always-on VM accepting the card-at-signup requirement as an owner-approved exception) and is
+explicit that the actual choice is the project owner's, out of scope for this session.
+
+## Files created/changed
+
+`git diff 449ce36 --stat` (Phase 8's final commit → this phase's final commit):
+
+```
+14 files changed, 1635 insertions(+), 7 deletions(-)
+```
+
+By area:
+
+- **`config/settings/demo.py`** (new): the fourth settings module — see design decision 3.
+- **`config/settings/base.py`**: added `DEMO_MAX_DELIVERY_REQUESTS_PER_ORG` (env-overridable,
+  default 500).
+- **`apps/deliveries/exceptions.py`**: new `DeliveryRequestQuotaExceededError`.
+- **`apps/deliveries/services.py`**: new `_enforce_delivery_request_quota`, called from
+  `create_delivery_request` — see design decision 2.
+- **`apps/deliveries/tests/test_services.py`**: three new tests for the quota safeguard (see design
+  decision 2), plus a small `_create_delivery_request_for_org` helper (the existing
+  `_create_full_delivery_request` helper builds a brand-new `Organization` per call, which cannot
+  exercise a *per-organization* cap).
+- **`apps/organizations/management/commands/seed_full_demo.py`** (new): the comprehensive demo seed
+  — see "Synthetic demo mode" below.
+- **`apps/organizations/management/commands/reset_demo_data.py`** (new): the cleanup/reset command
+  — see design decision 2.
+- **`apps/organizations/tests/test_seed_full_demo.py`** / **`test_reset_demo_data.py`** (new): full
+  test coverage for both new commands (100% line coverage on both — see quality-gate output below).
+- **`docs/DEMO_PACKAGE.md`** (new): the real, tested local-run walkthrough, demo account list and
+  reasoning, seeded-dataset description, and quota/safeguard write-up.
+- **`docs/HOSTING_OPTIONS.md`** (new): the hosting recommendation document — see design decision 4.
+- **`README.md`**: corrected a stale "Phase 0 only" claim and added a short pointer to
+  `docs/DEMO_PACKAGE.md`/`docs/HOSTING_OPTIONS.md`.
+- **`.env.example`**: documented `DJANGO_SETTINGS_MODULE=config.settings.demo` as the public-demo
+  option (names only) and the two new demo-only env vars
+  (`DEMO_MAX_DELIVERY_REQUESTS_PER_ORG`/`DEMO_SESSION_COOKIE_AGE`).
+- **`docs/COST_AUDIT.md`**: regenerated (timestamp only; dependency set unchanged — **zero new
+  dependencies this phase**, matching the task's own "should need zero or near-zero new
+  dependencies").
+- **No new models, no new migrations.** `seed_full_demo`/`reset_demo_data` orchestrate existing
+  models/service functions only.
+
+## Synthetic demo mode — `seed_full_demo`
+
+`python manage.py seed_full_demo` calls `seed_demo_data` (Phase 1: 3 organizations, 8 facilities,
+their users) and then adds, all via real cross-app service-layer calls (never by writing rows
+directly — see the command's own module docstring for the full rationale):
+
+- **5 couriers with varied credential/authorization states**: `demo_courier_ana` (approved,
+  refrigerated-capable, Manhattan), `demo_courier_ben` (approved, ambient-only, Brooklyn),
+  `demo_courier_cara` (approved, but with a driver-license/insurance credential expiring in ~10
+  days — inside `flag_expiring_credentials`'s default 30-day window, confirmed by actually running
+  that command against the seeded data, see verification below), `demo_courier_dee` (an applicant
+  still mid-onboarding — no credentials/vehicle/equipment/availability rows at all, a deliberately
+  different variety of "state" than an expired credential), and `demo_courier_eli` (suspended).
+- **5 delivery requests spanning different lifecycle states**: one `READY_FOR_DISPATCH`
+  (unassigned), one `ASSIGNED` (not advanced further), one driven through the complete real
+  courier/custody lifecycle to `DELIVERED` (proof of pickup, an in-range 5.0C reading against the
+  seeded 2.0-8.0C refrigerated range, recipient PIN generation/verification, proof of delivery),
+  one **temperature excursion** (a 15.0C reading against the same refrigerated range — genuinely
+  out of range — which `apps.temperature.services.record_reading` itself turns into a real `SEVERE`
+  incident and an `INCIDENT_HOLD`, left open deliberately as a live item for the incidents console),
+  and one **recipient-unavailable return** (a `MODERATE` `RECIPIENT_UNAVAILABLE` incident +
+  `initiate_return`/`complete_return`, ending `RETURNED`, with the incident itself then resolved).
+- **1 generated invoice** (`apps.billing.services.generate_invoice_for_delivery`) for the delivered
+  scenario.
+
+Idempotency is handled differently for the two halves of this command, and this difference is
+documented rather than papered over: the org/facility/user/courier seeding is fully idempotent
+(`get_or_create` throughout, exactly like `seed_demo_data`), but the five delivery-lifecycle
+*scenarios* are each a multi-step, stateful sequence of real transitions — there is no honest way to
+"get_or_create" a lifecycle. Each scenario is tagged with a stable marker string
+(`SCENARIO_TAGS`) embedded in `DeliveryRequest.facility_instructions`; re-running the command skips
+(with a clear stdout message) any scenario whose tagged row already exists rather than erroring or
+duplicating it. This was verified directly, not just written: `seed_full_demo` was run twice in a
+row against a fresh database and produced identical counts both times (5 delivery requests, 1
+invoice, 5 couriers) — see the manual verification transcript below.
+
+## Manual, real-database verification (beyond the automated test suite)
+
+Two separate real runs were performed and are reported honestly below:
+
+### 1. In-process SQLite run (fast iteration/debugging)
+
+Ran `seed_demo_data` → `seed_full_demo` (twice, to prove idempotency) → inspected every
+`DeliveryRequest`'s status and every `Incident`'s category/severity/status → ran
+`flag_expiring_credentials` → ran `reset_demo_data --yes` → re-inspected counts, all against a real
+(in-process) SQLite test database via `django.test.runner.DiscoverRunner`. Actual output:
+
+```
+Total DeliveryRequest rows: 5
+... ready_for_dispatch, assigned, delivered, incident_hold, returned (one each)
+Total Invoice rows: 1
+Total Incident rows: 2
+... recipient_unavailable / moderate / resolved
+... temperature_excursion / severe / open
+=== flag_expiring_credentials ===
+Expiring within 30 day(s) (2):
+  - Cara Nguyen (Demo Courier) (Approved Courier) — Driver License expires 2026-08-14
+  - Cara Nguyen (Demo Courier) (Approved Courier) — Insurance expires 2026-08-14
+=== reset_demo_data --yes ===
+Deleted 30 demo user(s) and 3 organization(s) (cascading to everything that referenced them).
+... reseeded: DeliveryRequest count: 5, Invoice count: 1
+```
+
+### 2. Real Docker Compose run against the actual PostGIS/Postgres/Valkey/Mailpit stack
+
+This is the walkthrough documented in `docs/DEMO_PACKAGE.md` — genuinely executed in this session,
+not merely reviewed:
+
+- `docker compose up --build` (host ports remapped via a **local, uncommitted** override file only
+  because this shared dev machine already had unrelated services on 5432/6379/8000 — deleted before
+  finishing this phase, never part of any commit) — `db`, `valkey`, `mailpit` all reached Docker
+  `healthy`.
+- `docker compose exec web python manage.py migrate` — all 52 migrations (every app, including
+  `django-otp`'s) applied cleanly against the real `postgis/postgis:17-3.5` image.
+- `docker compose exec web python manage.py seed_full_demo` — succeeded with the same output shape
+  as the SQLite run above.
+- `curl http://localhost:.../healthz/` → `{"status": "ok"}`; `.../readyz/` →
+  `{"status": "ok", "checks": {"database": "ok", "cache": "ok"}}`.
+- A real HTTP session (via `curl`, following Django's CSRF flow — GET the login page, extract the
+  CSRF token, POST credentials) logged in as `northstar_owner` / `MedRelayDemo!2026`, received a
+  `302` redirect to `/organizations/`, and the subsequent authenticated page genuinely contained
+  both `"NorthStar Diagnostics (Demo)"` and the full literal disclaimer text
+  (`"This is a software prototype using synthetic data..."`) plus the `DEMO_MODE` banner string —
+  confirmed by grepping the real response body, not assumed from reading the template.
+- `docker compose down -v` — full teardown; the temporary port-override file and the throwaway
+  `.env` were both deleted before this phase's final commit.
+
+## No medical-operation claim — confirmed, not re-built
+
+Spot-checked `templates/couriers/base.html`, `templates/recipient/tracking.html`, and
+`templates/registration/login.html` — all three `{% extends "base.html" %}`, so the Phase 0
+disclaimer/`DEMO_MODE` banner (bold text, red background, top of every page, before the nav)
+already renders everywhere, including the courier PWA and the anonymous recipient tracking page.
+This was re-confirmed in the real HTTP walkthrough above, not just by reading the templates. No
+template change was needed this phase — Phase 8's design pass already made this indicator
+sufficiently prominent.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`source .venv/bin/activate && export DJANGO_SETTINGS_MODULE=config.settings.test`.
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+269 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 269 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (2 silenced).
+```
+(the 2 silenced checks are unchanged from Phase 8 — `django_ratelimit.E003`/`W001`, test-settings
+only)
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(no new models were added this phase)
+
+### `pytest --cov --cov-report=term-missing`
+```
+561 passed in 25.71s
+```
+Coverage: 95% (project total). Every new Phase 9 module is at 100% line coverage:
+`apps/deliveries/exceptions.py` (100%), `apps/deliveries/services.py` (100%),
+`apps/organizations/management/commands/seed_full_demo.py` (100%),
+`apps/organizations/management/commands/reset_demo_data.py` (100%). `config/settings/demo.py` shows
+0% in the coverage report because no automated test imports it as `DJANGO_SETTINGS_MODULE` (the
+whole suite runs under `config.settings.test`, matching every prior phase's convention) — it was
+instead verified manually by loading it directly (`python -c "import django; django.setup()"` with
+`DJANGO_SETTINGS_MODULE=config.settings.demo`) and confirming `APP_MODE`, `DEMO_MAX_DELIVERY_REQUESTS_PER_ORG`,
+`SESSION_COOKIE_AGE`, and `SECURE_SSL_REDIRECT` all resolved to the expected values. Remaining
+project-wide coverage gaps are the same pre-existing environment-entrypoint modules every prior
+phase has honestly reported (`config/asgi.py`, `config/celery.py`, `config/wsgi.py`,
+`config/settings/{dev,prod}.py`).
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 24 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+(24, unchanged from Phase 8 — **zero new dependencies this phase**)
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from Phase 8. The one new string that plausibly looks
+secret-shaped in this phase's test fixtures (a deliberately-not-a-real-password string in
+`test_reset_demo_data.py`, used only to prove a real `createsuperuser` account is never touched by
+the reset command) is marked `# pragma: allowlist secret` inline, same convention as every prior
+phase.
+
+## Known gaps / deviations (honest list)
+
+- **No external deployment was performed** — by design, per this phase's explicit scope boundary.
+  `docs/HOSTING_OPTIONS.md` is a recommendation for the project owner, not an action taken.
+- **No screenshots/video/static marketing page were produced** — `docs/HOSTING_OPTIONS.md` section
+  3 names these as the roadmap's own preferred "publish a local-run package... instead of weakening
+  the system" alternative, but producing them was outside this session's scope (no video/screenshot
+  tooling was requested or available in this environment); flagged as reasonable, low-friction
+  future work rather than silently omitted.
+- **The quota safeguard is a single mechanism** (a per-organization `DeliveryRequest` cap) — the
+  task explicitly asked for "at least one concrete new safeguard," not an exhaustive abuse-prevention
+  system. `docs/DEMO_PACKAGE.md` section 5.1 names what a real public deployment would additionally
+  want (e.g. per-IP/session caps on organization/courier creation) and why they weren't built now
+  (no public self-signup surface exists yet for either).
+- **No cron/scheduled-task infrastructure is wired up** for `reset_demo_data` — deliberately, per
+  the roadmap's own "even if you don't wire up the actual cron here." An operator of a real
+  deployment would supply their own scheduler.
+- **`seed_full_demo`'s idempotency is scenario-level, not fully self-healing** — re-running it will
+  never error or duplicate a scenario, but will not "restore" a scenario a demo visitor has since
+  changed through the real UI. `reset_demo_data` is the documented mitigation.
+- **`config/settings/demo.py` has not been exercised by the automated test suite** (0% in the
+  coverage report) — verified manually instead (see "Manual, real-database verification" /
+  quality-gate section above). This matches every prior phase's honest treatment of
+  environment-entrypoint settings modules (`dev.py`/`prod.py` are in the same position).
+- All Phase 0-8 known gaps not touched by this phase remain as previously documented in their own
+  sections above (MFA opt-in, ORM-level-not-DB-level append-only enforcement, no dependency-
+  vulnerability scanning, etc.).
+- Not yet built (correctly out of scope for Phase 9, and explicitly gated until a real pilot review
+  per the roadmap): Phase 10's pilot-readiness review, any real external deployment, any real
+  self-service organization/courier registration.
+
+## Commit history for this phase
+
+(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)

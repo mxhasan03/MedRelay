@@ -21,3 +21,12 @@ class InvalidTransitionError(Exception):
 class StaleDeliveryRequestError(Exception):
     """Raised by optimistic-concurrency checks when the caller's expected
     `version` does not match the current row's `version`."""
+
+
+class DeliveryRequestQuotaExceededError(Exception):
+    """Raised by `apps.deliveries.services.create_delivery_request` when an
+    organization has reached its `settings.DEMO_MAX_DELIVERY_REQUESTS_PER_ORG`
+    cap (Phase 9 — docs/IMPLEMENTATION_ROADMAP.md "Quota/abuse safeguards").
+    Not a data-validity error (that would be `ValidationError`) and not a
+    concurrency error — a plain control-flow exception, matching this
+    module's own convention above."""

@@ -7,6 +7,7 @@ import datetime
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.test import override_settings
 
 from apps.cargo.models import CargoClassCode, TemperatureProfileCode
 from apps.cargo.tests.factories import (
@@ -14,7 +15,7 @@ from apps.cargo.tests.factories import (
     CargoPolicyFactory,
     TemperatureProfileFactory,
 )
-from apps.deliveries.exceptions import StaleDeliveryRequestError
+from apps.deliveries.exceptions import DeliveryRequestQuotaExceededError, StaleDeliveryRequestError
 from apps.deliveries.models import DeliveryStatus, RecipientVerificationMethod, StopType
 from apps.deliveries.services import (
     cancel_delivery_request,
@@ -87,6 +88,81 @@ def test_submit_delivery_request_reaches_ready_for_dispatch_when_complete() -> N
     assert delivery_request.status == DeliveryStatus.READY_FOR_DISPATCH
     assert delivery_request.estimated_price is not None
     assert hasattr(delivery_request, "quote")
+
+
+def _create_delivery_request_for_org(organization, *, attest_packaging: bool = True):
+    """Like `_create_full_delivery_request`, but for a *caller-supplied*
+    organization (needed to test the Phase 9 per-organization quota, which
+    `_create_full_delivery_request` can't exercise itself since it builds a
+    brand-new `Organization` on every call)."""
+    pickup_facility = FacilityFactory(
+        organization=organization, latitude="40.75", longitude="-73.98"
+    )
+    destination_facility = FacilityFactory(latitude="40.76", longitude="-73.99")
+    cargo_class = CargoClassFactory(code=CargoClassCode.CLASS_2)
+    CargoPolicyFactory(cargo_class=cargo_class, allows_ambient=True, allows_refrigerated=True)
+    temperature_profile = TemperatureProfileFactory(code=TemperatureProfileCode.AMBIENT)
+    start = datetime.datetime(2026, 1, 5, 14, 0, tzinfo=datetime.UTC)
+
+    return create_delivery_request(
+        organization=organization,
+        created_by=None,
+        service_level="scheduled",
+        pickup_facility=pickup_facility,
+        destination_facility=destination_facility,
+        pickup_window_start=start,
+        pickup_window_end=start + datetime.timedelta(hours=2),
+        required_delivery_by=start + datetime.timedelta(hours=4),
+        cargo_class=cargo_class,
+        temperature_profile=temperature_profile,
+        package_count=1,
+        sender_contact_name="Front Desk",
+        recipient_contact_name="Lab Intake",
+        recipient_verification_method=RecipientVerificationMethod.NONE,
+        attest_packaging=attest_packaging,
+    )
+
+
+@override_settings(DEMO_MAX_DELIVERY_REQUESTS_PER_ORG=2)
+def test_create_delivery_request_raises_once_org_quota_is_reached() -> None:
+    """Phase 9 abuse safeguard (docs/CURRENT_STATUS.md 'Phase 9' — quota/abuse
+    safeguards): the third delivery request for the same organization is
+    rejected with a clear error once the (here, deliberately lowered) cap is
+    reached, and no row is created for the rejected attempt."""
+    organization = OrganizationFactory()
+    _create_delivery_request_for_org(organization)
+    _create_delivery_request_for_org(organization)
+
+    with pytest.raises(DeliveryRequestQuotaExceededError, match="demo delivery-request cap"):
+        _create_delivery_request_for_org(organization)
+
+    assert organization.delivery_requests.count() == 2
+
+
+@override_settings(DEMO_MAX_DELIVERY_REQUESTS_PER_ORG=1)
+def test_create_delivery_request_quota_is_per_organization_not_global() -> None:
+    """A different organization's own requests must not count against this
+    one's cap — the quota is scoped per-tenant, matching every other
+    tenant-scoping rule in this codebase (CLAUDE.md 'Multi-tenancy')."""
+    first_org = OrganizationFactory()
+    second_org = OrganizationFactory()
+    _create_delivery_request_for_org(first_org)
+
+    # second_org has made zero requests yet, so it should still succeed even
+    # though the global cap (1) has already been reached by first_org.
+    _create_delivery_request_for_org(second_org)
+
+    with pytest.raises(DeliveryRequestQuotaExceededError):
+        _create_delivery_request_for_org(first_org)
+
+
+@override_settings(DEMO_MAX_DELIVERY_REQUESTS_PER_ORG=None)
+def test_create_delivery_request_quota_check_is_a_no_op_when_setting_is_none() -> None:
+    """A `None` cap (not set, or explicitly disabled) must never block
+    creation — see `_enforce_delivery_request_quota`'s defensive default."""
+    organization = OrganizationFactory()
+    for _ in range(3):
+        _create_delivery_request_for_org(organization)
 
 
 def test_submit_delivery_request_stays_at_validation_required_without_attestation() -> None:
