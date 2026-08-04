@@ -3674,8 +3674,9 @@ Commits for this phase, in order (all on top of Phase 7's final commit `80cd033`
 5. `8502bfa` — the SQLite concurrency-test flake investigation and fix
 6. `e353eee` — axe-core accessibility scans + a real Playwright critical-path test
 7. `4e97603` — backup/restore drill, threat model, PHI sweep, this section of `CURRENT_STATUS.md`
-8. `20ee2e0` — this line, recording commit (7)'s hash (see below for why this is always a
-   one-commit lag)
+8. `082f48c` — recorded commits 1-7's hashes here (a guessed hash for this same commit, corrected
+   in commit 9 below — the same "can't know your own hash in advance" wrinkle Phase 0 hit first)
+9. (this line's own commit) — corrected commit (8)'s self-referential hash guess
 
 A doc file can never contain the hash of the commit that introduces its own final content — this
 line, added in a small follow-up commit, is the account of that. Run `git log --oneline` in the
