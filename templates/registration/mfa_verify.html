@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block nav %}{% endblock %}
+{% block title %}Verify your identity — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto p-4 mt-8">
+    <h1>Verify your identity</h1>
+    <p class="text-sm text-slate-500 mb-4">
+        This account has TOTP multi-factor authentication enabled. Enter the current 6-digit code
+        from your authenticator app to finish logging in.
+    </p>
+    {% if form.errors %}
+    <p class="text-red-800 font-bold" role="alert">{{ form.code.errors.0|default:"Please correct the error below." }}</p>
+    {% endif %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <label for="id_code">{{ form.code.label }}</label>
+        {{ form.code }}
+        <button type="submit">Verify</button>
+    </form>
+</div>
+{% endblock %}

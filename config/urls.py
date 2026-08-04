@@ -5,6 +5,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from apps.accounts.mfa import MedRelayLoginView, MfaEnrollView, MfaVerifyView
 from config.health import healthz, readyz
 from config.pwa import service_worker, web_manifest
 
@@ -19,9 +20,16 @@ urlpatterns = [
     # root-level routes rather than plain {% static %} references).
     path("manifest.json", web_manifest, name="web-manifest"),
     path("sw.js", service_worker, name="service-worker"),
-    # Built-in Django auth views (login/logout/password change) — no self-service signup in this
-    # prototype; accounts are provisioned via the admin or `seed_demo_data` (see
-    # apps/organizations/management/commands/seed_demo_data.py).
+    # Login is MedRelayLoginView (apps.accounts.mfa), not the stock
+    # django.contrib.auth LoginView, so that a privileged user with a
+    # confirmed TOTP device is routed through the MFA-verify step (Phase 8)
+    # before a real session is established. Logout/password-change/reset
+    # remain the stock Django auth views — no self-service signup in this
+    # prototype; accounts are provisioned via the admin or `seed_demo_data`
+    # (see apps/organizations/management/commands/seed_demo_data.py).
+    path("accounts/login/", MedRelayLoginView.as_view(), name="login"),
+    path("accounts/mfa/verify/", MfaVerifyView.as_view(), name="mfa-verify"),
+    path("accounts/mfa/enroll/", MfaEnrollView.as_view(), name="mfa-enroll"),
     path("accounts/", include("django.contrib.auth.urls")),
     path("organizations/", include("apps.organizations.urls")),
     path("facilities/", include("apps.facilities.urls")),

@@ -270,3 +270,29 @@ AUDIT_VIEWER_ROLES = frozenset(
 def can_view_audit_log(user: AnyUser) -> bool:
     """Can the user view the internal audit viewer (apps.audit)?"""
     return get_internal_role(user) in AUDIT_VIEWER_ROLES
+
+
+def is_mfa_eligible(user: AnyUser) -> bool:
+    """Is this user a "privileged demo account" eligible to enroll TOTP MFA
+    (apps.accounts.mfa, Phase 8 — docs/SECURITY_COMPLIANCE_BOUNDARIES.md
+    section 4: "TOTP MFA for privileged roles when enabled")?
+
+    Scope decision (see docs/CURRENT_STATUS.md "Phase 8" for the full
+    write-up): every internal-ops role (any `InternalRoleAssignment`, not
+    just the cross-org-manage subset — a courier-onboarding-reviewer's
+    account is just as much a "privileged internal account" as a
+    dispatcher's for this purpose) plus any customer-organization
+    owner/administrator (`ORG_MANAGING_ROLES`) in at least one active
+    membership. Ordinary customer-org roles (requester/dispatcher, billing
+    manager, compliance reviewer, read-only auditor) are not required to
+    enroll in this demo — MFA is opt-in and enforced only once a user has
+    actually completed enrollment (see `apps.accounts.mfa`), never a login
+    hard-block for accounts that never enrolled.
+    """
+    if isinstance(user, AnonymousUser) or not user.is_authenticated:
+        return False
+    if getattr(user, "is_internal_staff", False):
+        return True
+    return OrganizationMembership.objects.filter(
+        user=user, role__in=ORG_MANAGING_ROLES, is_active=True
+    ).exists()

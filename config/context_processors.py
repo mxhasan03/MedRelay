@@ -37,13 +37,15 @@ def nav(request: HttpRequest) -> dict[str, Any]:
             "nav_is_courier": False,
             "nav_can_dispatch": False,
             "nav_can_view_audit": False,
+            "nav_mfa_eligible": False,
         }
 
-    from apps.organizations.services import can_dispatch, can_view_audit_log
+    from apps.organizations.services import can_dispatch, can_view_audit_log, is_mfa_eligible
 
     return {
         "nav_is_internal_staff": bool(getattr(user, "is_internal_staff", False)),
         "nav_is_courier": bool(getattr(user, "is_courier", False)),
         "nav_can_dispatch": can_dispatch(user),
         "nav_can_view_audit": can_view_audit_log(user),
+        "nav_mfa_eligible": is_mfa_eligible(user),
     }

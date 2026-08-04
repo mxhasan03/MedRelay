@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Enroll multi-factor authentication — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto p-4">
+    <h1>Multi-factor authentication</h1>
+
+    {% if already_enrolled %}
+        {% if just_enrolled %}
+        <p class="text-green-800 font-semibold" role="status">
+            Enrollment complete. From now on, logging in to this account will require a code from
+            your authenticator app.
+        </p>
+        {% else %}
+        <p>This account already has TOTP multi-factor authentication enabled.</p>
+        {% endif %}
+    {% else %}
+        <p class="text-sm text-slate-500 mb-4">
+            Scan this QR code with any standard TOTP authenticator app (e.g. a free/open-source
+            app such as andOTP, FreeOTP, or Aegis — no paid identity provider is used, per
+            docs/TECH_STACK_AND_ZERO_COST_POLICY.md), then enter the 6-digit code it shows to
+            confirm enrollment.
+        </p>
+        <img src="{{ qr_svg }}" alt="TOTP enrollment QR code — scan with an authenticator app" class="mb-4 border border-slate-200 rounded-md p-2 bg-white" width="220" height="220">
+        <p class="text-sm text-slate-500 mb-4">
+            Can't scan a code? Enter this key manually: <code class="break-all">{{ secret_key }}</code>
+        </p>
+        {% if form.errors %}
+        <p class="text-red-800 font-bold" role="alert">{{ form.code.errors.0|default:"Please correct the error below." }}</p>
+        {% endif %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <label for="id_code">{{ form.code.label }}</label>
+            {{ form.code }}
+            <button type="submit">Confirm enrollment</button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}
