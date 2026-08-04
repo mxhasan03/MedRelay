@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Invoice {{ invoice.invoice_number }} — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:50rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <h1>Invoice {{ invoice.invoice_number }}</h1>
+    <p>Organization: {{ invoice.organization.name }}</p>
+    <p>Delivery: {{ invoice.delivery_request_id }}</p>
+    <p>Payment status: <strong>{{ invoice.get_payment_status_display }}</strong> (synthetic mock — no real payment processor)</p>
+
+    {% if messages %}
+    <ul>{% for message in messages %}<li>{{ message }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">
+        <thead><tr><th>#</th><th>Description</th><th>Amount</th></tr></thead>
+        <tbody>
+            {% for line in invoice.lines.all %}
+            <tr><td>{{ line.sequence }}</td><td>{{ line.description }}</td><td>{{ line.amount }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p><strong>Total: {{ invoice.total }}</strong></p>
+
+    <p>
+        <a href="{% url 'invoice-export-csv' invoice.pk %}">Export CSV</a> |
+        <a href="{% url 'invoice-export-html' invoice.pk %}">Export HTML</a>
+    </p>
+
+    <form method="post" action="{% url 'invoice-mark-paid' invoice.pk %}">
+        {% csrf_token %}
+        {% if invoice.payment_status == "paid" %}
+        <button type="submit" name="action" value="unpaid">Mark unpaid</button>
+        {% else %}
+        <button type="submit" name="action" value="paid">Mark paid</button>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}

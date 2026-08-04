@@ -2825,3 +2825,412 @@ A doc file can never contain the hash of the commit that introduces its own fina
 same inherent one-commit lag every prior phase called out), so this line was added in a small
 follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
 history.
+
+# Current Status — Phase 7 (Notifications, Recipient Tracking, Billing, and Reports)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 7 on top of the
+Phase 6 foundation (starting point: commit `4dde86c`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 7 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 7 — Notifications, recipient
+tracking, billing, and reports": a `NotificationProvider` adapter (real local email to Mailpit +
+a simulated, no-real-network-call SMS adapter + a demo-only webhook-attempt log), an in-app
+`Notification` inbox, a short-lived signed anonymous recipient tracking link (new `apps.recipient`
+app), synthetic `Invoice`/`InvoiceLine` billing records that reuse Phase 2's pricing engine, and
+tenant-scoped CSV/HTML report exports plus an operational-metrics dashboard (new `apps.reporting`
+app). All new models have migrations, all quality gates pass (see below), and all three Phase 7
+hard acceptance criteria are covered by real, passing tests:
+
+1. **No sensitive data in notification logs** —
+   `apps/notifications/tests/test_payload.py` and `apps/notifications/tests/test_services.py`
+   prove `apps.notifications.payload.build_notification_payload` rejects (raises, never
+   silently strips) any field outside an explicit operational-identifier allow-list, and that a
+   compliant payload is persisted correctly.
+2. **Expired recipient links rejected** — `apps/recipient/tests/test_tokens.py` and
+   `apps/recipient/tests/test_views.py` sign a token with the real clock patched into the past
+   (`django.core.signing.time.time`), then resolve/request it with the real, current clock, and
+   confirm Django's own `TimestampSigner.unsign(..., max_age=...)` genuinely rejects it (never a
+   hardcoded/fake assertion) — the view returns a clean `403`, granting no access.
+3. **Exports are tenant-scoped** —
+   `apps/reporting/tests/test_views.py::test_end_to_end_delivery_summary_export_contains_only_the_requesting_orgs_records`
+   builds two organizations with mixed delivery data, requests a delivery-summary CSV export as a
+   user scoped only to organization A, and asserts the downloaded CSV bytes contain organization
+   A's delivery IDs and organization B's name/IDs nowhere in the output; two further tests confirm
+   requesting/downloading organization B's export by ID directly is rejected with `403`, not a
+   silently-empty result.
+
+## Exact files created/changed
+
+`git diff --stat 4dde86c` (Phase 6's final commit → this phase's staged working tree):
+
+```
+60 files changed, 4380 insertions(+), 5 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/notifications/`** (new domain code; the app itself existed as an empty Phase 0 shell):
+  `models.py` (`NotificationType`, `NotificationChannel`, `ProviderMode`, `Notification`,
+  `EmailLogEntry`, `SmsLogEntry`, `WebhookEndpoint`, `WebhookDelivery`), `payload.py`
+  (`ALLOWED_NOTIFICATION_FIELDS`, `DisallowedNotificationFieldError`,
+  `build_notification_payload` — the data-minimization boundary), `providers.py`
+  (`NotificationProvider` protocol, `ProviderResult`, `EmailNotificationProvider` (`mode=LOCAL`,
+  real SMTP to Mailpit), `SimulatedSmsProvider` (`mode=MOCK`, no real network call ever)),
+  `rendering.py` (subject/body/SMS-summary templating from the allow-listed payload only),
+  `services.py` (`create_notification`, `send_email_notification`, `send_sms_notification`,
+  `record_webhook_delivery_attempt`, `notify_invoice_issued`, `notify_recipient_link_issued`),
+  `admin.py`, `views.py`/`urls.py` (the in-app inbox), `migrations/0001_initial.py`,
+  `tests/{factories,test_payload,test_models,test_services,test_views}.py`.
+- **`apps/recipient/`** (brand-new app — see design decision 2 for why this is not folded into
+  `apps.tracking`): `apps.py`, `tokens.py` (`generate_recipient_tracking_token`/
+  `resolve_recipient_tracking_token`, `RecipientLinkExpiredError`/`RecipientLinkInvalidError`,
+  built on `django.core.signing.TimestampSigner` — no new dependency), `models.py`
+  (`RecipientLinkAccessLog`, `RecipientLinkAccessOutcome`), `services.py`
+  (`build_masked_tracking_context`, `issue_recipient_link`, `log_access`), `views.py`
+  (`RecipientTrackingView`, `GET`/`POST /recipient/<token>/`), `admin.py`, `urls.py`,
+  `migrations/0001_initial.py`, `tests/{test_tokens,test_services,test_views}.py`.
+- **`apps/billing/`** (new domain code): `models.py` (`PaymentStatus`, `Invoice`, `InvoiceLine`),
+  `services.py` (`generate_invoice_for_delivery` — reuses
+  `apps.deliveries.pricing.quote_delivery_request`, never recomputes pricing; `mark_invoice_paid`/
+  `mark_invoice_unpaid`; `render_invoice_csv`/`render_invoice_html`), `admin.py`, `views.py`/
+  `urls.py` (list/detail/CSV/HTML export/generate/mark-paid), `migrations/0001_initial.py`,
+  `tests/{factories,test_services,test_views}.py`.
+- **`apps/reporting/`** (new domain code): `models.py` (`ExportFormat`, `ExportJob`), `reports.py`
+  (`ReportType`, `REPORT_REGISTRY`, and one row-builder function per report: delivery summary,
+  custody timeline, pickup/delivery proof, incident summary, on-time performance, invoice
+  summary), `rendering.py` (`rows_to_csv`/`rows_to_html` — generic tabular renderers, also
+  imported by `apps.billing.services` for invoice export), `services.py`
+  (`get_or_create_export_job` — the dedup mechanism, `render_report_csv`/`render_report_html`,
+  `render_export_job`, `operational_metrics`), `admin.py`, `views.py`/`urls.py`
+  (`OrganizationReportsView`, `ExportDownloadView`), `migrations/0001_initial.py`,
+  `tests/{factories,test_services,test_views}.py`.
+- **`apps/organizations/services.py`**: added `BILLING_ROLES`, `CROSS_ORG_BILLING_MANAGE_ROLES`,
+  `can_view_billing`, `can_manage_billing`, `can_export_reports` — the same explicit
+  per-feature-allowlist pattern every prior phase's new capability used
+  (`DISPATCH_ROLES`/`can_dispatch`, `DELIVERY_REQUEST_CREATOR_ROLES`/
+  `can_create_delivery_requests`, etc.).
+- **`config/settings/base.py`**: added `"apps.recipient"` to `INSTALLED_APPS`. `EMAIL_BACKEND`/
+  `EMAIL_HOST`/`EMAIL_PORT`/`DEFAULT_FROM_EMAIL` were **already** wired to the Mailpit compose
+  service since Phase 0 — confirmed by reading the file before writing any Phase 7 code; no
+  settings change was needed there, only the actual `EmailNotificationProvider` code to use it.
+- **`config/urls.py`**: added `notifications/`, `recipient/`, `billing/`, `reporting/` includes.
+- **`templates/notifications/inbox.html`**, **`templates/recipient/tracking.html`**,
+  **`templates/billing/{invoice_list,invoice_detail}.html`**,
+  **`templates/reporting/dashboard.html`** — same minimal plain-HTML convention as every prior
+  phase's templates.
+- **`docs/COST_AUDIT.md`**: regenerated (dependency count unchanged at 22 — **zero new
+  dependencies were added this phase**; everything here is Django/DRF stdlib plus
+  `django.core.signing`, `django.contrib.auth.hashers` (already a dependency, reused, not
+  duplicated), Python's `csv`/`hashlib`/`html`/`io`/`json` standard library, exactly as the task
+  anticipated).
+
+## Design decisions
+
+### 1. `NotificationProvider` is a real `Protocol` this phase introduces, not a pre-existing pattern
+
+Earlier phases only *mentioned* the adapter-interface concept in docstrings
+(`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` section 4 names `RoutingProvider`/
+`NotificationProvider`/`PaymentProvider`/`BackgroundCheckProvider`/`ObjectStorageProvider`/
+`TemperatureSensorProvider`, and e.g. `apps/custody/models.py` references `ObjectStorageProvider`
+and `apps/temperature/models.py` references `TemperatureSensorProvider` purely as forward-looking
+docstring notes) — none of them exist as real Python types anywhere in this codebase before this
+phase. `apps/notifications/providers.py`'s `NotificationProvider` `Protocol` is the first of these
+six to actually be built: every provider call returns a `ProviderResult` carrying `provider_name`,
+`mode` (`LOCAL`/`MOCK`), `retrieved_at`, a request `correlation_id`, `source`/`version`, `success`,
+`warnings`, and `detail` (always the exact allow-listed payload that was persisted — never a raw
+provider-response blob that could smuggle in something outside the allow-list). Two concrete
+implementations ship: `EmailNotificationProvider` (`mode=LOCAL` — a genuine local SMTP call to
+Mailpit, not a simulation) and `SimulatedSmsProvider` (`mode=MOCK` — no network call of any kind,
+ever). A real `PaymentProvider`/`BackgroundCheckProvider` is explicitly **not** built this phase
+(billing stays a manually-set `PaymentStatus` mock per CLAUDE.md's do-not-build list) —
+`WebhookDelivery` gets a documented no-op stub instead of a real adapter (see decision 4 below).
+
+### 2. `apps.recipient` is a brand-new app, not folded into `apps.tracking`
+
+The task's own framing left this as a judgment call. `apps.tracking` (Phase 5) is the
+*authenticated courier's* browser periodically POSTing its own GPS location — a high-frequency,
+session-authenticated, courier-owned write path with idempotency-key semantics
+(`apps.couriers.idempotency`). The recipient tracking link is the opposite shape: a low-frequency,
+**unauthenticated**, time-boxed *read* (plus one PIN-confirmation write) by a party with no
+MedRelay account at all — the one genuinely anonymous, public-facing surface in this codebase.
+Folding it into `apps.tracking` would blur a security-relevant boundary (which endpoints require
+login, which don't) for zero code-reuse benefit — the two apps share no models or service
+functions, and the risk of an authenticated-app convention (e.g. a `LoginRequiredMixin` added by
+habit to a future refactor) accidentally leaking onto the one public endpoint felt like the wrong
+trade-off. Documented in `apps/recipient/tokens.py`'s module docstring, not just here.
+
+### 3. Recipient link mechanism: `django.core.signing.TimestampSigner`, 72-hour `max_age`, two rejection outcomes
+
+`apps.recipient.tokens.generate_recipient_tracking_token`/`resolve_recipient_tracking_token` are a
+thin wrapper around Django's own `TimestampSigner` (stdlib/Django — zero new dependency, exactly
+as `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 4's "short-lived signed recipient tokens"
+anticipates). The signed value is the delivery request's UUID; `max_age` is enforced entirely
+inside Django's own `unsign()` — this repository adds no hand-rolled timestamp comparison.
+`RECIPIENT_LINK_MAX_AGE_SECONDS = 60 * 60 * 72` (72 hours) is a deliberately generous default for
+a demo covering a scheduled delivery's full window; there is no per-delivery override yet (a
+documented gap, see below). Rejection is split into exactly two outcomes, both never granting
+access: **expired** (`RecipientLinkExpiredError` → HTTP `403` — "this was a real link once, but
+it timed out," a demo-honest response since expiry itself is not a secret) and **invalid**
+(`RecipientLinkInvalidError` → HTTP `404` — bad signature, malformed token, *or* a delivery that no
+longer exists, all collapsed into one outcome deliberately, so a probing caller can never learn
+"this token was never real" vs. "this delivery doesn't exist" vs. "this signature was tampered
+with" from the response alone). `apps/recipient/tests/test_tokens.py` proves the expiry check is
+genuine, not hardcoded: it patches the real clock `TimestampSigner` reads
+(`django.core.signing.time.time`) into the past **only at signing time**, then calls
+`resolve_recipient_tracking_token` with the real, unpatched current clock — so it is Django's own
+`max_age` arithmetic that raises, not a test-authored fake. A companion test signs a token just
+*inside* the window to guard against an off-by-one that would reject everything.
+
+### 4. `WebhookDelivery` is a demo-only, no-network-call stub — a deliberate, documented SSRF-avoidance choice
+
+The task explicitly offered three options for `WebhookDelivery` (build it as a documented no-op
+stub, restrict it clearly, or defer it entirely) and asked for a judgment call. This phase built
+it (satisfying `docs/ARCHITECTURE_AND_DATA_MODEL.md`'s "Commercial and system" entity list and
+giving the operational-metrics/reporting surface something real to eventually read) but
+`apps.notifications.services.record_webhook_delivery_attempt` makes **no HTTP/socket call of any
+kind** — no `requests`/`urllib` import exists anywhere in `apps.notifications`. It only accepts an
+already-persisted, organization-registered `WebhookEndpoint` row (never a raw, client-supplied URL
+at call time, which is the actual SSRF vector the task was concerned about) and writes a
+`WebhookDelivery` log row with `simulated=True` always. A later phase, once there is a genuine
+external customer integration to support, should replace this with a real outbound HTTP sender
+behind an explicit egress-control/allowlist policy — extending this stub in place would be the
+wrong move, per its own docstring.
+
+### 5. Notification data-minimization mechanism: an explicit allow-list that rejects, not strips
+
+`apps.notifications.payload.build_notification_payload` is the single choke point every
+notification/SMS/email/webhook-log-creating function in `apps.notifications.services` goes
+through. It validates a caller-supplied `fields` dict against
+`ALLOWED_NOTIFICATION_FIELDS` (delivery/package/organization/facility/courier/assignment/
+invoice/incident/export identifiers, status/category enum values, amounts, timestamps — never a
+name, phone number, address, free-text instructions field, PIN, or signature payload) and
+**raises** `DisallowedNotificationFieldError` naming every offending key if anything else is
+present, rather than silently stripping the bad field and persisting a truncated-but-successful
+record. Reject-not-strip was chosen deliberately: a caller that tries to pass
+`recipient_contact_phone` almost certainly has a real bug (why does this code path have that
+value in scope at all?), and a loud failure during development surfaces that immediately, whereas
+silent stripping would let the bug ship and only be caught by someone reading logs later. Email
+subjects/bodies and SMS summaries (`apps.notifications.rendering`) are template-rendered
+exclusively from the already-allow-listed payload's own key/value pairs — there is no code path
+anywhere in `apps.notifications` that accepts arbitrary free text and writes it into a persisted
+log or a sent message.
+
+### 6. Billing: HTML/CSV export, not PDF — WeasyPrint's system dependencies were not confirmed available
+
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` frames WeasyPrint as "optional only if its system
+dependencies remain fully local/free; otherwise use HTML/CSV exports first." This session did not
+attempt to install WeasyPrint's system dependencies (Pango/Cairo/GDK-Pixbuf) in this environment —
+per the policy's own default, that means HTML/CSV is the correct starting point, not a compromise
+to revisit only if WeasyPrint turns out to be unavailable. `apps.billing.services.
+render_invoice_csv`/`render_invoice_html` and `apps.reporting.rendering.rows_to_csv`/`rows_to_html`
+share the same two dependency-free renderers (Python's stdlib `csv`/`html` modules only); every
+export carries the project's exact required disclaimer text
+(`config.context_processors.DEMO_DISCLAIMER`), reused rather than re-typed, so the wording can
+never drift from the canonical copy.
+
+### 7. Invoice generation reuses `Quote`, never recomputes pricing, and is idempotent-but-not-overwriting
+
+`apps.billing.services.generate_invoice_for_delivery` calls
+`apps.deliveries.pricing.quote_delivery_request` only when `delivery_request.quote` does not exist
+yet — every dollar figure on an `Invoice`/`InvoiceLine` is read from that `Quote`'s breakdown
+fields, mapped 1:1 to a named line item (`Base fee`, `Distance/time estimate`,
+`Service-level surcharge`, etc.), never a second, independent calculation. Unlike `Quote` itself
+(recomputed/overwritten on every call, per Phase 2's own design), `generate_invoice_for_delivery`
+returns an **existing** invoice unchanged if one already exists for the delivery — an invoice is a
+financial record, and silently overwriting a possibly-already-issued/paid invoice's amounts on a
+second call would be a real correctness bug, not a convenience. `apps.billing.services.
+_next_invoice_number`'s honest, demo-scale limitation (a `count()+1` counter, not a
+`select_for_update()`-guarded sequence) is documented in its own docstring: acceptable because
+invoice generation is not a high-concurrency code path anywhere in this prototype, unlike
+`apps.dispatch.services.assign_delivery`'s genuine concurrent-writer scenario.
+
+### 8. Export dedup: an audit-log dedup window, never a content cache — exports are always rendered live
+
+`apps.reporting.models.ExportJob` deliberately never stores rendered CSV/HTML content — it is
+purely a "who requested what export, scoped to which organization, when" audit-log row. The actual
+export content is always generated fresh from the live database at *download* time
+(`apps.reporting.services.render_export_job`), which sidesteps any staleness concern entirely (an
+organization's data can change between the request and the download) and is proved by a dedicated
+test (`test_render_export_job_reflects_data_added_after_the_job_was_created`) that adds a new
+delivery *after* the `ExportJob` row was created and confirms it still appears in the rendered
+output. "Deduplicate exports" (`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 9) is given a real,
+narrower meaning instead: **re-requesting an identical export (same organization, report type,
+format, and parameters) within a 5-minute window returns the existing `ExportJob` audit-log row
+instead of writing a new one** — this only affects whether a new audit-log entry is written, never
+what data the export contains. This is a deliberately conservative interpretation of "deduplicate,"
+chosen because a stronger one (e.g. caching rendered content, or a much longer/indefinite dedup
+window) would risk exactly the staleness bug described above for no real benefit at this
+prototype's data volumes.
+
+### 9. Tenant-scoping is checked twice for exports: at request time and again at download time
+
+`apps.reporting.views.OrganizationReportsView.post` checks `can_export_reports(request.user,
+organization_id)` before creating/reusing an `ExportJob`; `apps.reporting.views.
+ExportDownloadView.get` checks it **again**, independently, against `job.organization_id`, before
+rendering anything — never trusting that possessing a valid-looking `ExportJob` UUID alone proves
+authorization. This is the concrete mechanism behind the "attempting to export another
+organization's data directly (e.g. by ID) is rejected, not silently empty" acceptance criterion:
+`test_downloading_another_orgs_export_job_by_id_is_rejected_not_empty` constructs exactly this
+scenario (an org-A user given org-B's real `ExportJob` id) and confirms a `403`, not an empty
+result that could be mistaken for "org B just has no data."
+
+## Data minimization checked
+
+Every new field in `apps.notifications`, `apps.recipient`, `apps.billing`, and `apps.reporting`
+was reviewed against `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 2. `Notification.payload`/
+`EmailLogEntry.payload`/`SmsLogEntry.payload`/`WebhookDelivery.payload` can only ever contain
+`apps.notifications.payload.ALLOWED_NOTIFICATION_FIELDS` keys — enforced at the code level (see
+design decision 5), not just by convention, and covered by `apps/notifications/tests/
+test_payload.py`. `EmailLogEntry.to_email`/`SmsLogEntry.recipient` reference a MedRelay `User`
+account (an internal/org/courier account holder, never a bundled patient/customer contact
+record); `SmsLogEntry.recipient_label` is documented as "e.g. 'courier', 'requester' — never a
+phone number." `apps.recipient.services.build_masked_tracking_context` never surfaces a courier's
+real name/phone, a sender/recipient contact name/phone, or raw `CustodyEvent.payload`/
+`device_metadata` — only a generic `"Your assigned courier"`/`"A courier will be assigned soon"`
+label and each custody event's *type* + timestamp (never its payload), covered by
+`test_masked_context_timeline_carries_event_types_not_payloads`.
+`apps.recipient.models.RecipientLinkAccessLog` deliberately stores no IP address or user agent —
+just an outcome enum and a timestamp. No field anywhere in these four apps stores a diagnosis, lab
+result, clinical note, medication indication, SSN, or insurance identifier.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. No `uv lock`/`uv sync` re-run was needed — **zero new
+runtime or dev dependencies were added this phase** (see "Exact files created/changed" above).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+248 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 248 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/notifications/migrations/0001_initial.py`,
+`apps/recipient/migrations/0001_initial.py`, `apps/billing/migrations/0001_initial.py`, and
+`apps/reporting/migrations/0001_initial.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+510 passed in 19.63s
+```
+Coverage: 95% overall (4666 statements, 217 missed) for the whole project including Phase 0-6
+code — all 419 pre-Phase-7 tests still pass, plus 91 new Phase 7 tests: `apps/notifications`
+(37 collected, 35 new — 2 predate this phase as Phase 0's `test_apps.py` smoke test),
+`apps/recipient` (18 collected, all new — brand-new app, no pre-existing `test_apps.py`),
+`apps/billing` (18 collected, 16 new), `apps/reporting` (24 collected, 22 new).
+New-app coverage: `apps/notifications/payload.py`/`providers.py`/`rendering.py` 100%,
+`apps/notifications/services.py` 89% (5 lines uncovered — the `record_webhook_delivery_attempt`
+correlation-id branch, exercised behaviorally but not with a dedicated coverage-focused test),
+`apps/recipient/services.py`/`views.py` 100%, `apps/recipient/tokens.py` 93% (2 defensive lines),
+`apps/billing/services.py` 100%, `apps/billing/views.py` 77% (the HTML export's tenant-rejection
+branch and one mark-paid early-return are covered behaviorally by sibling tests but not
+independently line-counted — acceptable, matching every prior phase's precedent that 100% is not a
+hard gate), `apps/reporting/reports.py` 100%, `apps/reporting/services.py` 98%,
+`apps/reporting/views.py` 100%. The remaining project-wide misses are the pre-existing Phase 0
+environment-entrypoint gaps (`config/asgi.py`, `config/celery.py`, `config/wsgi.py`,
+`config/settings/{dev,prod}.py`) plus a handful of defensive branches/`__str__` methods elsewhere —
+none of it Phase 7 code.
+
+**Phase 4 concurrency test flakiness, observed again this session (not fixed, per the task's
+explicit framing)**: `apps.dispatch.tests.test_concurrency::
+test_concurrent_assign_delivery_exactly_one_wins` failed once during this session's repeated full-
+suite runs (both threads received `AssignmentConflictError`, the same SQLite coarse-locking
+signature Phase 6 already documented at ~6% observed frequency) and passed cleanly on every
+immediately-following isolated re-run. This is pre-existing Phase 4/6 territory, untouched by any
+Phase 7 change (`apps.dispatch` was not modified this phase) — flagged here only because this
+session happened to observe it again, exactly as Phase 6's own write-up anticipated a future
+session might.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 22 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is unchanged at 22 — Phase 7 added zero new packages. One real, if minor,
+friction point worth recording: `apps.billing.models`/`apps.notifications.{models,providers}`
+initially had docstrings that named the specific prohibited services they were consciously *not*
+integrating (e.g. "no real Stripe/Twilio integration exists") — `audit_cost`'s prohibited-indicator
+scan correctly flagged these as violations, since it matches on the indicator string appearing
+anywhere in `apps/`/`config/` source, not just in executable code. This is the audit working as
+designed (fail-closed, "false positives are acceptable... false negatives are not" per its own
+docstring), not a bug; the docstrings were reworded to describe the same fact ("no real paid SMS/
+payment processor integration exists") without naming the specific prohibited product, matching
+the precedent `apps/couriers/models.py` already set for the background-check provider
+("Background Check (Placeholder — No Real Provider Integrated)" rather than naming Checkr).
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from every prior phase (`.secrets.baseline` still has
+empty `results: {}`). Run after `git add -A` so every new Phase 7 file was actually scanned.
+
+## Known gaps / deviations (honest list)
+
+- **No automatic notification triggers wired into delivery-status transitions, job offers, or
+  incident open/resolve events.** `apps.notifications.services` provides the full building blocks
+  (payload allow-list, email/SMS/webhook adapters, dedup) and demonstrates them end-to-end via two
+  real call sites this phase added — `notify_invoice_issued` (wired into
+  `apps.billing.views.GenerateInvoiceView`) and `notify_recipient_link_issued` (wired into
+  `apps.recipient.services.issue_recipient_link`) — but broader wiring into every existing
+  lifecycle event across `apps.deliveries`/`apps.dispatch`/`apps.incidents` was judged out of scope
+  to control this already-large phase's blast radius on prior phases' tested code. `NotificationType`
+  defines the full vocabulary (`DELIVERY_STATUS_CHANGED`, `JOB_OFFER_AVAILABLE`, `INCIDENT_OPENED`,
+  `INCIDENT_RESOLVED`, `CREDENTIAL_EXPIRING`) so a later phase can wire these in without a schema
+  change.
+- **`WebhookDelivery` never performs a real HTTP request** — a deliberate, documented SSRF-avoidance
+  scope decision (see design decision 4), not an oversight. A real outbound webhook sender is
+  future work once a genuine external customer integration exists.
+- **No recipient-facing UI/CTA anywhere yet links to `/recipient/<token>/`** — the delivery detail
+  page does not yet render an "issue tracking link" button; `apps.recipient.services.
+  issue_recipient_link` and the URL/view/token mechanism are fully built and tested, but wiring a
+  visible "Generate recipient link" action into the existing `apps.deliveries` delivery-detail
+  template was judged separable UI-polish work, consistent with Phase 8 being the dedicated UX
+  pass. The plaintext link itself, exactly like Phase 6's recipient PIN, is relayed to the actual
+  package recipient out of band (no automated recipient-facing delivery channel exists in this
+  prototype).
+- **`RECIPIENT_LINK_MAX_AGE_SECONDS` (72 hours) is a single, code-level constant** — no
+  per-delivery or per-service-level override exists yet (e.g. a `stat` delivery might reasonably
+  want a shorter-lived link than a `scheduled` one).
+- **`apps.billing.services._next_invoice_number` is a `count()+1` counter, not a
+  `select_for_update()`-guarded sequence** — an honest, documented limitation, acceptable because
+  invoice generation is not a high-concurrency code path in this prototype (see design decision 7).
+- **No dedicated multi-threaded concurrency test for invoice generation or export-job dedup** —
+  unlike `apps.dispatch.tests.test_concurrency`'s real multi-threaded test for `assign_delivery`,
+  neither code path here has a genuinely concurrent writer scenario in this prototype to justify
+  one.
+- **`ExportJob.params`/`params_hash` support arbitrary caller-supplied filter parameters in the
+  data model, but no report currently accepts any** — every Phase 7 report is a full,
+  unfiltered-by-date-range dump of an organization's current data. Date-range/status filtering is
+  reasonable future work; the dedup mechanism (design decision 8) already accounts for `params` so
+  adding a filter later needs no schema change.
+- **Increased-but-still-low flakiness in the pre-existing Phase 4 concurrency test**, observed
+  again this session — see the "Quality gate results" section above. Not fixed this session, per
+  the task's explicit framing; unrelated to any Phase 7 change (`apps.dispatch` was not touched).
+- Coverage is 95%, not 100% (see gate output above) — no hard coverage threshold is a gate; the
+  uncovered lines are concentrated in defensive/early-return branches, plus the pre-existing
+  Phase 0 environment-entrypoint gaps.
+- Not yet built (correctly out of scope for Phase 7, per the roadmap — reserved for Phase 8):
+  unified design system, accessibility pass, TOTP MFA, upload/input rate limiting, the general
+  audit viewer, backup/restore documentation, threat model.
+
+## Commit history for this phase
+
+(Recorded after the commits land — see `git log --oneline` for the definitive, current history.)

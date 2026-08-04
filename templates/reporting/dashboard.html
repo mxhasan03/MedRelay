@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Reports — {{ organization.name }} — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <h1>Reports &amp; Operational Metrics</h1>
+    <h2>{{ organization.name }}</h2>
+
+    <h3>Operational metrics</h3>
+    <ul>
+        <li>Delivery volume: {{ metrics.delivery_volume }}</li>
+        <li>Delivered: {{ metrics.delivered_count }}</li>
+        <li>On-time %: {% if metrics.on_time_percentage is not None %}{{ metrics.on_time_percentage }}%{% else %}n/a{% endif %}</li>
+        <li>Incident count: {{ metrics.incident_count }}</li>
+        <li>Average quote value: {% if metrics.average_quote_value is not None %}${{ metrics.average_quote_value }}{% else %}n/a{% endif %}</li>
+    </ul>
+
+    <h3>Request an export</h3>
+    <form method="post">
+        {% csrf_token %}
+        <select name="report_type">
+            {% for key, title in report_type_choices %}
+            <option value="{{ key }}">{{ title }}</option>
+            {% endfor %}
+        </select>
+        <select name="export_format">
+            <option value="csv">CSV</option>
+            <option value="html">HTML</option>
+        </select>
+        <button type="submit">Generate &amp; download</button>
+    </form>
+
+    <h3>Recent export requests</h3>
+    <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        <thead><tr><th>Report</th><th>Format</th><th>Requested</th><th></th></tr></thead>
+        <tbody>
+            {% for job in recent_jobs %}
+            <tr>
+                <td>{{ job.report_type }}</td>
+                <td>{{ job.export_format }}</td>
+                <td>{{ job.requested_at }}</td>
+                <td><a href="{% url 'export-download' job.pk %}">Download &rarr;</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">No exports requested yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

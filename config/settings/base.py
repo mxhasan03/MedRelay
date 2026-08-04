@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.temperature",
     "apps.incidents",
     "apps.notifications",
+    "apps.recipient",
     "apps.billing",
     "apps.reporting",
     "apps.audit",

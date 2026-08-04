@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Delivery Tracking — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:40rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <h1>Delivery Tracking</h1>
+    <p>Tracking reference: <strong>{{ delivery_id|truncatechars:8 }}</strong></p>
+    <p>Status: <strong>{{ status_display }}</strong></p>
+    <p>Expected by: {{ required_delivery_by }}</p>
+    <p>{{ courier_label }}.</p>
+
+    <h2>Status timeline</h2>
+    <ul>
+        {% for entry in timeline %}
+        <li>{{ entry.occurred_at }} — {{ entry.event_type }}</li>
+        {% empty %}
+        <li>No custody events recorded yet.</li>
+        {% endfor %}
+    </ul>
+
+    {% if pin_error %}
+    <p style="color:#7a1f1f;"><strong>{{ pin_error }}</strong></p>
+    {% endif %}
+
+    {% if pin_verified %}
+    <p><strong>Recipient identity confirmed.</strong></p>
+    {% elif pin_required %}
+    <h2>Confirm your identity</h2>
+    <p>Please enter the PIN provided to you to confirm receipt.</p>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="pin" maxlength="8" inputmode="numeric" autocomplete="one-time-code">
+        <button type="submit">Confirm</button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

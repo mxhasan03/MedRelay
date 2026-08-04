@@ -179,6 +179,47 @@ def can_dispatch(user: AnyUser) -> bool:
     return get_internal_role(user) in DISPATCH_ROLES
 
 
+# Customer-org roles allowed to view their own organization's invoices
+# (apps.billing, Phase 7). Deliberately narrower than "any member" — billing
+# figures are exactly the kind of data docs/PRODUCT_REQUIREMENTS.md section 4
+# names a dedicated "billing manager" role for.
+BILLING_ROLES = frozenset(
+    {CustomerRole.OWNER, CustomerRole.ADMINISTRATOR, CustomerRole.BILLING_MANAGER}
+)
+
+# Internal ops roles allowed to generate invoices / change payment status for
+# any organization. `finance` gets this even though it is not in
+# CROSS_ORG_MANAGE_ROLES (which is deliberately a much smaller set for
+# organization/facility management) — invoicing is finance's own job, not a
+# general org-management capability.
+CROSS_ORG_BILLING_MANAGE_ROLES = frozenset(
+    {InternalRole.FINANCE, InternalRole.OPERATIONS_MANAGER, InternalRole.SYSTEM_ADMINISTRATOR}
+)
+
+
+def can_view_billing(user: AnyUser, organization_id: int) -> bool:
+    """Can the user view this organization's invoices?"""
+    if get_org_role(user, organization_id) in BILLING_ROLES:
+        return True
+    return has_cross_org_read_access(user)
+
+
+def can_manage_billing(user: AnyUser, organization_id: int) -> bool:
+    """Can the user generate invoices / change payment status for this
+    organization's deliveries?"""
+    if get_org_role(user, organization_id) in BILLING_ROLES:
+        return True
+    return get_internal_role(user) in CROSS_ORG_BILLING_MANAGE_ROLES
+
+
+def can_export_reports(user: AnyUser, organization_id: int) -> bool:
+    """Can the user request/download a report export scoped to this
+    organization? Any org member (any role) may export their own
+    organization's operational reports; cross-org read access covers
+    internal ops the same way it covers ordinary organization viewing."""
+    return can_view_organization(user, organization_id)
+
+
 def scope_queryset_to_user_orgs(
     queryset: QuerySet[_T], user: AnyUser, *, org_field: str = "organization_id"
 ) -> QuerySet[_T]:

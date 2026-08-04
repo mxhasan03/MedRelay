@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Notifications — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <h1>Notifications</h1>
+    <p>In-app notifications for {{ request.user }}. Every entry below carries only operational
+        identifiers (delivery/invoice/incident IDs, statuses) — never a raw contact name, phone
+        number, address, PIN, or signature (docs/SECURITY_COMPLIANCE_BOUNDARIES.md section 2).</p>
+
+    <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Details</th>
+                <th>Created</th>
+                <th>Read?</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for notification in notifications %}
+            <tr{% if not notification.is_read %} style="font-weight:bold;"{% endif %}>
+                <td>{{ notification.get_notification_type_display }}</td>
+                <td>
+                    {% for key, value in notification.payload.items %}
+                    <div>{{ key }}: {{ value }}</div>
+                    {% endfor %}
+                </td>
+                <td>{{ notification.created_at }}</td>
+                <td>{{ notification.is_read|yesno:"Yes,No" }}</td>
+                <td>
+                    {% if not notification.is_read %}
+                    <form method="post" action="{% url 'notification-mark-read' notification.pk %}">
+                        {% csrf_token %}
+                        <button type="submit">Mark read</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No notifications.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

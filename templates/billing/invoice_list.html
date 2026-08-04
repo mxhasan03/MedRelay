@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Invoices — MedRelay (Demo Prototype){% endblock %}
+{% block content %}
+<div style="max-width:60rem;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+    <h1>Invoices</h1>
+    <table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr><th>Invoice #</th><th>Organization</th><th>Delivery</th><th>Status</th><th>Total</th><th>Issued</th><th></th></tr>
+        </thead>
+        <tbody>
+            {% for invoice in invoices %}
+            <tr>
+                <td>{{ invoice.invoice_number }}</td>
+                <td>{{ invoice.organization.name }}</td>
+                <td>{{ invoice.delivery_request_id|truncatechars:8 }}</td>
+                <td>{{ invoice.get_payment_status_display }}</td>
+                <td>{{ invoice.total }}</td>
+                <td>{{ invoice.issued_at }}</td>
+                <td><a href="{% url 'invoice-detail' invoice.pk %}">View &rarr;</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7">No invoices.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

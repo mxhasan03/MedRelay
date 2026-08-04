@@ -1,6 +1,9 @@
 """AppConfig for the reporting app.
 
-Operational reports and CSV/HTML exports. No domain models yet in Phase 0.
+Phase 7: tenant-scoped CSV/HTML report exports (delivery summary, custody
+timeline, pickup/delivery proof, incident summary, on-time performance,
+invoice summary), the `ExportJob` audit log (with a short dedup window —
+see `apps.reporting.services`), and the operational-metrics dashboard.
 """
 
 from django.apps import AppConfig
