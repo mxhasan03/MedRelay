@@ -3241,3 +3241,430 @@ A doc file can never contain the hash of the commit that introduces its own fina
 same inherent one-commit lag every prior phase called out), so this line was added in a small
 follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
 history.
+
+# Current Status — Phase 8 (UX, Accessibility, Security, and Demo Hardening)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 8 on top of the
+Phase 7 foundation (starting point: commit `80cd033`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 8 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 8 — UX, accessibility, security,
+and demo hardening": a unified Tailwind CSS design system applied across every existing template,
+a real accessibility pass verified with axe-core via Playwright (violations found and fixed, not
+just asserted clean), TOTP MFA for privileged demo accounts (django-otp), explicit upload/input
+size limits, rate limiting on the recipient PIN-verification/token-resolution endpoints
+(django-ratelimit), a new generic `AuditEvent` log plus a unified read-only audit viewer, a real
+executed backup/restore drill against the actual PostGIS image (`docs/BACKUP_RESTORE.md`), a
+specific threat model (`docs/THREAT_MODEL.md`), a real investigation and fix for the documented
+Phase 4 SQLite concurrency-test flake, a genuine Playwright critical-path test, and a documented
+PHI sweep. All new models have migrations, all quality gates pass (see below), and every Phase 8
+acceptance criterion is covered by real, passing, non-stubbed tests.
+
+## Design decisions
+
+### 1. Tailwind CSS via the CDN "Play" build, not a CLI/PostCSS build step
+
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` names Tailwind CSS as the design system and this phase's
+own instructions explicitly allow the CDN build "for zero-build-step simplicity ... unless you
+judge a proper Tailwind CLI/PostCSS build is easy to add without violating the zero-cost policy or
+adding required Node.js tooling as a hard dependency for running the app." This repository's
+`Dockerfile`/`compose.yaml` have had **zero** Node.js runtime dependency since Phase 0 (Python/`uv`
+only) — adding a Tailwind CLI/PostCSS build step would newly require Node.js just to *build* the
+`web` image, a real, avoidable increase in required tooling for a project whose zero-Node posture
+has held for seven prior phases. The CDN script (`templates/base.html`) is free, needs no API key,
+and is loaded only by the *browser* rendering a page — never a server-side/build-time dependency.
+The one honest tradeoff: pages depend on `cdn.tailwindcss.com` being reachable at render time,
+exactly the same class of tradeoff already accepted for OpenStreetMap-derived tile/routing data
+elsewhere in the stack per `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`. Documented inline in
+`templates/base.html`'s own comment.
+
+### 2. A global Tailwind `@layer base` style block, not per-element class edits everywhere
+
+Tailwind's CSS reset (Preflight, bundled with the CDN build) strips default browser styling from
+every heading, table, button, input, and link — meaning simply loading Tailwind on the existing
+plain-HTML templates would have made every `<h1>`/`<table>`/`<button>` look like unstyled inline
+text. Rather than hand-editing every element in all ~25 templates, `templates/base.html` defines a
+project-wide `@layer base` block (`h1`/`h2`/`h3`/`a`/`table`/`th`/`td`/`label`/text inputs/
+checkboxes/`button`/`.btn`) using Tailwind's `text/tailwindcss` inline-style-block feature (the
+same mechanism the Phase 5 courier shell already needed for its own `.btn`/`.card` component
+classes, now formalized project-wide). Because Tailwind's cascade-layer ordering guarantees
+`base < components < utilities` regardless of source order or selector specificity, any template
+that *does* need to override a default (e.g. `templates/partials/nav.html`'s white-on-dark nav
+links) can do so with an ordinary utility class — the base layer never fights an explicit override.
+This is what made "consistent form styling, consistent table/list styling" (the phase's own
+framing) achievable as a single shared style block plus a mechanical pass converting per-template
+`style="..."` attributes to Tailwind utility classes, rather than a much larger per-element rewrite.
+
+### 3. One role-aware shared nav (`templates/partials/nav.html`) + a new `nav` context processor
+
+`config.context_processors.nav` computes `nav_is_internal_staff`/`nav_is_courier`/
+`nav_can_dispatch`/`nav_can_view_audit`/`nav_mfa_eligible` once per request (delegating to the
+exact same `apps.organizations.services` permission functions every view already uses — the
+processor decides nothing new about *access*, only what to show a *link* to; every linked page
+still enforces its own permission check independently) so every non-courier, non-recipient page
+gets one consistent top nav without touching every view's `get_context_data`. The courier PWA
+(`templates/couriers/base.html`) and the anonymous recipient tracking page
+(`templates/recipient/tracking.html`) keep their own minimal/no-nav shells, per
+`docs/PRODUCT_REQUIREMENTS.md` section 6 (courier is a phone-first tool) and the fact that an
+anonymous recipient has no account to navigate from.
+
+### 4. axe-core sourcing: a local, dev-only npm install, never a CDN reference from app code
+
+Node.js (v18.19.1) and npm (9.2.0) were confirmed available in this sandbox and `npm install
+axe-core` completed in well under a minute with zero vulnerabilities — so the task's preferred path
+("check this is feasible/fast ... if npm/Node isn't cleanly available ... look for a pip-installable
+alternative") was taken. `tests/accessibility/package.json` declares `axe-core` as its only
+dependency; `npm install` there produces `tests/accessibility/node_modules/axe-core/axe.min.js`,
+which `tests/accessibility/test_axe_scans.py` injects into each page under test via Playwright's
+`page.add_script_tag(path=...)` — a **local file path**, never a CDN URL, and never referenced from
+any file under `apps/`, `templates/`, or `static/`. `node_modules/` is gitignored;
+`package.json`/`package-lock.json` are committed (same reproducibility rationale as `uv.lock`).
+This is unambiguously dev-only test tooling, on the same footing as Playwright itself (an approved
+dev dependency since Phase 5) — confirmed by `python manage.py audit_cost` continuing to pass with
+no new Python dependency needed for this (only `django-otp`/`django-ratelimit` were added to
+`pyproject.toml`; axe-core is npm-side test tooling, entirely outside the Python dependency graph
+`audit_cost` audits).
+
+### 5. TOTP MFA scope: internal ops staff (any role) + customer-org owners/administrators; opt-in
+
+`apps.organizations.services.is_mfa_eligible` grants MFA *enrollment* eligibility to any internal
+operations role (`user.is_internal_staff`) or any customer-org owner/administrator (an active
+`OrganizationMembership` with `role` in `ORG_MANAGING_ROLES`) — not every customer-org role
+(requester/dispatcher, billing manager, compliance reviewer, read-only auditor are not required to
+enroll). Enrollment is opt-in, matching the phase's own instruction ("does not need to be mandatory
+for every login in the demo, but the mechanism must be real and testable"); once a user *has*
+enrolled (a confirmed `django_otp.plugins.otp_totp.models.TOTPDevice`), login for that specific
+account genuinely requires the current code — see "TOTP MFA" below for exactly how this is
+enforced and verified with a real generated code, not a hardcoded stub.
+
+### 6. Rate limiting: `django-ratelimit`, Valkey-cache-backed, applied to the recipient endpoints
+
+`django-ratelimit` (free/open-source, added to `pyproject.toml` and `audit_cost`'s allowlist) was
+chosen over a hand-rolled cache-based limiter for its maturity (built-in `Ratelimited` exception,
+`RATELIMIT_VIEW` hook for a clean custom response) while still using the project's existing
+Valkey-backed `CACHES["default"]` (`RATELIMIT_USE_CACHE = "default"` in `config/settings/base.py`)
+— no new infrastructure. Applied to `apps.recipient.views.RecipientTrackingView`: the anonymous
+tracking GET (30/minute/IP) and, more importantly, the PIN-verification POST (10/minute/IP **and**
+5/minute/token) — the real PIN-brute-force mitigation `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`
+section 4 calls for, which had no rate limiting at all before this phase. A rejected request gets a
+genuine `429` (`apps.recipient.views.ratelimited_view`, wired via
+`django_ratelimit.middleware.RatelimitMiddleware`) rather than an unhandled 403.
+`config/settings/test.py` silences `django_ratelimit`'s "LocMemCache is not a shared cache" system
+checks (true in a real multi-process deployment, irrelevant to the single-process SQLite test
+suite; dev/prod use the real shared Valkey cache, which is not silenced there).
+
+### 7. Audit viewer architecture: a new generic log for auth/membership + links into existing logs
+
+`docs/ARCHITECTURE_AND_DATA_MODEL.md` lists a single `AuditEvent` entity (confirmed, by grepping
+the codebase before this phase, that `apps/audit/` had no `models.py` at all — genuinely unbuilt
+until now), while `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 6 lists a much longer "record
+these" list, most of which **already has its own dedicated, purpose-built table**: delivery state
+transitions (`apps.deliveries.models.DeliveryStatusTransition`, Phase 2), assignment overrides
+(`apps.dispatch.models.DispatchOverride`, Phase 4), custody events (`apps.custody.models.
+CustodyEvent`, Phase 6 — a real hash chain, strictly stronger tamper evidence than a generic log
+could offer), incident actions (`apps.incidents.models.IncidentAction`, Phase 6), and export
+creation (`apps.reporting.models.ExportJob`, Phase 7). Duplicating all of that into one wide table
+would either lose information or become a second, competing source of truth. Instead,
+`apps.audit.models.AuditEvent` is scoped to exactly the two event families that had **no existing
+home**: authentication events (login succeeded/failed, logout — new capture points, wired via
+`django.contrib.auth.signals` in `apps/audit/signals.py`) and role/membership changes
+(`OrganizationMembership`/`InternalRoleAssignment` creation and role/active-flag changes, via
+`pre_save`/`post_save` signals that snapshot the prior DB state so only genuine changes are
+logged — verified by a real test that a same-value re-save creates no spurious row). The audit
+viewer (`apps/audit/views.py`, `templates/audit/event_list.html`) surfaces this generic log,
+filterable by event type/organization, alongside a fixed set of links into the five existing
+per-domain logs above — it never re-queries or duplicates their rows. Scoped to
+`compliance_reviewer`/`operations_manager`/`system_administrator` internal roles only
+(`apps.organizations.services.can_view_audit_log`), tenant-aware where applicable (membership
+events carry the `organization` FK for filtering).
+
+### 8. Concurrency-flake decision: retry the race once, not the assertions
+
+See `apps/dispatch/tests/test_concurrency.py`'s expanded docstring for the full account. Summary:
+the documented ~5-7% flake (both threads cleanly conflict, zero successes — never a crash, never a
+double-assignment) was reproduced empirically (4/40 = 10% baseline in this environment) and traced
+to a real, specific mechanism by reading Django's own SQLite test-database setup
+(`django/db/backends/sqlite3/creation.py`): the in-memory test database runs in SQLite's
+*shared-cache* mode (required for two threads' separate connections to see the same in-memory
+data), and shared-cache mode has its own lock-conflict-detection behavior (`SQLITE_LOCKED`, a
+deadlock signal) that is **not** subject to the ordinary busy-timeout retry loop that covers
+`SQLITE_BUSY`. This was confirmed, not just theorized: raising the SQLite connection `timeout`
+(`config/settings/test.py`, Python's 5-second default → 30 seconds) measurably reduced the flake
+(1/40 in a second batch) but did not eliminate it, and every observed failure still completed in
+~2 seconds — far short of even the original timeout, proving it is an immediate deadlock detection,
+not a timed-out wait a longer timeout would fix. Decision: keep the (harmless, genuinely helpful
+for real `SQLITE_BUSY` contention) timeout bump, and retry the two-thread race itself once if both
+attempts cleanly conflict — the delivery request's state is provably unchanged in that case (still
+`READY_FOR_DISPATCH`, asserted explicitly before retrying), so a same-object retry is valid. The
+hard invariants (no crash, no double-assignment, exactly one success given at least one attempt)
+are never weakened. **Stress-tested 60/60 passes** after the fix (up from ~90-97.5% before, across
+two separate 40-run baseline batches). This has no bearing on the real Postgres deployment, where
+`select_for_update()` takes a genuine row lock with no equivalent deadlock-on-promotion behavior.
+
+## Files created/changed
+
+`git diff 80cd033 --stat` (Phase 7's final commit → this phase's final commit):
+
+```
+74 files changed, 2538 insertions(+), 212 deletions(-)
+```
+
+By area:
+
+- **Dependencies**: `pyproject.toml`/`uv.lock` — added `django-otp>=1.7,<2.0` and
+  `django-ratelimit>=4.1,<5.0` (both extended in `apps/audit/management/commands/audit_cost.py`'s
+  `ALLOWED_PACKAGES`). `segno` (already approved, Phase 2) is reused for TOTP QR-code rendering
+  instead of adding a new `qrcode` dependency. `tests/accessibility/package.json` +
+  `package-lock.json` (npm, axe-core only — outside the Python dependency graph entirely; see
+  design decision 4).
+- **`config/settings/base.py`**: `django_otp`/`django_otp.plugins.otp_totp`/`django_ratelimit` in
+  `INSTALLED_APPS`; `OTPMiddleware`/`RatelimitMiddleware` in `MIDDLEWARE`;
+  `DATA_UPLOAD_MAX_MEMORY_SIZE`/`FILE_UPLOAD_MAX_MEMORY_SIZE`/`DATA_UPLOAD_MAX_NUMBER_FIELDS`;
+  `RATELIMIT_USE_CACHE`/`RATELIMIT_VIEW`; `config.context_processors.nav` added to `TEMPLATES`.
+- **`config/settings/test.py`**: SQLite `OPTIONS: {"timeout": 30}`;
+  `SILENCED_SYSTEM_CHECKS` for `django_ratelimit.E003`/`W001` (LocMemCache-only, test-settings-only).
+- **`config/urls.py`**: `MedRelayLoginView`/`MfaVerifyView`/`MfaEnrollView` routes
+  (`apps.accounts.mfa`); `apps.audit.urls` included at `/audit/`.
+- **`config/context_processors.py`**: new `nav()` processor.
+- **`apps/audit/`**: `models.py` (`AuditEvent`, append-only, same ORM-enforcement pattern as
+  `DeliveryStatusTransition`), `signals.py`, `admin.py`, `views.py`, `urls.py`,
+  `migrations/0001_initial.py`, `tests/{test_models,test_signals,test_views}.py`.
+  `apps.organizations.services`: `AUDIT_VIEWER_ROLES`/`can_view_audit_log`, `is_mfa_eligible`.
+- **`apps/accounts/mfa.py`** (new): `MedRelayLoginView`/`MfaVerifyView`/`MfaEnrollView`/
+  `TOTPCodeForm`; `apps/accounts/tests/test_mfa.py`.
+- **`apps/recipient/views.py`**: rate limiting (`django-ratelimit` decorators) +
+  `ratelimited_view`; `apps/recipient/tests/test_rate_limiting.py`.
+- **`apps/custody/validators.py`** (new): `MAX_SIGNATURE_DATA_URL_LENGTH`/
+  `SignatureTooLargeError`/`check_signature_data_url_length`; wired into
+  `apps/custody/models.py` (model-level `MaxLengthValidator`) and `apps/custody/services.py`
+  (explicit pre-save check, since the JSON-in/JSON-out courier endpoints never call
+  `full_clean()`); `apps/couriers/views.py` catches the new exception and returns 413.
+  `apps/incidents/models.py`'s `Incident.SUMMARY_MAX_LENGTH` + `apps/incidents/services.py`'s
+  matching check (courier-submitted via `ReportIncidentView`'s JSON body).
+  `apps/deliveries/forms.py`'s `facility_instructions`/`attestation_notes` gain `max_length=2000`;
+  matching model-level caps on `apps.deliveries.models.DeliveryRequest.facility_instructions` and
+  `apps.cargo.models.PackagingAttestation.notes`. Migrations:
+  `apps/cargo/migrations/0009_alter_packagingattestation_notes.py`,
+  `apps/custody/migrations/0002_alter_proofofdelivery_signature_data_url_and_more.py`,
+  `apps/deliveries/migrations/0003_alter_deliveryrequest_facility_instructions.py`,
+  `apps/incidents/migrations/0002_alter_incident_summary.py`.
+- **Design system**: `templates/base.html` (Tailwind CDN + global `@layer base` styles + skip-link
+  + single global messages render), `templates/partials/nav.html` (new), `templates/couriers/
+  base.html` (rebuilt on Tailwind utilities), and every other existing template (organizations,
+  facilities, deliveries, dispatch, incidents, billing, notifications, reporting, recipient,
+  registration) converted from inline `style="..."` to the shared design system, with accessibility
+  fixes (labels, `aria-live` status regions, `aria-label` on unlabeled inputs,
+  `role="alert"`/`role="status"`) applied in the same pass. New: `templates/registration/
+  {mfa_verify,mfa_enroll}.html`, `templates/audit/event_list.html`.
+- **Docs**: `docs/BACKUP_RESTORE.md` (new), `docs/THREAT_MODEL.md` (new), `docs/COST_AUDIT.md`
+  (regenerated, 24 dependencies now).
+- **Tests**: `tests/accessibility/test_axe_scans.py` (new), `tests/e2e/
+  test_dispatch_critical_path.py` (new); `apps/dispatch/tests/test_concurrency.py` (retry logic).
+
+## Accessibility pass (axe-core via Playwright) — detailed results
+
+Scanned (WCAG 2A/2AA rule sets): the login page, the organization list, the facility list, the
+dispatch board, the courier job-offer list (at a 390×844 mobile viewport, per
+`docs/PRODUCT_REQUIREMENTS.md` section 6), and the anonymous recipient tracking page — the exact
+set named in the roadmap.
+
+**Before fixes**, 6/6 pages failed with `serious`-impact `color-contrast` violations:
+
+- `templates/partials/nav.html`'s links (`Organizations`/`Facilities`/`Dispatch Board`/`Incidents`/
+  `Notifications`/`MFA`/the `MedRelay` brand link) inherited the new global `@layer base` `a {
+  color: text-rose-800 }` default (dark maroon) against the dark `bg-rose-900` nav background —
+  measured contrast ratio **1.19:1**, nowhere near the 4.5:1 WCAG AA minimum for normal text —
+  because nothing in `nav.html` overrode that default with an explicit light-text utility class.
+  Found on org list/facility list/dispatch board/courier offers/recipient tracking (everywhere the
+  nav renders).
+- `templates/base.html`'s `<footer>` (`text-slate-400` on white, contrast **2.45:1**) and
+  `templates/dispatch/board_detail.html`'s ineligible-candidate table rows (same `text-slate-400`
+  class) were also under threshold. Found on the login page (footer only, no nav there) and
+  proactively fixed in `board_detail.html` too (not one of the six required pages, but the same
+  underlying class).
+
+**Fix**: added explicit `text-white` to every nav link/button in `nav.html`; changed
+`text-slate-400` → `text-slate-600` (≈7:1 contrast) in the footer and the dispatch-detail
+ineligible-row styling.
+
+**After fixes**: a full re-scan of all six required pages found **zero violations at any severity**
+(not just critical/serious) — `tests/accessibility/test_axe_scans.py`'s 6 tests all pass, and a
+separate diagnostic run confirmed the moderate/minor violation lists were also empty, so there is
+nothing deferred to write up as an accepted minor finding.
+
+## TOTP MFA — real test results
+
+`apps/accounts/tests/test_mfa.py` (9 tests, all passing) uses a **real** `django_otp`
+`TOTPDevice` and a **real** code generated via `django_otp.oath.totp(device.bin_key)` — never a
+hardcoded stub:
+
+- `test_org_owner_can_enroll_and_confirm_with_a_real_generated_code` — a customer-org owner
+  enrolls, and confirmation only succeeds with the actual current generated code.
+- `test_ordinary_customer_org_user_without_a_managing_role_cannot_enroll` /
+  `test_internal_staff_can_enroll` — enrollment eligibility matches `is_mfa_eligible` exactly.
+- `test_enrollment_rejects_an_incorrect_code` — a wrong code leaves the device unconfirmed.
+- `test_login_without_an_enrolled_device_does_not_require_mfa` — unenrolled accounts are
+  unaffected (opt-in, per design decision 5).
+- `test_login_with_an_enrolled_device_defers_the_session_until_verify` — a real POST to
+  `/accounts/login/` with the correct password does **not** establish an authenticated session
+  when a confirmed device exists; a protected page (`/organizations/`) still redirects to login.
+- `test_mfa_verify_rejects_a_wrong_code_without_completing_login` /
+  `test_mfa_verify_accepts_the_real_generated_code_and_completes_login` — split into two tests
+  (rather than one "wrong then right" scenario) after discovering `django-otp`'s own real,
+  per-device throttling (`TOTPDevice`'s `ThrottlingMixin`) imposes a short cooldown after any
+  failed attempt, which would otherwise make an immediately-following correct attempt fail too —
+  a real, empirically-found interaction, documented in the test file rather than worked around
+  silently. With a fresh device/session, the real generated code completes login and the session
+  can then reach a protected page.
+
+## Rate-limiting — real test results
+
+`apps/recipient/tests/test_rate_limiting.py` (2 tests, passing): 6 rapid POSTs to the recipient
+PIN-verification endpoint against the same token — the first 5 are processed normally (400, wrong
+PIN), and the 6th is rejected with a genuine `429`, with no PIN-validity information leaked in the
+rejection response.
+
+## Playwright critical-path test — real result
+
+`tests/e2e/test_dispatch_critical_path.py::
+test_dispatcher_logs_in_and_assigns_a_courier_through_the_real_dispatch_board` — a real Chromium
+browser session: logs in as a dispatcher through the real `/accounts/login/` view, views the
+dispatch board, opens a specific delivery's dispatch detail page, submits the real HTML assign
+form for an eligible courier, and confirms the assignment landed both in the reloaded page's DOM
+and in the database (`DeliveryAssignment`/`DeliveryRequest.status`). Reuses the exact working
+Playwright/Chromium setup from Phase 5's `tests/integration/test_pwa_browser.py`. Passed on first
+run and on 4 repeated runs with no flakiness observed.
+
+## PHI sweep — findings
+
+Grep-based sweep (documented here, not just performed silently) across every `apps/*/models.py`,
+every `apps/*/migrations/*.py`, `apps/*/forms.py`/`services.py`, and `demo_data/` for
+`diagnos|lab.?result|clinical|medication|prescription|ssn|social.?security|insurance|patient|mrn|
+medical.?record|date.?of.?birth` (case-insensitive): **every match is either (a) a docstring/
+help_text explicitly disclaiming the category** (e.g. `apps/cargo/models.py`: "Never diagnosis/
+clinical content"), **(b) a legitimate non-clinical enum/label** (`OrganizationType.DIAGNOSTIC_LAB`
+— a customer-org *classification*, not patient data; `CargoClassCode.CLASS_3`'s "Sealed
+Non-Controlled Prescription Medication" — a cargo *category* label, never medication contents/
+indication/dosage data), or **(c) an active test assertion enforcing the prohibition**
+(`apps/notifications/tests/test_payload.py`, `apps/organizations/tests/test_seed_demo_data.py::
+test_seed_demo_data_users_have_no_clinical_fields`). No field anywhere stores a real diagnosis,
+lab result, clinical note, medication indication, SSN, insurance identifier, date of birth, or
+medical record number. `demo_data/` remains an empty placeholder (all synthetic seed data lives in
+`apps/organizations/management/commands/seed_demo_data.py`, as established in Phase 1).
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`source .venv/bin/activate && export DJANGO_SETTINGS_MODULE=config.settings.test`.
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+264 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 264 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (2 silenced).
+```
+(the 2 silenced checks are `django_ratelimit.E003`/`W001`, silenced only in
+`config/settings/test.py` — see design decision 6)
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+
+### `pytest --cov --cov-report=term-missing`
+```
+549 passed in 29.04s
+```
+Coverage: 95% (4967 statements, 242 missed). Every new Phase 8 module is at or near 100% (audit
+100%, accounts/mfa full-path-covered by `test_mfa.py`, custody validators 100%); remaining misses
+are concentrated in the same pre-Phase-8 environment-entrypoint gaps (`config/asgi.py`,
+`config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`) plus a handful of defensive
+branches, consistent with every prior phase's honest coverage reporting.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 24 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+(24, up from 20 at the end of Phase 7 — `django-otp`, `django-ratelimit` added; axe-core is npm-side
+tooling, outside this Python dependency audit's scope by design — see design decision 4)
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from Phase 7. New synthetic demo-only credentials this
+phase (`MfaPhase8Test!2026`, `MedRelayAxeScanTest!2026`, `MedRelayDispatchE2ETest!2026`,
+`AuditSignalTest!2026`, `AuditViewTest!2026`, and a deliberately-wrong test login credential  # pragma: allowlist secret
+fixture) are all marked `# pragma: allowlist secret` inline, same convention as every prior phase.
+
+## Backup/restore — actually executed, not just documented
+
+See `docs/BACKUP_RESTORE.md` for the full write-up. Summary: a real, disposable PostGIS container
+(the same `postgis/postgis:17-3.5` image `compose.yaml` uses) was started, migrated (38
+migrations across every app, including `django-otp`'s own `otp_totp` migrations), seeded with
+`seed_demo_data` (3 organizations, 8 facilities, 18 memberships, 25 users), backed up with a real
+`pg_dump -Fc`, had its database **dropped and recreated** (`DROP DATABASE`/`CREATE DATABASE` — not
+merely truncated), restored with `pg_restore`, and re-verified with the identical row counts and
+organization names as before the drop. This was a genuine round-trip, executed and confirmed in
+this session, not commands reviewed-but-not-run. Valkey is documented as intentionally not backed
+up (pure cache/broker state — see that doc for the full reasoning).
+
+## Threat model
+
+See `docs/THREAT_MODEL.md` for the full document: tenant-isolation bypass, recipient-link/PIN
+brute-force, custody-chain tampering (with its honest ORM-level-vs-database-level limitation
+restated), notification data leakage, courier location/tracking privacy, session/CSRF, plus a
+"other relevant surfaces" section (SQL injection, XSS, upload/input DoS, secret leakage,
+dependency/supply-chain risk, idempotency/concurrency) and an explicit "out of scope" section
+citing `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8's professional-review gates.
+
+## Known gaps / deviations (honest list)
+
+- **MFA is opt-in, not enforced** for any account, including privileged ones — a deliberate Phase 8
+  scope decision (see design decision 5), not an oversight. A real pilot should decide whether to
+  make it mandatory for specific roles.
+- **Rate limiting is per-IP/per-token via a shared cache, not a hard per-token lockout** — a
+  distributed attacker spreading attempts across many IPs is still bounded by the 5/minute
+  per-token limit (impractically slow for a 6-digit PIN, but not mathematically zero). See
+  `docs/THREAT_MODEL.md` section 2.
+- **Custody-chain/audit-event append-only enforcement remains ORM-level, not database-level** — no
+  Postgres `REVOKE`/trigger backs this yet (an explicit, honest limitation restated in
+  `docs/THREAT_MODEL.md` section 3, inherited from Phase 6's own documented limitation on
+  `CustodyEvent`).
+- **Upload/input-limits pass is not exhaustive**: internal-staff-only free-text fields
+  (`Organization.notes`, `Facility.notes`/`access_instructions`, `DispatchOverride.reason`,
+  `IncidentAction.note`, admin-only resolution notes) were reviewed but left at their existing
+  unbounded `TextField` — reachable only by authenticated internal/admin users, not the public/
+  courier-facing surfaces this pass prioritized, and still bounded transitively by
+  `DATA_UPLOAD_MAX_MEMORY_SIZE`. See the "Files created/changed" section above for the exact list
+  of fields that *were* capped.
+- **No dependency-vulnerability scanning** (e.g. `pip-audit`, Dependabot alerts) wired into CI —
+  `audit_cost` checks cost-policy compliance, not upstream package compromise. Flagged in
+  `docs/THREAT_MODEL.md` section 7 as reasonable future work.
+- **No automated/scheduled backups, point-in-time recovery, or backup-file encryption** — all
+  explicitly out of scope for `DEMO_MODE` per `docs/BACKUP_RESTORE.md`'s own "what this document
+  does not cover" section.
+- **`CourierLocationPing` has no data-retention/purge policy** — rows accumulate indefinitely in
+  this prototype (synthetic data only). Flagged in `docs/THREAT_MODEL.md` section 5.
+- Coverage is 95%, not 100% — no hard coverage threshold is a gate; see the quality-gate section
+  above for exactly where the gaps are.
+- Not yet built / explicitly deferred beyond Phase 8 (per the roadmap): Phase 9's free public
+  demonstration deployment and Phase 10's pilot-readiness review remain untouched by this phase.
+
+## Commit history for this phase
+
+(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.
+As with every prior phase, this doc cannot contain the hash of the commit that introduces its own
+final content, so a small follow-up commit records that hash here.)
