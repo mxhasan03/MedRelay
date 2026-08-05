@@ -11,6 +11,17 @@ urlpatterns = [
     path("", views.CourierHomeView.as_view(), name="courier-home"),
     path("offers/", views.JobOfferListView.as_view(), name="courier-job-offer-list"),
     path(
+        "availability/",
+        views.CourierAvailabilityView.as_view(),
+        name="courier-availability",
+    ),
+    path(
+        "availability/update/",
+        views.CourierAvailabilityUpdateView.as_view(),
+        name="courier-availability-update",
+    ),
+    path("profile/", views.CourierProfileView.as_view(), name="courier-profile"),
+    path(
         "offers/<int:pk>/accept/",
         views.JobOfferAcceptView.as_view(),
         name="courier-job-offer-accept",

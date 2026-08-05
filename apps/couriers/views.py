@@ -44,6 +44,10 @@ from apps.couriers.services import (
     COURIER_ADVANCE_SEQUENCE,
     advance_delivery_status,
     can_access_courier_portal,
+    cargo_handling_boundary_text,
+    credential_expiration_summary,
+    delivery_timeline_steps,
+    update_courier_availability,
 )
 from apps.custody.services import (
     PinVerificationError,
@@ -132,6 +136,99 @@ class JobOfferListView(CourierPermissionMixin, TemplateView):
             .select_related("delivery_request")
             .prefetch_related("delivery_request__stops__facility")
         )
+        return context
+
+
+class CourierAvailabilityView(CourierPermissionMixin, TemplateView):
+    """`GET /couriers/availability/` — the logged-in courier's own
+    online/offline, shift window, current service zone, and configured
+    capacity (docs/PRODUCT_REQUIREMENTS.md section 6 "Availability"), read
+    from `apps.couriers.models.CourierAvailability`. Update happens via
+    `CourierAvailabilityUpdateView` below."""
+
+    template_name = "couriers/availability.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        from apps.couriers.models import CourierAvailability
+        from apps.facilities.models import ServiceZone
+
+        context = super().get_context_data(**kwargs)
+        courier = _actor(self.request).courier_profile
+        availability, _ = CourierAvailability.objects.get_or_create(courier=courier)
+        context["availability"] = availability
+        context["service_zones"] = ServiceZone.objects.filter(is_active=True)
+        return context
+
+
+class CourierAvailabilityUpdateView(CourierPermissionMixin, View):
+    """`POST /couriers/availability/update/` — update the logged-in courier's
+    OWN `CourierAvailability` only (the courier is always derived from
+    `request.user.courier_profile`, never from a client-supplied id, so a
+    courier can never target another courier's row). JSON in/out,
+    Idempotency-Key protected per this app's established pattern, submitted
+    via `MedRelayCourier.submitAction` from `couriers/availability.html`."""
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        courier = _actor(request).courier_profile
+        payload = _json_body(request)
+        key = _idempotency_key(request, payload)
+        if not key:
+            return JsonResponse({"error": "An Idempotency-Key is required."}, status=400)
+
+        def _do() -> dict[str, Any]:
+            availability = update_courier_availability(
+                courier,
+                is_online=bool(payload.get("is_online", False)),
+                current_service_zone_id=payload.get("current_service_zone_id") or None,
+                shift_start=payload.get("shift_start") or None,
+                shift_end=payload.get("shift_end") or None,
+                max_concurrent_deliveries=payload.get("max_concurrent_deliveries"),
+            )
+            return {
+                "is_online": availability.is_online,
+                "current_service_zone_id": availability.current_service_zone_id,
+                "shift_start": (
+                    availability.shift_start.isoformat() if availability.shift_start else None
+                ),
+                "shift_end": (
+                    availability.shift_end.isoformat() if availability.shift_end else None
+                ),
+                "max_concurrent_deliveries": availability.max_concurrent_deliveries,
+            }
+
+        try:
+            data, status_code = idempotent_call(
+                courier=courier, endpoint="availability_update", key=key, fn=_do
+            )
+        except ValidationError as exc:
+            message = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+            return JsonResponse({"error": message}, status=400)
+        return JsonResponse(data, status=status_code)
+
+
+class CourierProfileView(CourierPermissionMixin, TemplateView):
+    """`GET /couriers/profile/` — read-only onboarding/profile screen: identity
+    review/driver-license/insurance status, vehicles, equipment, cargo
+    authorizations, training records, and credential expiration warnings
+    (docs/PRODUCT_REQUIREMENTS.md section 6 "Onboarding profile"). No
+    submission/upload path exists here or anywhere in this app — real
+    credential documents are never stored, per
+    docs/SECURITY_COMPLIANCE_BOUNDARIES.md."""
+
+    template_name = "couriers/profile.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        courier = _actor(self.request).courier_profile
+        context["courier"] = courier
+        context["vehicles"] = courier.vehicles.filter(is_active=True)
+        context["equipment"] = courier.equipment.filter(is_active=True)
+        context["cargo_authorizations"] = courier.cargo_authorizations.filter(
+            is_active=True
+        ).select_related("cargo_class")
+        context["training_records"] = courier.training_records.all()
+        context["credential_summary"] = credential_expiration_summary(courier=courier)
+        context["credentials"] = courier.credentials.all()
         return context
 
 
@@ -229,6 +326,8 @@ class ActiveDeliveryView(CourierPermissionMixin, DetailView):
         context["recipient_verification_method"] = delivery_request.recipient_verification_method
         context["incident_categories"] = IncidentCategory.choices
         context["incident_severities"] = IncidentSeverity.choices
+        context["cargo_handling_boundary"] = cargo_handling_boundary_text(delivery_request)
+        context["timeline_steps"] = delivery_timeline_steps(delivery_request)
         return context
 
 

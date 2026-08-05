@@ -1,0 +1,145 @@
+{% extends "couriers/base.html" %}
+{% block title %}Profile — MedRelay (Demo Prototype){% endblock %}
+{% block courier_content %}
+<h1>Profile &amp; Onboarding</h1>
+<p>Read-only. This is a synthetic-data demo prototype — there is no document
+   upload anywhere in this app; credential evidence below is a placeholder
+   label only, never a real uploaded document
+   (docs/SECURITY_COMPLIANCE_BOUNDARIES.md).</p>
+
+<div class="card">
+  <h2>Account status</h2>
+  <p>Courier status:
+    {% if courier.status == "approved" %}
+    <span class="badge badge-green">{{ courier.get_status_display }}</span>
+    {% elif courier.status == "suspended" %}
+    <span class="badge badge-red">{{ courier.get_status_display }}</span>
+    {% else %}
+    <span class="badge badge-neutral">{{ courier.get_status_display }}</span>
+    {% endif %}
+  </p>
+  <p>Identity review:
+    {% if courier.identity_review_status == "approved" %}
+    <span class="badge badge-green">{{ courier.get_identity_review_status_display }}</span>
+    {% elif courier.identity_review_status == "rejected" %}
+    <span class="badge badge-red">{{ courier.get_identity_review_status_display }}</span>
+    {% else %}
+    <span class="badge badge-amber">{{ courier.get_identity_review_status_display }}</span>
+    {% endif %}
+  </p>
+  <p>Driver license:
+    {% if courier.driver_license_status == "valid" %}
+    <span class="badge badge-green">{{ courier.get_driver_license_status_display }}</span>
+    {% elif courier.driver_license_status == "expired" or courier.driver_license_status == "rejected" %}
+    <span class="badge badge-red">{{ courier.get_driver_license_status_display }}</span>
+    {% else %}
+    <span class="badge badge-amber">{{ courier.get_driver_license_status_display }}</span>
+    {% endif %}
+  </p>
+  <p>Insurance:
+    {% if courier.insurance_status == "valid" %}
+    <span class="badge badge-green">{{ courier.get_insurance_status_display }}</span>
+    {% elif courier.insurance_status == "expired" or courier.insurance_status == "rejected" %}
+    <span class="badge badge-red">{{ courier.get_insurance_status_display }}</span>
+    {% else %}
+    <span class="badge badge-amber">{{ courier.get_insurance_status_display }}</span>
+    {% endif %}
+  </p>
+  {% if courier.home_service_zone %}
+  <p>Home service zone: {{ courier.home_service_zone.name }} ({{ courier.home_service_zone.get_borough_display }})</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Credential expiration warnings</h2>
+  {% if credential_summary.expired %}
+  <p><span class="badge badge-red">Expired</span></p>
+  <ul>
+    {% for credential in credential_summary.expired %}
+    <li>{{ credential.get_credential_type_display }} &mdash; expired {{ credential.expires_on }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if credential_summary.expiring_soon %}
+  <p><span class="badge badge-amber">Expiring within 30 days</span></p>
+  <ul>
+    {% for credential in credential_summary.expiring_soon %}
+    <li>{{ credential.get_credential_type_display }} &mdash; expires {{ credential.expires_on }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if not credential_summary.expired and not credential_summary.expiring_soon %}
+  <p>No expired or soon-to-expire credentials.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Credentials</h2>
+  {% if not credentials %}
+  <p>No credentials on file.</p>
+  {% endif %}
+  {% for credential in credentials %}
+  <p>
+    {{ credential.get_credential_type_display }} &mdash;
+    {% if credential.status == "approved" %}
+    <span class="badge badge-green">{{ credential.get_status_display }}</span>
+    {% elif credential.status == "expired" or credential.status == "rejected" or credential.status == "revoked" %}
+    <span class="badge badge-red">{{ credential.get_status_display }}</span>
+    {% else %}
+    <span class="badge badge-amber">{{ credential.get_status_display }}</span>
+    {% endif %}
+    {% if credential.expires_on %}(expires {{ credential.expires_on }}){% endif %}
+  </p>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Vehicles</h2>
+  {% if not vehicles %}
+  <p>No active vehicles on file.</p>
+  {% endif %}
+  {% for vehicle in vehicles %}
+  <p>{{ vehicle.get_vehicle_type_display }}
+    {% if vehicle.make or vehicle.model_name %}&mdash; {{ vehicle.make }} {{ vehicle.model_name }}{% endif %}
+    {% if vehicle.supports_refrigeration %}<span class="badge badge-blue">Refrigerated</span>{% endif %}
+  </p>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Equipment</h2>
+  {% if not equipment %}
+  <p>No active equipment on file.</p>
+  {% endif %}
+  {% for item in equipment %}
+  <p>{{ item.get_equipment_type_display }}
+    {% if item.supports_refrigeration %}<span class="badge badge-blue">Refrigerated</span>{% endif %}
+  </p>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Cargo authorizations</h2>
+  {% if not cargo_authorizations %}
+  <p>No active cargo authorizations on file.</p>
+  {% endif %}
+  {% for authorization in cargo_authorizations %}
+  <p>{{ authorization.cargo_class.name }}
+    {% if authorization.supports_refrigeration %}<span class="badge badge-blue">Refrigerated capable</span>{% endif %}
+  </p>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Training records</h2>
+  {% if not training_records %}
+  <p>No training records on file.</p>
+  {% endif %}
+  {% for record in training_records %}
+  <p>{{ record.get_training_type_display }}
+    {% if record.completed_on %}&mdash; completed {{ record.completed_on }}{% endif %}
+    {% if record.expires_on %}(expires {{ record.expires_on }}){% endif %}
+  </p>
+  {% endfor %}
+</div>
+{% endblock %}

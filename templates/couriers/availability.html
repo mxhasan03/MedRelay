@@ -1,0 +1,70 @@
+{% extends "couriers/base.html" %}
+{% block title %}Availability — MedRelay (Demo Prototype){% endblock %}
+{% block courier_content %}
+<h1>Availability</h1>
+<p>This controls whether you receive job offers at all — reused directly by
+   the dispatch eligibility engine's "unavailable"/"outside service zone"/
+   "capacity exceeded" checks (apps.couriers.eligibility).</p>
+
+<div class="card">
+  <p>
+    Current status:
+    {% if availability.is_online %}
+    <span class="badge badge-green">Online</span>
+    {% else %}
+    <span class="badge badge-neutral">Offline</span>
+    {% endif %}
+  </p>
+
+  <label>
+    <input type="checkbox" id="avail-online" {% if availability.is_online %}checked{% endif %}>
+    Online (available for job offers)
+  </label>
+
+  <label for="avail-zone">Current service zone:</label>
+  <select id="avail-zone">
+    <option value="">— None —</option>
+    {% for zone in service_zones %}
+    <option value="{{ zone.pk }}" {% if availability.current_service_zone_id == zone.pk %}selected{% endif %}>
+      {{ zone.name }} ({{ zone.get_borough_display }})
+    </option>
+    {% endfor %}
+  </select>
+
+  <label for="avail-shift-start">Shift start (optional — blank means no shift restriction while online):</label>
+  <input type="time" id="avail-shift-start" value="{% if availability.shift_start %}{{ availability.shift_start|time:'H:i' }}{% endif %}">
+
+  <label for="avail-shift-end">Shift end (optional):</label>
+  <input type="time" id="avail-shift-end" value="{% if availability.shift_end %}{{ availability.shift_end|time:'H:i' }}{% endif %}">
+
+  <label for="avail-max-concurrent">Max concurrent deliveries (your configured capacity limit):</label>
+  <input type="number" id="avail-max-concurrent" min="0" value="{{ availability.max_concurrent_deliveries }}">
+
+  <button class="btn" data-url="{% url 'courier-availability-update' %}" onclick="submitAvailability(this)">Save availability</button>
+  <p id="availability-status" role="status" aria-live="polite" class="text-sm mt-1"></p>
+</div>
+{% endblock %}
+{% block courier_scripts %}
+<script>
+function submitAvailability(btn) {
+  var body = {
+    is_online: document.getElementById("avail-online").checked,
+    current_service_zone_id: document.getElementById("avail-zone").value || null,
+    shift_start: document.getElementById("avail-shift-start").value || null,
+    shift_end: document.getElementById("avail-shift-end").value || null,
+    max_concurrent_deliveries: document.getElementById("avail-max-concurrent").value,
+  };
+  MedRelayCourier.submitAction(btn.getAttribute("data-url"), body, function (ok, data) {
+    var el = document.getElementById("availability-status");
+    if (ok) {
+      el.textContent = "Availability updated.";
+      window.location.reload();
+    } else if (data.queued) {
+      el.textContent = "Offline — queued, will retry automatically.";
+    } else {
+      el.textContent = "Error: " + (data.error || "could not update availability");
+    }
+  });
+}
+</script>
+{% endblock %}
