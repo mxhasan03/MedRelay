@@ -76,20 +76,14 @@ services:
     region: oregon
     autoDeployTrigger: commit
     healthCheckPath: /healthz/
-    # `dockerCommand` is exec'd directly, NOT through a shell — Render does not wrap it in
-    # `/bin/sh -c` the way a Dockerfile's shell-form CMD implicitly does. An earlier version of
-    # this file relied on that assumption and shipped a bare `cmd1 && cmd2 && cmd3` string, which
-    # Render then split on whitespace and fed to `manage.py collectstatic` as literal arguments —
-    # confirmed in production by the exact failure: `collectstatic: error: unrecognized
-    # arguments: && python manage.py migrate && ...`. `&&` is shell syntax; without an actual
-    # shell process interpreting it, it's just a nonsense argv token. The fix is to explicitly
-    # invoke `sh -c "..."` so a real shell parses the `&&` chain — the whole chained command must
-    # be a single quoted argument to `-c`, not four bare words.
-    dockerCommand: >-
-      sh -c "python manage.py collectstatic --noinput &&
-      python manage.py migrate --noinput &&
-      python manage.py seed_full_demo &&
-      gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+    # `dockerCommand` has undocumented, quirky string-tokenization behavior — two different
+    # inline `&&`-chained values were both tried in production and both failed in different ways
+    # (see scripts/render_start.sh's own comment header for the full account of both failures).
+    # Rather than keep guessing at Render's exact parsing rules for quotes/operators, the real
+    # multi-step start sequence now lives in a real script file, and this field is reduced to the
+    # simplest possible value: two plain words, no quotes, no `&&`, no `$`, nothing left for any
+    # tokenizer to misinterpret.
+    dockerCommand: sh /app/scripts/render_start.sh
     envVars:
       # Selects config/settings/demo_render.py (see that module's own
       # docstring for exactly what it adds on top of config/settings/demo.py

@@ -4380,3 +4380,46 @@ in this codebase's own test/verification history ever exercised Render's specifi
 `dockerCommand` exec behavior until the owner's real deployment did. This is a genuine gap in prior
 verification coverage, not a contradiction of anything previously claimed as tested.
 
+### Follow-up same day: the `sh -c "..."` fix above also failed, differently
+
+The `sh -c "cmd1 && cmd2 && cmd3"` fix committed above (`010e9bb`) was pushed, and Render's
+Blueprint-managed auto-deploy picked up the new commit and rebuilt the image — but the deploy
+still failed, this time with a different, stranger error:
+
+```
+sh: 1: python manage.py collectstatic --noinput && python manage.py migrate --noinput && python manage.py seed_full_demo && gunicorn config.wsgi:application --bind 0.0.0.0:10000: not found
+```
+
+Note `$PORT` was correctly expanded to `10000` (proving a real shell process *did* run and *did*
+expand it), yet the entire `&&`-chained line was still treated as one literal, non-existent command
+name rather than being parsed as shell syntax. The exact mechanism inside Render's `dockerCommand`
+handling that produces this (some combination of how it tokenizes quoted values and/or when it
+performs environment-variable substitution relative to that tokenizing) was not conclusively
+determined — and rather than keep guessing at further quoting variations against a real, undocumented,
+third-party parser, the fix was to stop depending on Render's `dockerCommand` string parsing at all:
+
+**Fix**: added `scripts/render_start.sh`, a real shell script (`set -e`; `collectstatic` →
+`migrate` → `seed_full_demo` → `exec gunicorn ... --bind "0.0.0.0:${PORT:-8000}"`) committed to the
+repository and copied into the image by the existing `COPY . .` Dockerfile step (no Dockerfile
+change needed). `render.yaml`'s `dockerCommand` is now just `sh /app/scripts/render_start.sh` —
+two plain words, no quotes, no `&&`, no `$`, nothing left for any upstream tokenizer to
+misinterpret regardless of its exact (undocumented) parsing rules.
+
+**Re-verified end-to-end** against a fresh real Postgres/PostGIS container, this time invoking the
+literal final command (`sh /app/scripts/render_start.sh`, not a hand-rolled equivalent): full
+migration set applied, `seed_full_demo` completed, `gunicorn` started as PID 1 (via the script's
+`exec`, so it receives signals directly rather than being a child of a lingering shell — a small
+correctness improvement over the earlier inline-command versions), `/healthz/` and `/readyz/` both
+returned 200. Verification containers/network/image removed afterward.
+
+**Files changed this round**: `scripts/render_start.sh` (new), `render.yaml` (`dockerCommand`
+value only).
+
+**Why this is more robust than either prior attempt**: both earlier fixes assumed a specific,
+unconfirmed model of how Render parses `dockerCommand` (no shell at all; then, a shell but with
+some other quoting quirk) and were each disproven by a real deploy. A plain `sh <path>` invocation
+has no quoting or operator-chaining for *any* parser to get wrong — it's just two whitespace-
+separated words, which is exactly the case the very first failure proved Render handles correctly
+(it's structurally identical to how `manage.py collectstatic --noinput` — itself just words with no
+special characters — got tokenized correctly, before the payload after it went wrong).
+
