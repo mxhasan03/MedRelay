@@ -4441,3 +4441,64 @@ way (documented above) are a real, if minor, example of the gap between "verifie
 "verified against the actual third-party platform's undocumented behavior" — worth remembering
 for any future hosting-platform change.
 
+## Dated addendum — 2026-08-05 (same day): a real, more serious bug found by actually looking at the live site
+
+After confirming the live deploy was reachable, the project owner reported the rendered login page
+showed a large block of raw, visible text above the login form — literally the contents of
+in-template documentation comments, verbatim, instead of being hidden.
+
+**Root cause, confirmed by direct testing, not guessed**: Django's `{# ... #}` template comment tag
+only strips comments that fit on a **single line** — its comment-matching regex does not match
+across newlines, so a `{# ... #}` span containing a line break is left as literal text in the
+rendered output rather than being removed. This was confirmed with a minimal reproduction directly
+against this project's own Django installation:
+
+```python
+Template('{# simple comment #}Hello').render(Context())        # -> 'Hello' (stripped correctly)
+Template('{# line one\nline two #}Hello').render(Context())    # -> '{# line one\nline two #}Hello' (NOT stripped)
+```
+
+This codebase's heavily-documented style — explaining *why* behind nearly every non-trivial
+decision, inline, in the file it applies to — used multi-line `{# ... #}` blocks for exactly this
+kind of documentation in several templates. Every one of them was silently leaking into rendered
+HTML in production the entire time; this was never caught locally because:
+
+- Phase 8's axe-core accessibility scans check contrast/ARIA/labels, not "does extraneous text
+  appear on the page" — leaked-but-readable text with fine contrast does not fail an accessibility
+  audit, so a clean axe-core run (genuinely clean, per that phase's own verification) says nothing
+  about this class of bug.
+- No prior phase's test suite asserted anything about rendered page *content* beyond specific
+  expected strings (e.g. the disclaimer banner, specific model data) — nothing was checking for the
+  *absence* of unexpected leaked text.
+
+**Found and fixed**: exactly 5 multi-line `{# ... #}` blocks across 4 files (`templates/base.html`
+×2, `templates/couriers/base.html`, `templates/partials/nav.html`,
+`templates/dispatch/board_detail.html`), found by a repo-wide regex scan
+(`\{#(.*?)#\}` with `DOTALL`, filtered to matches containing a newline) rather than by eye, so the
+search was exhaustive rather than "found some, might have missed others." Each was converted to
+Django's `{% comment %}...{% endcomment %}` tag, which *does* support multi-line content correctly.
+
+**Re-verified end-to-end** against a real Postgres container running this exact fix: `curl`'d
+`/accounts/login/` before and after — before, `grep -c "Tailwind CSS via the CDN"` on the response
+body returned `1` (the bug, reproduced locally, confirming it was never Render-specific); after, `0`
+(clean), while `/healthz/` and `/readyz/` still returned 200 and the DEMO_MODE disclaimer banner
+still rendered correctly. The three other affected templates were confirmed clean via direct
+`get_template(...).render()` calls (courier PWA base, nav partial) or a targeted source-level check
+(the dispatch board detail template needs request-specific context to render at all, so it was
+checked by confirming no bare multi-line `{#` pattern remains in its source, consistent with the
+exhaustive regex scan already having found and fixed its one instance).
+
+**Regression test added**: `tests/integration/test_no_multiline_template_comments.py` statically
+scans every file under `templates/` for a `{# ... #}` span containing a newline and fails with the
+exact file/line location if it finds one — this runs on every future `pytest` invocation and in CI,
+so this exact class of bug cannot silently reappear in a fifth file without a test failure calling
+it out immediately, rather than requiring a human to notice a broken-looking live page again.
+
+**Disk-space note (environment-only, not a codebase issue)**: mid-investigation, this verification
+session's local Docker build cache had accumulated roughly 63GB across every phase's local
+Postgres/PostGIS container runs and image builds throughout this project's entire development
+history, filling the shared development machine's disk and causing a build to fail with
+`ResourceExhausted: ... no space left on device`. Resolved with `docker system prune -af --volumes`
+before continuing. Not a project defect — purely an artifact of how much local Docker-based
+verification this project's development process has genuinely performed, phase after phase.
+

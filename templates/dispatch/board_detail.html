@@ -33,10 +33,10 @@
     {% endif %}
 
     <h2>Ranked candidates</h2>
-    {# The "offer" form has no visible fields of its own — every checkbox/input
+    {% comment %} The "offer" form has no visible fields of its own — every checkbox/input
        that belongs to it lives inside the table below and points back at it
        via the HTML5 form="offer-form" attribute, so the <form> element itself
-       does not need to (invalidly) wrap table rows. #}
+       does not need to (invalidly) wrap table rows. {% endcomment %}
     <form method="post" action="{% url 'dispatch-offer' delivery_request.pk %}" id="offer-form">{% csrf_token %}</form>
     <table>
         <thead>

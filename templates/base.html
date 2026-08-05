@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MedRelay (Demo Prototype){% endblock %}</title>
     <link rel="icon" href="{% static 'icons/icon.svg' %}" type="image/svg+xml">
-    {# Tailwind CSS via the CDN "Play" build — Phase 8 design-system decision.
+    {% comment %} Tailwind CSS via the CDN "Play" build — Phase 8 design-system decision.
        docs/TECH_STACK_AND_ZERO_COST_POLICY.md names Tailwind as the design
        system and explicitly allows the CDN build for zero-build-step
        simplicity. This repository's Dockerfile/compose stack has no Node.js
@@ -20,9 +20,9 @@
        cdn.tailwindcss.com being reachable, exactly like any other
        CDN-hosted demo asset already accepted for this prototype (see
        docs/TECH_STACK_AND_ZERO_COST_POLICY.md's OpenStreetMap-derived data
-       note for the same class of tradeoff elsewhere in the stack). #}
+       note for the same class of tradeoff elsewhere in the stack). {% endcomment %}
     <script src="https://cdn.tailwindcss.com"></script>
-    {# Project-wide base-layer defaults, processed by the Tailwind CDN's
+    {% comment %} Project-wide base-layer defaults, processed by the Tailwind CDN's
        client-side `text/tailwindcss` handling (same mechanism used by
        templates/couriers/base.html). Putting these in Tailwind's `base`
        layer (rather than plain CSS) means any element-level utility class
@@ -32,7 +32,7 @@
        always override, not a competing styling system. This is what makes
        "consistent form styling, consistent table/list styling" (Phase 8)
        apply across every existing plain-HTML template without hand-editing
-       every element in every file. #}
+       every element in every file. {% endcomment %}
     <style type="text/tailwindcss">
       @layer base {
         h1 { @apply text-2xl font-bold text-slate-900 mb-4; }

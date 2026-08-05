@@ -6,13 +6,13 @@
 <meta name="csrf-token" content="{{ csrf_token }}">
 <link rel="manifest" href="{% url 'web-manifest' %}">
 <link rel="apple-touch-icon" href="{% static 'icons/icon.svg' %}">
-{# Mobile-first: this is explicitly the courier's phone-based tool
+{% comment %} Mobile-first: this is explicitly the courier's phone-based tool
    (docs/PRODUCT_REQUIREMENTS.md section 6) — large touch targets (44px
    minimum per common mobile-accessibility guidance), a single-column layout
    that never needs horizontal scrolling. Reusable `.btn`/`.card` component
    classes are defined with Tailwind's `@apply` via a `text/tailwindcss`
    style block, which the Tailwind CDN "Play" build processes client-side
-   (see templates/base.html's docstring on the CDN-vs-build-step decision). #}
+   (see templates/base.html's docstring on the CDN-vs-build-step decision). {% endcomment %}
 <style type="text/tailwindcss">
   .btn {
     @apply inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-base font-medium rounded-lg border border-rose-900 bg-rose-900 text-white px-4 py-2 no-underline m-1 ml-0;

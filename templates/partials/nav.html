@@ -1,4 +1,4 @@
-{# Shared top navigation — Phase 8 unified design system.
+{% comment %} Shared top navigation — Phase 8 unified design system.
 
 Role-aware via the `nav_*` context variables from
 `config.context_processors.nav` (computed once per request). This nav is
@@ -8,7 +8,7 @@ its own compact, mobile-first shell instead (docs/PRODUCT_REQUIREMENTS.md
 section 6 — the courier UI is a phone-first tool, not a desktop console),
 and the anonymous recipient tracking page
 (`templates/recipient/tracking.html`) renders no nav at all since it has no
-account to navigate from. #}
+account to navigate from. {% endcomment %}
 <nav aria-label="Main navigation" class="bg-rose-900 text-white">
     <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
         <a href="{% url 'organization-list' %}" class="font-bold text-lg tracking-tight text-white">MedRelay</a>
