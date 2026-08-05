@@ -5,6 +5,29 @@
 <p>Status: <strong>{{ delivery_request.get_status_display }}</strong></p>
 
 <div class="card">
+  <h2>Delivery progress</h2>
+  <ol class="relative border-l-2 border-slate-200 ml-3 py-1">
+    {% for step in timeline_steps %}
+    <li class="mb-4 ml-4 last:mb-0">
+      <span aria-hidden="true" class="absolute -left-[9px] mt-0.5 w-4 h-4 rounded-full border-2 border-white
+        {% if step.state == 'completed' %}bg-green-600{% elif step.state == 'current' %}bg-rose-800 ring-4 ring-rose-100{% else %}bg-slate-300{% endif %}"></span>
+      <p class="text-sm {% if step.state == 'current' %}font-semibold text-rose-900{% elif step.state == 'completed' %}text-slate-700{% else %}text-slate-400{% endif %}">
+        {{ step.label }}
+        {% if step.state == 'current' %}<span class="badge badge-blue">Current</span>
+        {% elif step.state == 'completed' %}<span class="badge badge-green">Done</span>
+        {% endif %}
+      </p>
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+
+<div class="card border-l-4 border-amber-500">
+  <h2>Cargo handling</h2>
+  <p class="font-medium">{{ cargo_handling_boundary }}</p>
+</div>
+
+<div class="card">
   <h2>Stops</h2>
   {% for stop in delivery_request.stops.all %}
   <p><strong>{{ stop.get_stop_type_display }}</strong>: {{ stop.facility.name }}<br>
@@ -131,15 +154,6 @@
   <p id="incident-report-status" role="status" aria-live="polite" class="text-sm mt-1"></p>
 </div>
 
-<div class="card">
-  <h2>Status timeline</h2>
-  <ul class="timeline">
-    {% for transition in transitions %}
-    <li>{{ transition.occurred_at }}: {{ transition.from_status|default:"(none)" }}
-      &rarr; {{ transition.to_status }}</li>
-    {% endfor %}
-  </ul>
-</div>
 {% endblock %}
 {% block courier_scripts %}
 <script>
