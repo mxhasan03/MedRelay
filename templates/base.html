@@ -58,6 +58,37 @@
         button.secondary, .btn.secondary { @apply bg-white text-rose-800; }
         button:disabled, .btn:disabled { @apply opacity-50 cursor-not-allowed; }
       }
+      {% comment %} Shared component classes — added during the dispatch-board UI
+         cleanup pass (see docs/CURRENT_STATUS.md for the write-up). `.btn`
+         above was already effectively a shared component (defined once
+         here, in `@layer base`, and usable from any template); `.card` was
+         not — it previously existed only as a page-local definition inside
+         `templates/couriers/base.html`'s own `<style>` block. It is added
+         here, in `@layer components` (Tailwind's documented layer between
+         `base` and unlayered utility classes), so org/facility/dispatch
+         pages can use one `.card` without duplicating the rule, while
+         `templates/couriers/base.html` keeps its own local `.card`/`.btn`
+         overrides completely untouched — that file is intentionally not
+         part of this pass (see its own docstring on the courier PWA's
+         mobile-first 44px-touch-target requirements, deliberately
+         different from these desktop-oriented ops-console defaults). Since
+         Tailwind's CDN "Play" build processes each `<style type=
+         "text/tailwindcss">` block independently in document order and
+         resolves `@layer` precedence across all of them, `.card` here does
+         not affect `.card`'s already-more-specific-by-cascade-order
+         definition in `templates/couriers/base.html`. {% endcomment %}
+      @layer components {
+        .card { @apply border border-slate-200 rounded-lg p-4 mb-4 bg-white shadow-sm; }
+        .badge {
+          @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold
+                 whitespace-nowrap no-underline;
+        }
+        .badge-neutral { @apply bg-slate-100 text-slate-700; }
+        .badge-blue { @apply bg-blue-100 text-blue-800; }
+        .badge-amber { @apply bg-amber-100 text-amber-900; }
+        .badge-green { @apply bg-green-100 text-green-800; }
+        .badge-red { @apply bg-red-100 text-red-800; }
+      }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
