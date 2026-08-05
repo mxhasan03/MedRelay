@@ -8,6 +8,15 @@ notifications are Phase 7 work (`apps.notifications`), not built here.
 
 Usage:
     python manage.py flag_expiring_credentials [--within-days 30]
+
+The actual "expired"/"expiring soon" query logic lives on
+`CourierCredentialQuerySet.expired`/`.expiring_within`
+(`apps.couriers.models`); this command calls
+`apps.couriers.services.credential_expiration_summary` (courier=None, i.e.
+across every courier) — the same shared function the courier-facing
+profile screen (`apps.couriers.views.CourierProfileView`) calls scoped to
+one courier — so the definition of "expiring" is never duplicated between
+the two call sites.
 """
 
 from __future__ import annotations
@@ -17,7 +26,7 @@ from typing import Any
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from apps.couriers.models import CourierCredential
+from apps.couriers.services import credential_expiration_summary
 
 
 class Command(BaseCommand):
@@ -38,16 +47,9 @@ class Command(BaseCommand):
         within_days: int = options["within_days"]
         today = timezone.localdate()
 
-        expired = list(
-            CourierCredential.objects.expired(as_of=today).select_related(
-                "courier__user", "reviewed_by"
-            )
-        )
-        expiring_soon = list(
-            CourierCredential.objects.expiring_within(within_days, as_of=today).select_related(
-                "courier__user", "reviewed_by"
-            )
-        )
+        summary = credential_expiration_summary(within_days=within_days, as_of=today)
+        expired = summary.expired
+        expiring_soon = summary.expiring_soon
 
         self.stdout.write(f"Credential expiration report — as of {today.isoformat()}")
         self.stdout.write("")
