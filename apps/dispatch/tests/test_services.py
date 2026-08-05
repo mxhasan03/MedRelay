@@ -51,15 +51,19 @@ from apps.dispatch.models import (
     JobOfferStatus,
     RoutePlan,
 )
+from apps.dispatch.scoring import rank_candidates
 from apps.dispatch.services import (
     accept_job_offer,
     assign_delivery,
     at_risk_delivery_ids,
+    best_candidate_sla_feasibility,
     decline_job_offer,
     offer_delivery,
     reassign_delivery,
     recommend_couriers,
+    sla_risk_by_delivery_id,
 )
+from apps.dispatch.sla import AT_RISK, INFEASIBLE
 from apps.dispatch.tests.factories import SLAProfileFactory
 from apps.facilities.tests.factories import FacilityFactory, ServiceZoneFactory
 
@@ -396,6 +400,79 @@ def test_at_risk_delivery_ids_excludes_comfortably_feasible_delivery() -> None:
     at_risk = at_risk_delivery_ids()
 
     assert delivery_request.pk not in at_risk
+
+
+# --- sla_risk_by_delivery_id / best_candidate_sla_feasibility (UI cleanup pass) --------
+
+
+def test_sla_risk_by_delivery_id_distinguishes_at_risk_from_infeasible() -> None:
+    """`DispatchCandidate.sla_feasibility` (`apps.dispatch.scoring`) already
+    separates `AT_RISK` (slack is thin but still positive) from `INFEASIBLE`
+    (slack is negative — mathematically cannot make the deadline); this is
+    a real, existing distinction in the data, not merely cosmetic — this
+    test proves `sla_risk_by_delivery_id` actually surfaces it rather than
+    collapsing both into one boolean the way the older `at_risk_delivery_ids`
+    still deliberately does for its own callers."""
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    _eligible_courier(cargo_class, zone)
+    baseline = rank_candidates(delivery_request)[0]
+    assert baseline.eligible
+
+    # Slack of +10 min against this service level's real (seeded, 90-min
+    # for "scheduled") minimum buffer: positive but well under the minimum
+    # -> AT_RISK, not INFEASIBLE.
+    delivery_request.required_delivery_by = baseline.estimated_delivery_at + datetime.timedelta(
+        minutes=10
+    )
+    delivery_request.save(update_fields=["required_delivery_by"])
+
+    risk = sla_risk_by_delivery_id()
+
+    assert risk[delivery_request.pk] == AT_RISK
+
+    # Same delivery, same courier: pushing required_delivery_by *before* the
+    # estimated delivery instant makes slack negative -> INFEASIBLE.
+    delivery_request.required_delivery_by = baseline.estimated_delivery_at - datetime.timedelta(
+        minutes=5
+    )
+    delivery_request.save(update_fields=["required_delivery_by"])
+
+    risk = sla_risk_by_delivery_id()
+
+    assert risk[delivery_request.pk] == INFEASIBLE
+
+
+def test_sla_risk_by_delivery_id_omits_comfortably_feasible_delivery() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    delivery_request.required_delivery_by = (
+        delivery_request.pickup_window_start + datetime.timedelta(hours=6)
+    )
+    delivery_request.save(update_fields=["required_delivery_by"])
+    _eligible_courier(cargo_class, zone)
+
+    risk = sla_risk_by_delivery_id()
+
+    assert delivery_request.pk not in risk
+
+
+def test_best_candidate_sla_feasibility_prefers_top_ranked_eligible_candidate() -> None:
+    zone = ServiceZoneFactory()
+    delivery_request, cargo_class = _ready_for_dispatch_delivery(pickup_zone=zone)
+    _eligible_courier(cargo_class, zone)
+    _ineligible_courier()
+
+    ranked = rank_candidates(delivery_request)
+
+    assert best_candidate_sla_feasibility(ranked) == ranked[0].sla_feasibility
+    # The top of `ranked` is the eligible candidate (ineligible candidates
+    # always sort after eligible ones — apps.dispatch.scoring.rank_candidates).
+    assert ranked[0].eligible
+
+
+def test_best_candidate_sla_feasibility_empty_list_returns_none() -> None:
+    assert best_candidate_sla_feasibility([]) is None
 
 
 # --- accept_job_offer / decline_job_offer (Phase 5) ---------------------------

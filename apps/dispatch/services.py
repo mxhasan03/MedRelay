@@ -574,27 +574,58 @@ def _build_route_plan(assignment: DeliveryAssignment) -> RoutePlan:
     return route_plan
 
 
-def at_risk_delivery_ids(*, as_of: datetime.datetime | None = None) -> set[Any]:
-    """IDs of open (`READY_FOR_DISPATCH`/`OFFERED`) delivery requests whose
-    single best-ranked eligible candidate's SLA feasibility is `"at_risk"` or
-    `"infeasible"` — the simple SLA-risk rule the dashboard surfaces
-    (docs/PRODUCT_REQUIREMENTS.md section 7 "at-risk deadlines"). Not a
-    background job/notification (that's Phase 7) — purely a query used at
-    render time.
+def best_candidate_sla_feasibility(candidates: list[DispatchCandidate]) -> str | None:
+    """The SLA feasibility (`apps.dispatch.sla.FEASIBLE`/`AT_RISK`/`INFEASIBLE`/
+    `NOT_EVALUATED`) of the single candidate a dispatcher would actually act
+    on: the top-ranked *eligible* candidate if one exists, else the
+    top-ranked candidate overall (for transparency when nobody is eligible
+    at all). `None` only if `candidates` is empty. Shared by
+    `sla_risk_by_delivery_id` (below) and `DispatchBoardDetailView` (so the
+    detail page's own SLA-risk badge always agrees with the board list's,
+    without a second, separate `rank_candidates` computation for the same
+    delivery)."""
+    eligible = [c for c in candidates if c.eligible]
+    best = eligible[0] if eligible else (candidates[0] if candidates else None)
+    return best.sla_feasibility if best is not None else None
+
+
+def sla_risk_by_delivery_id(*, as_of: datetime.datetime | None = None) -> dict[Any, str]:
+    """Maps every open (`READY_FOR_DISPATCH`/`OFFERED`) delivery request's ID
+    to its single best-ranked eligible candidate's SLA feasibility, for
+    every delivery whose feasibility is `"at_risk"` or `"infeasible"`
+    (`apps.dispatch.sla.AT_RISK`/`INFEASIBLE`) — the same simple SLA-risk
+    rule `at_risk_delivery_ids` (below) has always used
+    (docs/PRODUCT_REQUIREMENTS.md section 7 "at-risk deadlines"), refined to
+    a dict so a caller (the dispatch board template) can tell "at risk"
+    (slack getting thin) apart from "infeasible" (mathematically cannot make
+    the deadline) instead of collapsing both into one boolean, since
+    `DispatchCandidate.sla_feasibility` (`apps.dispatch.scoring`) already
+    carries that real distinction — this was previously discarded, not
+    missing data. Not a background job/notification (that's Phase 7) —
+    purely a query used at render time.
     """
     from apps.dispatch.sla import AT_RISK, INFEASIBLE
 
-    at_risk_ids: set[Any] = set()
+    risk_by_id: dict[Any, str] = {}
     candidates_by_delivery = DeliveryRequest.objects.filter(
         status__in=(DeliveryStatus.READY_FOR_DISPATCH, DeliveryStatus.OFFERED)
     )
     for delivery_request in candidates_by_delivery:
-        ranked = rank_candidates(delivery_request)
-        eligible = [c for c in ranked if c.eligible]
-        best = eligible[0] if eligible else (ranked[0] if ranked else None)
-        if best is not None and best.sla_feasibility in (AT_RISK, INFEASIBLE):
-            at_risk_ids.add(delivery_request.pk)
-    return at_risk_ids
+        ranked = rank_candidates(delivery_request, reference_instant=as_of)
+        feasibility = best_candidate_sla_feasibility(ranked)
+        if feasibility in (AT_RISK, INFEASIBLE):
+            risk_by_id[delivery_request.pk] = feasibility
+    return risk_by_id
+
+
+def at_risk_delivery_ids(*, as_of: datetime.datetime | None = None) -> set[Any]:
+    """IDs of open (`READY_FOR_DISPATCH`/`OFFERED`) delivery requests whose
+    single best-ranked eligible candidate's SLA feasibility is `"at_risk"` or
+    `"infeasible"` — kept for existing callers/tests that only need the
+    boolean "is this delivery at risk at all" question; see
+    `sla_risk_by_delivery_id` for the at-risk-vs-infeasible distinction.
+    """
+    return set(sla_risk_by_delivery_id(as_of=as_of))
 
 
 __all__ = [
@@ -603,8 +634,10 @@ __all__ = [
     "accept_job_offer",
     "assign_delivery",
     "at_risk_delivery_ids",
+    "best_candidate_sla_feasibility",
     "decline_job_offer",
     "offer_delivery",
     "reassign_delivery",
     "recommend_couriers",
+    "sla_risk_by_delivery_id",
 ]
