@@ -294,7 +294,7 @@ class ActiveDeliveryView(CourierPermissionMixin, DetailView):
     def get_object(self, queryset: Any = None) -> DeliveryRequest:
         delivery_request = get_object_or_404(
             DeliveryRequest.objects.select_related("organization").prefetch_related(
-                "stops__facility", "packages__identifier", "status_transitions"
+                "stops__facility", "packages__identifier"
             ),
             pk=self.kwargs["pk"],
         )
@@ -317,7 +317,6 @@ class ActiveDeliveryView(CourierPermissionMixin, DetailView):
         delivery_request = self.object
         context["active_assignment"] = self.active_assignment
         context["next_status"] = COURIER_ADVANCE_SEQUENCE.get(delivery_request.status)
-        context["transitions"] = delivery_request.status_transitions.all()
         context["packages"] = delivery_request.packages.all()
         # Phase 6: proof/condition/incident capture context.
         context["has_proof_of_pickup"] = hasattr(delivery_request, "proof_of_pickup")
