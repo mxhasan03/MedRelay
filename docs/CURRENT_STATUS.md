@@ -4344,3 +4344,39 @@ explicitly for both `web` and `worker`.
   wrinkle Phase 0's and Phase 8's sections of this document already ran into) — see
   `git log --oneline` for the definitive, current history.
 
+## Dated addendum — 2026-08-05: real Render deploy attempt found a genuine `render.yaml` bug
+
+The project owner personally created the Neon project and Render Blueprint per
+`docs/DEPLOY_RENDER_NEON.md` — the first real, live deployment attempt against this codebase.
+It failed on the first try, and the failure was a genuine bug in `render.yaml`, not a
+misconfiguration on the owner's part:
+
+**The bug**: `render.yaml`'s `dockerCommand` was a bare `cmd1 --noinput && cmd2 --noinput && cmd3
+&& gunicorn ...` string, written on the (wrong) assumption that Render invokes it through a shell
+the way a Dockerfile's shell-form `CMD` implicitly does. It does not — Render execs `dockerCommand`
+directly, splitting it into literal argv tokens with no shell interpreting `&&` at all. The
+production log showed exactly this: `manage.py collectstatic: error: unrecognized arguments: &&
+python manage.py migrate && python manage.py seed_full_demo && gunicorn ...` — `&&` and everything
+after it were fed to `collectstatic` as nonsense positional arguments, because nothing ever ran a
+shell to interpret them as command separators.
+
+**Reproduced and fixed**: rather than trust the log analysis alone, this was reproduced locally
+first — running the app image with the *exact* original argv split (`python manage.py collectstatic
+--noinput "&&" python manage.py migrate ...` as separate, unshelled tokens, via a bash array so the
+host shell didn't itself consume the `&&`) reliably reproduced the identical error message
+byte-for-byte. The fix, `dockerCommand: sh -c "cmd1 && cmd2 && cmd3 && gunicorn ..."`, was then
+verified against a real Postgres container end-to-end: `collectstatic` → `migrate` (all
+migrations) → `seed_full_demo` → `gunicorn` starting cleanly, `/healthz/` and `/readyz/` both
+returning 200. Verification artifacts (containers/network/image) were removed afterward.
+
+**Files changed**: `render.yaml` only (`dockerCommand`'s value, plus a docstring comment explaining
+the no-shell behavior so this doesn't regress if the command chain is edited again later).
+
+**Why local `docker compose`/one-off container testing in Phases 0-9 never caught this**: every
+prior verification ran the app's start command either via `compose.yaml`'s own `command:` field
+(which Docker Compose *does* pass through a shell) or via an explicit `sh -c "..."` wrapper in this
+project's own verification steps (see this file's Phase 9 hosting-decision section above) — nothing
+in this codebase's own test/verification history ever exercised Render's specific no-shell
+`dockerCommand` exec behavior until the owner's real deployment did. This is a genuine gap in prior
+verification coverage, not a contradiction of anything previously claimed as tested.
+
