@@ -4423,3 +4423,21 @@ separated words, which is exactly the case the very first failure proved Render 
 (it's structurally identical to how `manage.py collectstatic --noinput` — itself just words with no
 special characters — got tokenized correctly, before the payload after it went wrong).
 
+### Outcome: the deployment succeeded — MedRelay is live
+
+Commit `f82d550`'s fix deployed cleanly. **The project owner's public demo is live at
+`https://medrelay-demo.onrender.com`** (Render free web tier + Neon free Postgres, genuinely $0,
+no card). Independently confirmed (not just reported by the owner): `/healthz/` returns
+`{"status": "ok"}`; `/readyz/` returns `{"status": "ok", "checks": {"database": "ok", "cache":
+"ok"}}` — real Neon database and real cache connectivity, not stubs; `/accounts/login/` renders
+the login form, the required synthetic-data disclaimer banner, and the demo-account note.
+
+This supersedes every earlier "no account was created, no deployment was performed" statement
+elsewhere in this addendum and in `docs/HOSTING_OPTIONS.md`/`docs/DEPLOY_RENDER_NEON.md` — those
+were accurate when written (this session never created an account or deployed anything itself,
+consistent with the scope boundary those documents state), but the project owner has since done
+exactly that, personally, and it worked. The three `render.yaml` bugs found and fixed along the
+way (documented above) are a real, if minor, example of the gap between "verified locally" and
+"verified against the actual third-party platform's undocumented behavior" — worth remembering
+for any future hosting-platform change.
+
