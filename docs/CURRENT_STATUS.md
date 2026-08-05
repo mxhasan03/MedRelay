@@ -4502,3 +4502,158 @@ history, filling the shared development machine's disk and causing a build to fa
 before continuing. Not a project defect — purely an artifact of how much local Docker-based
 verification this project's development process has genuinely performed, phase after phase.
 
+## Dated addendum — 2026-08-05 (same day): courier PWA availability, profile/onboarding, active-delivery boundary text and progress tracker, and app-like bottom navigation
+
+New work beyond the original ten-phase roadmap, requested directly by the project owner: build out
+the courier-facing PWA's remaining `docs/PRODUCT_REQUIREMENTS.md` section 6 gaps that Phase 5/6 left
+for later — an availability screen, a read-only onboarding/profile screen, an explicit cargo
+handling boundary statement and a real visual progress tracker on the active-delivery screen, and
+app-like bottom-tab navigation. Scoped strictly to `apps/couriers` and its templates/static assets —
+no other app's templates were touched.
+
+### Decision: kept `templates/couriers/base.html`'s local `.card`/`.btn` separate from
+`templates/base.html`'s shared `@layer components` versions
+
+The dispatch-console cleanup pass (this file, above) added shared `.card`/`.badge-*` classes to
+`templates/base.html` and explicitly called out `templates/couriers/base.html` as intentionally
+excluded from that pass, citing the courier PWA's mobile-specific 44px-minimum touch-target sizing.
+Re-examined that call now that this pass touches the same file: **the reasoning still holds and the
+split is kept** — `templates/couriers/base.html`'s `.btn`/`.card` carry `min-h-[44px] min-w-[44px]`
+and larger `p-3` form-control padding the desktop-oriented ops-console defaults do not need. Unifying
+them would either shrink the courier PWA's touch targets below the 44px guidance this file's own
+docstring cites, or bloat every ops-console `.btn`/`.card` usage with mobile-sized padding it
+doesn't need. **The shared `.badge-*` classes, by contrast, are reused unmodified** in the two new
+courier templates (`couriers/availability.html`'s online/offline status pill, `couriers/profile.html`'s
+credential/status pills) and in the active-delivery progress tracker's "Current"/"Done" step
+labels — badges are small status-label styling with no touch-target sizing concern, so forking them
+would just be duplication for no benefit. This decision (and why) is now documented directly in
+`templates/couriers/base.html`'s own docstring comment, not just in this file.
+
+### What was built
+
+1. **Availability screen** (`GET /couriers/availability/`, `POST /couriers/availability/update/`) —
+   `apps.couriers.views.CourierAvailabilityView`/`CourierAvailabilityUpdateView`, backed by a new
+   `apps.couriers.services.update_courier_availability` function. Shows/updates the logged-in
+   courier's own `CourierAvailability` row (online/offline, current service zone — a real
+   `apps.facilities.models.ServiceZone` dropdown, shift start/end, `max_concurrent_deliveries`) —
+   the exact field set that already existed on the Phase 3 model, no new model/migration. POST is
+   JSON in/out, `Idempotency-Key`-protected via the existing `apps.couriers.idempotency.idempotent_call`
+   mechanism, submitted from the template via the existing `MedRelayCourier.submitAction` JS helper —
+   the same pattern every other courier state-mutating endpoint already uses. The courier is always
+   derived from `request.user.courier_profile`, never a client-supplied id, so a courier can only
+   ever reach their own row.
+2. **Profile/onboarding screen** (`GET /couriers/profile/`) — `apps.couriers.views.CourierProfileView`,
+   entirely read-only, over existing Phase 3 data: `CourierProfile` status fields, `Vehicle`,
+   `Equipment`, `CargoAuthorization`, `TrainingRecord`, and `CourierCredential` rows, plus a
+   credential-expiration-warnings section. That last part reuses a new shared function,
+   `apps.couriers.services.credential_expiration_summary`, which both this view (scoped to one
+   courier) and the existing `flag_expiring_credentials` management command (unscoped, across every
+   courier) now call — the underlying "expired"/"expiring soon" query logic itself already lived on
+   `CourierCredentialQuerySet.expired`/`.expiring_within` (`apps.couriers.models`, Phase 3), so this
+   refactor's job was giving the two call sites one shared entry point rather than duplicating how
+   they invoke that queryset logic. No document upload path exists here or anywhere in this app —
+   `CourierCredential.evidence_reference` remains a placeholder text label, per
+   `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`.
+3. **Active-delivery screen improvements** (`templates/couriers/active_delivery.html`):
+   - A new **cargo handling boundary** card, driven by
+     `apps.couriers.services.cargo_handling_boundary_text` — built from the delivery's actual
+     `CargoClass.name`, `CargoPolicy.notes`, and `TemperatureProfile` row, not one hardcoded sentence
+     reused for every delivery. For a real seeded Class 2/ambient delivery
+     (`demo_courier_ben`'s `ec296524-…` assignment) this renders exactly: *"Class 2 — Approved
+     Routine Specimens. Ambient. No active temperature control is required for this package. Routine
+     specimens may require cold-chain (refrigerated) transport. You may not open, inspect the
+     contents of, or repack this package under any circumstances."* A refrigerated Class 2 delivery
+     renders a genuinely different second half (the refrigerated-container-handling clause instead of
+     "no active temperature control"), confirmed directly in
+     `apps/couriers/tests/test_services.py::test_cargo_handling_boundary_text_varies_by_cargo_class_and_temperature`.
+   - The old plain bulleted `DeliveryStatusTransition` list replaced with a real vertical
+     progress-tracker component (pure Tailwind, no new JS), driven by a new
+     `apps.couriers.services.delivery_timeline_steps` helper over the existing
+     `COURIER_ADVANCE_SEQUENCE`/`DeliveryStatus` sequence — each step marked
+     completed/current/upcoming, both visually (fill color + a `.badge-blue`/`.badge-green` label,
+     never color alone) and structurally. A delivery in an exception state outside the happy-path
+     sequence (e.g. `INCIDENT_HOLD`) renders every step as "upcoming" rather than guessing a
+     position — an honest fallback, not a misleading one.
+4. **App-like bottom tab bar** — added to `templates/couriers/base.html`: fixed-position, four tabs
+   (Home, Job Offers, Availability, Profile), active tab marked both visually
+   (color/bold) and via `aria-current="page"`. The old top nav's two links duplicated two of these
+   four destinations, so it was simplified to a brand-only header with a single Home link — documented
+   in the template's own comment, not just here.
+
+### Verification performed (real, not cited from an old report)
+
+- **Full quality-gate suite**, all green: `ruff check .` ("All checks passed!"), `ruff format
+  --check .` ("275 files already formatted"), `mypy .` ("Success: no issues found in 275 source
+  files"), `pytest --cov` (**607 passed**, 95% overall coverage, `apps/couriers/services.py` 98%),
+  `python manage.py check` (only the pre-existing, unrelated `django_ratelimit.W001` warning),
+  `python manage.py makemigrations --check --dry-run` ("No changes detected" — confirms this pass
+  needed no new models/migrations, exactly as scoped), `python manage.py audit_cost` ("24
+  dependencies checked, 0 prohibited-service indicators found"), `detect-secrets-hook --baseline
+  .secrets.baseline $(git ls-files)` (clean, exit 0).
+- **New tests added**: `apps/couriers/tests/test_availability_profile_views.py` (availability
+  GET/POST including the idempotency duplicate-submission acceptance criterion, profile GET, and —
+  the hard requirement — real cross-courier ownership tests:
+  `test_availability_update_only_affects_the_logged_in_couriers_own_row` and
+  `test_profile_view_shows_only_the_logged_in_couriers_own_data` construct two independent couriers
+  and assert courier A's request never reads or mutates courier B's row); new tests appended to
+  `apps/couriers/tests/test_services.py` for `update_courier_availability`,
+  `credential_expiration_summary` (both scoped and unscoped), `delivery_timeline_steps`, and
+  `cargo_handling_boundary_text`. The pre-existing
+  `apps/couriers/tests/test_flag_expiring_credentials_command.py` still passes unmodified against
+  the refactored command.
+- **New axe-core accessibility scan**: `tests/accessibility/test_axe_scans.py
+  ::test_courier_availability_screen_has_no_blocking_accessibility_violations`, following the
+  existing file's exact pattern (real Playwright browser, real login, 390×844 mobile viewport,
+  zero critical/serious violations required) — passed. The pre-existing
+  `test_courier_job_offer_list_has_no_blocking_accessibility_violations` and the full
+  `tests/integration/test_pwa_browser.py` suite (service-worker registration/precache,
+  manifest/CSRF-meta rendering) were re-run and still pass unmodified.
+- **Real local Postgres + Valkey verification**: brought up standalone `postgis/postgis:17-3.5` and
+  `valkey/valkey:8-alpine` containers (remapped to host ports `5544`/`6390` — this shared machine
+  already has unrelated Postgres/Redis containers on the default ports), ran `python manage.py
+  migrate` (all ~53 migrations applied cleanly) then `python manage.py seed_full_demo` against
+  `config.settings.dev`, then ran the real Django dev server and drove it with a real Playwright
+  Chromium browser (390×844 mobile viewport) logged in as the real seeded `demo_courier_ben`
+  account:
+  - **Home** — bottom tab bar rendered with all four tabs, "Home" correctly bold/highlighted; two
+    real active-delivery cards shown (`Returned`, `Assigned`), matching the real seeded assignment
+    data.
+  - **Availability** — current state (`Online`, no zone) shown correctly; toggled online, selected
+    "Brooklyn North (Demo)" from the real `ServiceZone` dropdown, set capacity to 3, saved — the
+    page reloaded showing the new values, and a direct DB query afterward confirmed the real
+    `CourierAvailability` row was updated (`is_online=True`, zone=Brooklyn North, `max_concurrent_
+    deliveries=3`).
+  - **Profile** — real onboarding data rendered: `Approved Courier`/`Approved`/`Valid`/`Valid`
+    status badges, one `Van` vehicle, three cargo authorizations (Class 1/2/3), two approved
+    credentials with real expiry dates, "No expired or soon-to-expire credentials."
+  - **Active delivery** (`ec296524-…`, a real seeded `ASSIGNED`-status, Class 2/Ambient delivery) —
+    the new vertical progress tracker rendered with "Assigned" filled and labeled "Current", the
+    remaining five steps shown greyed-out/upcoming in the correct order; the cargo handling boundary
+    card rendered the exact Class 2/Ambient text quoted above; the bottom tab bar stayed correctly
+    pinned to the viewport bottom on scroll (confirmed via a non-full-page viewport screenshot after
+    scrolling — an initial full-page screenshot had made the fixed nav appear to "float" mid-page,
+    which is a known Playwright full-page-screenshot artifact for `position: fixed` elements, not a
+    real rendering bug).
+  - Also spot-checked `demo_courier_dee` (an `applicant`-status courier with **no** pre-existing
+    `CourierAvailability` row) — both new screens rendered without error, confirming the
+    `get_or_create` fallback and that `can_access_courier_portal` (unchanged) does not gate on
+    approval status.
+  - All verification containers, the temporary `.env`, and the local dev server process were
+    removed afterward; `docker system df` before/after showed no net accumulation (the
+    `postgis`/`valkey` images were already cached from prior sessions, confirmed via
+    `docker images --format`'s `CreatedSince` column, not newly pulled by this session).
+
+### Known gaps / deviations (honest list)
+
+- **No real navigation/routing or synthetic ETA was added** to the active-delivery screen — out of
+  scope per this pass's own instructions (no `RoutingProvider` exists; a synthetic ETA/distance
+  figure was optional ("if you show one at all") and was not added, to avoid introducing a new,
+  unrequested surface this pass did not need).
+- **`transitions` context variable** (`DeliveryStatusTransition` queryset) is still computed and
+  passed by `ActiveDeliveryView` even though the template no longer renders it directly (replaced by
+  `timeline_steps`) — left in place as harmless, potentially useful for a future detailed
+  history/audit view, rather than removed and re-added later.
+- **Icons in the bottom tab bar are simple inline SVG line-icons**, not a shared icon system/library
+  — consistent with this codebase's existing "plain, no new front-end framework" convention, but a
+  real design system (still nobody's job in this prototype) would likely centralize these.
+
