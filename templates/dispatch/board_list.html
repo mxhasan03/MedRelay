@@ -1,74 +1,156 @@
 {% extends "base.html" %}
+{% load dispatch_badges %}
 {% block title %}Dispatch Board — MedRelay (Demo Prototype){% endblock %}
 {% block content %}
-<div class="max-w-5xl mx-auto p-4">
+<div class="max-w-6xl mx-auto p-4">
     <h1>Dispatch Board</h1>
-    <p>Minimal control-tower dashboard (docs/PRODUCT_REQUIREMENTS.md section 7) — no live map this
-        phase; see docs/CURRENT_STATUS.md "Phase 4" for the scoping note.</p>
+    <p>Control-tower dashboard (docs/PRODUCT_REQUIREMENTS.md section 7) — no live map this
+        phase, see this page's own module docstring for the current scoping note.</p>
     <p><a href="{% url 'incident-list' %}">Incident console (open incidents) &rarr;</a></p>
 
     <h2>Unassigned / offered deliveries</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Delivery</th>
-                <th>Organization</th>
-                <th>Service level</th>
-                <th>Status</th>
-                <th>Required by</th>
-                <th>At risk?</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for delivery_request in unassigned_deliveries %}
-            <tr{% if delivery_request.pk in at_risk_ids %} class="bg-red-50"{% endif %}>
-                <td>{{ delivery_request.pk|truncatechars:8 }}</td>
-                <td>{{ delivery_request.organization.name }}</td>
-                <td>{{ delivery_request.get_service_level_display }}</td>
-                <td>{{ delivery_request.get_status_display }}</td>
-                <td>{{ delivery_request.required_delivery_by }}</td>
-                <td>{% if delivery_request.pk in at_risk_ids %}<strong>AT RISK</strong>{% else %}—{% endif %}</td>
-                <td><a href="{% url 'dispatch-board-detail' delivery_request.pk %}">Dispatch &rarr;</a></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="7">No unassigned or offered deliveries.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="card">
+        <form method="get" class="flex flex-wrap items-end gap-4 mb-4" aria-label="Filter unassigned deliveries">
+            {% if unassigned_sort %}<input type="hidden" name="unassigned_sort" value="{{ unassigned_sort }}">{% endif %}
+            {% if assigned_sort %}<input type="hidden" name="assigned_sort" value="{{ assigned_sort }}">{% endif %}
+            {% if assigned_org %}<input type="hidden" name="assigned_org" value="{{ assigned_org }}">{% endif %}
+            <div class="max-w-xs">
+                <label for="unassigned_org" class="!mt-0">Organization</label>
+                <select id="unassigned_org" name="unassigned_org">
+                    <option value="">All organizations</option>
+                    {% for org in organizations %}
+                    <option value="{{ org.pk }}"{% if unassigned_org == org.pk|stringformat:"s" %} selected{% endif %}>{{ org.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <label class="flex items-center gap-2 !mt-0 mb-2">
+                <input type="checkbox" name="unassigned_at_risk" value="1"{% if unassigned_at_risk_only %} checked{% endif %}>
+                <span class="text-sm text-slate-700">At-risk only</span>
+            </label>
+            <button type="submit" class="btn secondary mb-2">Apply filters</button>
+        </form>
+        <div class="overflow-x-auto">
+        <table>
+            <thead>
+                <tr>
+                    <th>Delivery</th>
+                    <th>Organization</th>
+                    <th>
+                        <a href="{% toggle_sort_url request.GET 'unassigned_sort' 'service_level' %}" class="!text-slate-700 no-underline hover:underline">
+                            Service level{% if unassigned_sort == 'service_level' %} &#9650;{% elif unassigned_sort == '-service_level' %} &#9660;{% endif %}
+                        </a>
+                    </th>
+                    <th>Status</th>
+                    <th>
+                        <a href="{% toggle_sort_url request.GET 'unassigned_sort' 'required_delivery_by' %}" class="!text-slate-700 no-underline hover:underline">
+                            Required by{% if unassigned_sort == 'required_delivery_by' %} &#9650;{% elif unassigned_sort == '-required_delivery_by' %} &#9660;{% endif %}
+                        </a>
+                    </th>
+                    <th>SLA risk</th>
+                    <th>Incidents</th>
+                    <th>Temp alerts</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for delivery_request in unassigned_deliveries %}
+                {% with feasibility=sla_risk_by_delivery_id|dict_get:delivery_request.pk %}
+                <tr>
+                    <td>{{ delivery_request.pk|truncatechars:8 }}</td>
+                    <td>{{ delivery_request.organization.name }}</td>
+                    <td>{{ delivery_request.get_service_level_display }}</td>
+                    <td><span class="badge {{ delivery_request.status|status_badge_class }}">{{ delivery_request.get_status_display }}</span></td>
+                    <td>{{ delivery_request.required_delivery_by }}</td>
+                    <td>
+                        {% if feasibility %}
+                        <span class="badge {{ feasibility|sla_risk_badge_class }}">{{ feasibility|sla_risk_label }}</span>
+                        {% else %}&mdash;{% endif %}
+                    </td>
+                    <td>
+                        {% if delivery_request.open_incident_count %}
+                        <a href="{% url 'incident-list' %}" class="badge badge-red">{{ delivery_request.open_incident_count }} open</a>
+                        {% else %}&mdash;{% endif %}
+                    </td>
+                    <td>
+                        {% if delivery_request.open_temp_excursion_count %}
+                        <span class="badge badge-amber">{{ delivery_request.open_temp_excursion_count }} alert{{ delivery_request.open_temp_excursion_count|pluralize }}</span>
+                        {% else %}&mdash;{% endif %}
+                    </td>
+                    <td><a href="{% url 'dispatch-board-detail' delivery_request.pk %}" class="btn secondary">Dispatch &rarr;</a></td>
+                </tr>
+                {% endwith %}
+                {% empty %}
+                <tr><td colspan="9">No unassigned or offered deliveries{% if unassigned_org or unassigned_at_risk_only %} match the current filters{% endif %}.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
 
     <h2>Assigned deliveries</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Delivery</th>
-                <th>Organization</th>
-                <th>Courier</th>
-                <th>Assigned at</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for delivery_request in assigned_deliveries %}
-            <tr>
-                <td>{{ delivery_request.pk|truncatechars:8 }}</td>
-                <td>{{ delivery_request.organization.name }}</td>
-                <td>
-                    {% with assignment=delivery_request.assignments.all|first %}
-                    {{ assignment.courier }}
-                    {% endwith %}
-                </td>
-                <td>
-                    {% with assignment=delivery_request.assignments.all|first %}
-                    {{ assignment.assigned_at }}
-                    {% endwith %}
-                </td>
-                <td><a href="{% url 'dispatch-board-detail' delivery_request.pk %}">Details &rarr;</a></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="5">No assigned deliveries.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="card">
+        <form method="get" class="flex flex-wrap items-end gap-4 mb-4" aria-label="Filter assigned deliveries">
+            {% if assigned_sort %}<input type="hidden" name="assigned_sort" value="{{ assigned_sort }}">{% endif %}
+            {% if unassigned_sort %}<input type="hidden" name="unassigned_sort" value="{{ unassigned_sort }}">{% endif %}
+            {% if unassigned_org %}<input type="hidden" name="unassigned_org" value="{{ unassigned_org }}">{% endif %}
+            {% if unassigned_at_risk_only %}<input type="hidden" name="unassigned_at_risk" value="1">{% endif %}
+            <div class="max-w-xs">
+                <label for="assigned_org" class="!mt-0">Organization</label>
+                <select id="assigned_org" name="assigned_org">
+                    <option value="">All organizations</option>
+                    {% for org in organizations %}
+                    <option value="{{ org.pk }}"{% if assigned_org == org.pk|stringformat:"s" %} selected{% endif %}>{{ org.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn secondary mb-2">Apply filter</button>
+        </form>
+        <div class="overflow-x-auto">
+        <table>
+            <thead>
+                <tr>
+                    <th>Delivery</th>
+                    <th>Organization</th>
+                    <th>Courier</th>
+                    <th>
+                        <a href="{% toggle_sort_url request.GET 'assigned_sort' 'required_delivery_by' %}" class="!text-slate-700 no-underline hover:underline">
+                            Required by{% if assigned_sort == 'required_delivery_by' %} &#9650;{% elif assigned_sort == '-required_delivery_by' %} &#9660;{% endif %}
+                        </a>
+                    </th>
+                    <th>Incidents</th>
+                    <th>Temp alerts</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for delivery_request in assigned_deliveries %}
+                <tr>
+                    <td>{{ delivery_request.pk|truncatechars:8 }}</td>
+                    <td>{{ delivery_request.organization.name }}</td>
+                    <td>
+                        {% with assignment=delivery_request.assignments.all|first %}
+                        {{ assignment.courier }}
+                        {% endwith %}
+                    </td>
+                    <td>{{ delivery_request.required_delivery_by }}</td>
+                    <td>
+                        {% if delivery_request.open_incident_count %}
+                        <a href="{% url 'incident-list' %}" class="badge badge-red">{{ delivery_request.open_incident_count }} open</a>
+                        {% else %}&mdash;{% endif %}
+                    </td>
+                    <td>
+                        {% if delivery_request.open_temp_excursion_count %}
+                        <span class="badge badge-amber">{{ delivery_request.open_temp_excursion_count }} alert{{ delivery_request.open_temp_excursion_count|pluralize }}</span>
+                        {% else %}&mdash;{% endif %}
+                    </td>
+                    <td><a href="{% url 'dispatch-board-detail' delivery_request.pk %}" class="btn secondary">Details &rarr;</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7">No assigned deliveries{% if assigned_org %} match the current filter{% endif %}.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
 </div>
 {% endblock %}

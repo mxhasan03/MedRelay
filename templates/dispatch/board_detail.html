@@ -1,13 +1,30 @@
 {% extends "base.html" %}
+{% load dispatch_badges %}
 {% block title %}Dispatch {{ delivery_request.pk|truncatechars:8 }} — MedRelay (Demo Prototype){% endblock %}
 {% block content %}
-<div class="max-w-5xl mx-auto p-4">
+<div class="max-w-6xl mx-auto p-4">
     <p><a href="{% url 'dispatch-board' %}">&larr; Dispatch Board</a></p>
     <h1>Dispatch {{ delivery_request.pk|truncatechars:8 }}</h1>
-    <p>Organization: {{ delivery_request.organization.name }} &middot; Service level:
-        {{ delivery_request.get_service_level_display }} &middot; Status:
-        <strong>{{ delivery_request.get_status_display }}</strong></p>
-    <p>Required delivery by: {{ delivery_request.required_delivery_by }}</p>
+
+    <div class="card flex flex-wrap items-center gap-2">
+        <span>Organization: <strong>{{ delivery_request.organization.name }}</strong></span>
+        <span>&middot;</span>
+        <span>Service level: <strong>{{ delivery_request.get_service_level_display }}</strong></span>
+        <span>&middot;</span>
+        <span class="badge {{ delivery_request.status|status_badge_class }}">{{ delivery_request.get_status_display }}</span>
+        {% if sla_feasibility|sla_risk_badge_class %}
+        <span class="badge {{ sla_feasibility|sla_risk_badge_class }}">{{ sla_feasibility|sla_risk_label }}</span>
+        {% endif %}
+        {% if open_incidents %}
+        <a href="{% if open_incidents|length == 1 %}{% url 'incident-detail' open_incidents.0.pk %}{% else %}{% url 'incident-list' %}{% endif %}" class="badge badge-red">
+            {{ open_incidents|length }} open incident{{ open_incidents|length|pluralize }}
+        </a>
+        {% endif %}
+        {% if open_temp_excursion_count %}
+        <span class="badge badge-amber">{{ open_temp_excursion_count }} temperature alert{{ open_temp_excursion_count|pluralize }}</span>
+        {% endif %}
+        <span class="w-full text-sm text-slate-600">Required delivery by: {{ delivery_request.required_delivery_by }}</span>
+    </div>
 
     {% if active_assignment %}
     <div class="border border-green-700 bg-green-50 text-green-900 rounded-md p-3 my-4" role="status">
@@ -16,20 +33,22 @@
     </div>
 
     <h2>Reassign</h2>
-    <form method="post" action="{% url 'dispatch-reassign' delivery_request.pk %}">
-        {% csrf_token %}
-        <label>Courier:
-            <select name="courier_id" required>
-                {% for candidate in candidates %}
-                {% if candidate.eligible %}
-                <option value="{{ candidate.courier.pk }}">{{ candidate.courier }} (score {{ candidate.total_score }})</option>
-                {% endif %}
-                {% endfor %}
-            </select>
-        </label>
-        <label>Reason (required): <input type="text" name="reason" required></label>
-        <button type="submit">Reassign</button>
-    </form>
+    <div class="card">
+        <form method="post" action="{% url 'dispatch-reassign' delivery_request.pk %}">
+            {% csrf_token %}
+            <label>Courier:
+                <select name="courier_id" required>
+                    {% for candidate in candidates %}
+                    {% if candidate.eligible %}
+                    <option value="{{ candidate.courier.pk }}">{{ candidate.courier }} (score {{ candidate.total_score }})</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Reason (required): <input type="text" name="reason" required></label>
+            <button type="submit">Reassign</button>
+        </form>
+    </div>
     {% endif %}
 
     <h2>Ranked candidates</h2>
@@ -38,51 +57,92 @@
        via the HTML5 form="offer-form" attribute, so the <form> element itself
        does not need to (invalidly) wrap table rows. {% endcomment %}
     <form method="post" action="{% url 'dispatch-offer' delivery_request.pk %}" id="offer-form">{% csrf_token %}</form>
-    <table>
-        <thead>
-            <tr>
-                <th>Offer</th>
-                <th>Courier</th>
-                <th>Eligible?</th>
-                <th>Score</th>
-                <th>ETA to pickup (min)</th>
-                <th>SLA slack (min)</th>
-                <th>SLA feasibility</th>
-                <th>Reasons</th>
-                <th>Assign</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for candidate in candidates %}
-            <tr{% if not candidate.eligible %} class="text-slate-600"{% endif %}>
-                <td>{% if candidate.eligible %}<input type="checkbox" name="courier_ids" value="{{ candidate.courier.pk }}" form="offer-form" aria-label="Include {{ candidate.courier }} in job offer">{% endif %}</td>
-                <td>{{ candidate.courier }}</td>
-                <td>{{ candidate.eligible }}</td>
-                <td>{{ candidate.total_score|default:"—" }}</td>
-                <td>{{ candidate.eta_to_pickup_minutes }}</td>
-                <td>{{ candidate.sla_slack_minutes }}</td>
-                <td>{{ candidate.sla_feasibility }}</td>
-                <td>
-                    <ul>
-                        {% for reason in candidate.reasons %}
-                        <li>{{ reason }}</li>
-                        {% endfor %}
-                    </ul>
-                </td>
-                <td>
-                    {% if candidate.eligible and not active_assignment %}
-                    <form method="post" action="{% url 'dispatch-assign' delivery_request.pk %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="courier_id" value="{{ candidate.courier.pk }}">
-                        <input type="text" name="reason" placeholder="Reason (required if not top-ranked)" aria-label="Assignment override reason">
-                        <button type="submit">Assign</button>
-                    </form>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+
+    <div class="card">
+        <form method="get" class="flex items-center gap-2 mb-4" aria-label="Filter ranked candidates">
+            {% if candidate_sort %}<input type="hidden" name="candidate_sort" value="{{ candidate_sort }}">{% endif %}
+            <label class="flex items-center gap-2 !mt-0 mb-0">
+                <input type="checkbox" name="eligible_only" value="1"{% if eligible_only %} checked{% endif %}>
+                <span class="text-sm text-slate-700">Eligible only</span>
+            </label>
+            <button type="submit" class="btn secondary">Apply</button>
+        </form>
+        <div class="overflow-x-auto">
+        <table>
+            <thead>
+                <tr>
+                    <th>Offer</th>
+                    <th>Courier</th>
+                    <th>Eligible?</th>
+                    <th>
+                        <a href="{% toggle_sort_url request.GET 'candidate_sort' 'score' %}" class="!text-slate-700 no-underline hover:underline">
+                            Score{% if candidate_sort == 'score' %} &#9650;{% elif candidate_sort == '-score' %} &#9660;{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a href="{% toggle_sort_url request.GET 'candidate_sort' 'eta' %}" class="!text-slate-700 no-underline hover:underline">
+                            ETA to pickup (min){% if candidate_sort == 'eta' %} &#9650;{% elif candidate_sort == '-eta' %} &#9660;{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a href="{% toggle_sort_url request.GET 'candidate_sort' 'sla_slack' %}" class="!text-slate-700 no-underline hover:underline">
+                            SLA slack (min){% if candidate_sort == 'sla_slack' %} &#9650;{% elif candidate_sort == '-sla_slack' %} &#9660;{% endif %}
+                        </a>
+                    </th>
+                    <th>SLA feasibility</th>
+                    <th>Last known location</th>
+                    <th>Reasons</th>
+                    <th>Assign</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for candidate in candidates %}
+                {% with ping=latest_ping_by_courier_id|dict_get:candidate.courier.pk %}
+                <tr{% if not candidate.eligible %} class="text-slate-600"{% endif %}>
+                    <td>{% if candidate.eligible %}<input type="checkbox" name="courier_ids" value="{{ candidate.courier.pk }}" form="offer-form" aria-label="Include {{ candidate.courier }} in job offer">{% endif %}</td>
+                    <td>{{ candidate.courier }}</td>
+                    <td><span class="badge {{ candidate.eligible|eligibility_badge_class }}">{{ candidate.eligible|eligibility_label }}</span></td>
+                    <td>{{ candidate.total_score|default:"—" }}</td>
+                    <td>{{ candidate.eta_to_pickup_minutes }}</td>
+                    <td>{{ candidate.sla_slack_minutes }}</td>
+                    <td>
+                        {% if candidate.sla_feasibility|sla_risk_badge_class %}
+                        <span class="badge {{ candidate.sla_feasibility|sla_risk_badge_class }}">{{ candidate.sla_feasibility|sla_risk_label }}</span>
+                        {% else %}{{ candidate.sla_feasibility }}{% endif %}
+                    </td>
+                    <td>
+                        {% if ping %}
+                        <span class="badge badge-blue" title="{{ ping.recorded_at }}">{{ ping.recorded_at|relative_time }}</span>
+                        {% else %}
+                        <span class="badge badge-neutral">No location data</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <ul class="list-disc pl-4 max-w-sm text-xs text-slate-600 space-y-1">
+                            {% for reason in candidate.reasons %}
+                            <li>{{ reason }}</li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+                    <td>
+                        {% if candidate.eligible and not active_assignment %}
+                        <form method="post" action="{% url 'dispatch-assign' delivery_request.pk %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="courier_id" value="{{ candidate.courier.pk }}">
+                            <input type="text" name="reason" placeholder="Reason (required if not top-ranked)" aria-label="Assignment override reason">
+                            <button type="submit">Assign</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endwith %}
+                {% empty %}
+                <tr><td colspan="10">No candidates{% if eligible_only %} are eligible{% endif %}.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
 
     {% if not active_assignment %}
     <p>
