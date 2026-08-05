@@ -183,6 +183,32 @@ def test_courier_job_offer_list_has_no_blocking_accessibility_violations(live_se
             browser.close()
 
 
+def test_courier_availability_screen_has_no_blocking_accessibility_violations(
+    live_server,
+) -> None:
+    """New screen (courier PWA availability/profile/active-delivery pass, see
+    docs/CURRENT_STATUS.md) — scanned the same way as the pre-existing
+    courier job offer list: real login, mobile viewport, zero
+    critical/serious axe-core violations required."""
+    courier = CourierProfileFactory()
+    courier.user.set_password(DEMO_PASSWORD)
+    courier.user.save()
+
+    with playwright_sync_api.sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.set_viewport_size({"width": 390, "height": 844})
+            _login(page, live_server, courier.user.username, DEMO_PASSWORD, "/organizations/")
+            page.goto(f"{live_server.url}/couriers/availability/")
+            violations = _run_axe(page)
+            _assert_no_blocking_violations(
+                violations, "courier availability screen (mobile viewport)"
+            )
+        finally:
+            browser.close()
+
+
 def test_recipient_tracking_page_has_no_blocking_accessibility_violations(live_server) -> None:
     delivery_request = DeliveryRequestFactory()
     token = generate_recipient_tracking_token(delivery_request)
