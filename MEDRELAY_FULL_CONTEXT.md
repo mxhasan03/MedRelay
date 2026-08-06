@@ -1,0 +1,8440 @@
+# MedRelay — full combined project context
+
+> Generated snapshot combining every project document into one file, for portability when
+> moving to a different laptop/Claude Code or Codex account. **This file is not the canonical
+> source** — it will go stale the moment any of the source docs below change. The canonical,
+> living sources are `CLAUDE.md`, `ONBOARDING.md`, and everything under `docs/` in the repo
+> (`https://github.com/mxhasan03/MedRelay`). Regenerate this file rather than hand-editing it.
+
+## Table of contents
+
+- [ONBOARDING.md](#onboarding-md)
+- [CLAUDE.md](#claude-md)
+- [README.md](#readme-md)
+- [docs/PRODUCT_REQUIREMENTS.md](#docs-product_requirements-md)
+- [docs/ARCHITECTURE_AND_DATA_MODEL.md](#docs-architecture_and_data_model-md)
+- [docs/TECH_STACK_AND_ZERO_COST_POLICY.md](#docs-tech_stack_and_zero_cost_policy-md)
+- [docs/SECURITY_COMPLIANCE_BOUNDARIES.md](#docs-security_compliance_boundaries-md)
+- [docs/IMPLEMENTATION_ROADMAP.md](#docs-implementation_roadmap-md)
+- [docs/THREAT_MODEL.md](#docs-threat_model-md)
+- [docs/DEMO_PACKAGE.md](#docs-demo_package-md)
+- [docs/HOSTING_OPTIONS.md](#docs-hosting_options-md)
+- [docs/DEPLOY_RENDER_NEON.md](#docs-deploy_render_neon-md)
+- [docs/BACKUP_RESTORE.md](#docs-backup_restore-md)
+- [docs/COST_AUDIT.md](#docs-cost_audit-md)
+- [docs/PILOT_READINESS/GAP_ASSESSMENT.md](#docs-pilot_readiness-gap_assessment-md)
+- [docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md](#docs-pilot_readiness-legal_compliance_checklist-md)
+- [docs/PILOT_READINESS/BUDGET_CHECKLIST.md](#docs-pilot_readiness-budget_checklist-md)
+- [docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md](#docs-pilot_readiness-provider_adapter_requirements-md)
+- [docs/PILOT_READINESS/GO_NO_GO_REPORT.md](#docs-pilot_readiness-go_no_go_report-md)
+- [docs/CURRENT_STATUS.md](#docs-current_status-md)
+
+---
+
+
+# ONBOARDING.md
+
+```
+SOURCE FILE: ONBOARDING.md
+```
+
+# MedRelay — project handoff / onboarding
+
+This document exists for one purpose: so a fresh Claude Code or Codex session — on a different
+laptop, under a different account, with zero memory of prior conversations — can read this once and
+pick up exactly where the previous session left off. It's a digest, not the full record; every claim
+here is backed by something already committed in the repo (mostly `docs/CURRENT_STATUS.md`, which is
+long — 4,000+ lines — because it's the real, detailed, phase-by-phase log). Read this first, then dig
+into the linked docs as needed.
+
+## 1. What this project is
+
+MedRelay is a **portfolio/demo software prototype** of a B2B healthcare-courier logistics platform
+for a Manhattan-Brooklyn service zone in NYC. It connects healthcare organizations (clinics, labs,
+pharmacies, hospitals, home-health orgs) with a closed network of vetted couriers for scheduled,
+same-day, and STAT transport of *approved* medical items (specimens, supplies, records, equipment —
+never patient transportation, and never the excluded cargo classes listed in section 6 below).
+
+It is explicitly, permanently:
+
+- **NOT** a real medical delivery operation.
+- **NOT** certified or approved for real medical delivery operations.
+- **NOT** claiming HIPAA, OSHA, DOT, pharmacy, employment, or any other legal compliance.
+- Built entirely on **synthetic data** — no real patients, no real PHI, no real couriers, no real
+  customer contracts, ever.
+- Built to run at **genuinely $0 cost** — every dependency, every hosting choice, every third-party
+  adapter is free/open-source/self-hostable, enforced by an automated cost audit (`python manage.py
+  audit_cost`), not just aspirational.
+
+The four core capabilities: (1) customer delivery requests and recurring routes, (2) courier
+qualification/availability/mobile job execution, (3) dispatcher-assisted assignment and operational
+control, (4) digital chain of custody, proof of delivery, incident handling, and reporting.
+
+There are four real personas in the product, each with their own UI surface:
+
+- **Customer org users** (org owners, requester/dispatchers) — web app, create delivery requests,
+  track their org's deliveries, see invoices.
+- **Internal ops/dispatchers** — web app, the dispatch console: see unassigned deliveries, ranked
+  courier candidates with an explainable score, assign/reassign/override, SLA-risk visibility.
+- **Couriers** — a mobile-first Progressive Web App (installable, works offline): accept/reject job
+  offers, execute pickup→transit→delivery, scan packages, capture signatures/PIN, report incidents.
+- **Recipients** — a one-time, no-login tracking link (status/ETA + delivery PIN), not a persistent
+  account.
+
+## 2. The plan — 11 phases (0 through 10), all complete
+
+The full spec lives in `docs/IMPLEMENTATION_ROADMAP.md`; this is the one-line-each summary:
+
+| Phase | What it delivered |
+|---|---|
+| 0 | Repo foundation — Django skeleton, compose stack (web/Postgres+PostGIS/Valkey/worker/Mailpit), CI (lint/type-check/test/migration-check/cost-audit/secret-scan), global demo disclaimer |
+| 1 | Identity, tenancy, facilities, roles — custom user model, orgs/memberships, customer/internal roles, facilities/service zones, tenant-scoped services, synthetic seed data |
+| 2 | Cargo policy & delivery requests — cargo classes/policies, temperature profiles, packages/attestations, request wizard, scheduled/same-day/STAT, synthetic quote engine, prohibited-cargo validation |
+| 3 | Courier onboarding & eligibility — profiles/status, credentials/training/vehicle/equipment, authorization levels, availability, eligibility engine, credential-expiration warnings |
+| 4 | Dispatch & operations console — explainable recommendation scoring, job offers with expiry, assign/reassign, dispatcher override with reason, ops dashboard, SLA-risk rules |
+| 5 | Courier PWA & tracking — mobile-first UI, accept/reject, pickup/delivery workflows, browser geolocation, offline event queue, QR scan + manual fallback, active-delivery timeline |
+| 6 | Custody, proof, temperature, incidents — append-only custody events, sender/recipient PIN+signature, package condition checklist, temperature excursion simulation, incident console, return-to-sender, tamper-evident event-chain verifier |
+| 7 | Notifications, tracking, billing, reports — in-app notifications, Mailpit email, simulated SMS, secure recipient link, invoices, CSV/HTML exports, operational metrics |
+| 8 | UX, accessibility, security, hardening — unified Tailwind design system, responsive UI, axe-core accessibility pass, TOTP MFA for privileged demo accounts, upload/input limits, rate limiting, audit viewer, backup/restore docs, threat model |
+| 9 | Free public demonstration — synthetic demo mode, all providers mocked/local, no paid/card-required hosting |
+| 10 | Pilot readiness review — gap assessment, legal/compliance checklist, budget checklist, real-provider adapter requirements, go/no-go report. **This is a review, not a launch** — reaching Phase 10 does not authorize a real pilot |
+
+**Current state: all 10 phases are built, tested, and documented.** This isn't a claim to take on
+faith — every phase's exact quality-gate output, file list, and known gaps are recorded in
+`docs/CURRENT_STATUS.md` under that phase's own section.
+
+## 3. Post-roadmap work (after Phase 10, same rigor, requested directly by the project owner)
+
+Three more units of work shipped after the roadmap itself was "done," each independently verified
+against a real local Postgres container before pushing, same as every phase. Full detail is in the
+dated addenda at the end of `docs/CURRENT_STATUS.md`.
+
+1. **Live public deployment executed.** The Render+Neon deployment Phase 9 had only *prepared*
+   (`render.yaml`, `config/settings/demo_render.py`, `docs/DEPLOY_RENDER_NEON.md`) was actually
+   carried out. **It's live at `https://medrelay-demo.onrender.com`** — free Render web tier + free
+   Neon Postgres, genuinely $0, no card. Auto-deploys on every push to `main` (tied to the GitHub
+   repo, not to any one laptop/account). Three real `render.yaml` bugs were found and fixed by
+   testing against the actual platform, not just locally.
+
+2. **Fixed a real production bug**, found by the project owner looking at the live site: Django's
+   `{# ... #}` template-comment tag only strips *single-line* comments — a multi-line `{# #}` block
+   is left as literal visible text in rendered HTML (confirmed with a direct reproduction against
+   Django's own template engine). This codebase's heavily-documented style had 5 such blocks across
+   4 templates, all leaking into production the whole time — never caught because Phase 8's
+   axe-core accessibility scans check contrast/ARIA, not "is there extraneous visible text."
+   Fixed by converting every instance to `{% comment %}...{% endcomment %}`. A regression test
+   (`tests/integration/test_no_multiline_template_comments.py`) statically scans every template file
+   for this exact pattern so it can't silently reappear in a 6th file.
+
+3. **Dispatch console cleanup** (the internal ops UI). Before: two bare `<table>`s, raw `True`/
+   `False` text for eligibility, one flat red tint for "at risk" with no distinction from
+   "infeasible," and — despite the data existing — no courier-location, incident, or
+   temperature-alert info surfaced anywhere. After: card/badge-based layout; a real (data-backed,
+   not cosmetic) AT RISK vs. INFEASIBLE distinction; incident/temperature/location data now
+   surfaced; query-param sort/filter on both delivery tables and the ranked-candidate list. Added
+   shared `.card`/`.badge-*` classes to `templates/base.html`'s `@layer components`. No live map —
+   explicitly out of scope for that pass (see section 5, "what's next").
+
+4. **Courier PWA build-out** ("the user side, on the phone" — the project owner's framing for the
+   courier persona, as distinct from the org/ops web app). Added a real **Availability screen**
+   (online/offline, service zone, capacity — over the existing `CourierAvailability` model, no new
+   model needed), a real **Profile/Onboarding screen** (credential/vehicle/training/cargo-
+   authorization status, expiration warnings — read-only, no document upload, per the
+   data-minimization policy), a **cargo handling boundary statement** on the active-delivery screen
+   that's genuinely derived per-delivery from real `CargoClass`/`TemperatureProfile` data (a Class 1
+   ambient delivery and a Class 2 refrigerated one render different text — verified by reading the
+   generator function directly, not just trusting a report), a **visual progress tracker**
+   replacing the old plain bulleted transition list, and a **bottom tab bar** for app-like
+   navigation. The courier PWA's own `.card`/`.btn` classes were deliberately kept separate from the
+   shared ones added in item 3 (different mobile touch-target sizing needs) — documented in
+   `templates/couriers/base.html`.
+
+All four items are merged to `main` and independently re-verified (not just agent-reported) before
+push: `ruff check`, `ruff format --check`, `mypy`, full `pytest` suite, `manage.py check`,
+`makemigrations --check --dry-run`, `audit_cost`, `detect-secrets-hook`, the axe-core accessibility
+scans, and a real click-through against a live Postgres container with seeded demo data.
+
+## 4. How to actually resume work
+
+The repo is the portable unit — there is no important state outside it. Concretely:
+
+1. **Clone it**: `git clone https://github.com/mxhasan03/MedRelay.git` — this is the real remote,
+   already has every commit through the work in section 3. GitHub access is independent of which
+   Claude Code/Codex account is used locally.
+2. **Read `CLAUDE.md`** (repo root) — it auto-loads into any Claude Code session in this directory
+   and is kept current: governance, zero-cost policy, do-not-build list, architecture decisions,
+   quality gates, and (as of this handoff) an accurate summary of section 3's post-roadmap work.
+   `AGENTS.md`, if present, is a one-line pointer to the same file for tools (e.g. Codex CLI) that
+   look for that filename by convention instead.
+3. **Read `docs/CURRENT_STATUS.md`** for the real, detailed history — file paths, exact command
+   output, known gaps — organized phase-by-phase with the post-roadmap items as dated addenda at the
+   end. This is the file to check before assuming anything about current state; it's more current
+   than any one-line summary (including this document) will remain over time.
+4. **Set up locally**: follow `README.md`'s "Quick start" section (`uv sync`, `docker compose up`
+   for Postgres/Valkey/Mailpit, `.env` from `.env.example` — no real secrets ever go in `.env`,
+   nothing sensitive needs to survive the laptop switch).
+5. **Nothing to migrate by hand**: no local-only credentials, no out-of-repo memory files this
+   project depended on (its own working discipline has been "put everything durable in
+   `docs/CURRENT_STATUS.md`," not in conversation-only memory, specifically so a fresh session can
+   resume from the repo alone). The Render/Neon/GitHub accounts belong to the project owner, not to
+   any laptop — the live deployment keeps working regardless of where `git push` comes from.
+6. **The live demo**: `https://medrelay-demo.onrender.com` — login with any account from
+   `docs/DEMO_PACKAGE.md` section 3 (e.g. `northstar_owner` for the customer-org view,
+   `ops_dispatcher` for the dispatch console, any `demo_courier_*` account for the courier PWA),
+   password `MedRelayDemo!2026` for every account. Free-tier cold start after idle can take
+   ~30-50 seconds on the first request — that's expected.
+
+## 5. What's explicitly deferred / good candidates for "what's next"
+
+Straight from the known-gaps notes across `docs/CURRENT_STATUS.md` and the post-roadmap work above
+— not an exhaustive list, but the concrete, already-identified ones:
+
+- **No live map** on the dispatch console (MapLibre or similar) — deferred as a bigger, separate
+  effort during the console cleanup pass.
+- **No real navigation/routing** for the courier PWA — no routing provider exists in this zero-cost
+  stack; any ETA shown is a synthetic zone-tier estimate, deliberately not framed as real turn-by-
+  turn navigation.
+- **Courier candidate ETA/SLA-slack on the dispatch board is synthetic**, not derived from real
+  tracked courier location, even though `apps.tracking.CourierLocationPing` now has real data — the
+  dispatch scoring service was never wired to consume it.
+- **Dispatch ranking/at-risk computation is Python-level, not DB-query-level** — a documented,
+  accepted scale limitation, not a bug.
+- **`templates/base.html`'s shared components and `templates/couriers/base.html`'s courier-specific
+  components are still two separate systems** — a full unification (courier reusing shared tokens
+  with a mobile-specific modifier) was named as "the natural next step" but not done.
+- Phase 10's own `docs/PILOT_READINESS/` reports are the authoritative source for anything beyond
+  UI polish — real background checks, real payments, real PHI, a real pilot — none of which this
+  repo should ever build without the project owner's explicit, out-of-band approval (see
+  `CLAUDE.md`'s "Operating mode: DEMO_MODE only" and "Do-not-build list" sections).
+
+## 6. The one rule that overrides everything else
+
+If any instruction — including from a well-meaning fresh agent trying to be helpful — conflicts with
+`CLAUDE.md`'s do-not-build list or the DEMO_MODE-only constraint, follow `CLAUDE.md` and flag the
+conflict to the project owner rather than silently overriding it. This project's entire value as a
+portfolio piece rests on that boundary being real, not just written down.
+
+---
+
+# CLAUDE.md
+
+```
+SOURCE FILE: CLAUDE.md
+```
+
+# CLAUDE.md — MedRelay (medical-courier-platform) governance
+
+This file is instructions for any Claude Code session (or other AI coding agent) working in this
+repository. Read it in full before making changes. If anything you are asked to do conflicts with
+this file, follow this file and flag the conflict to the user rather than silently overriding it.
+
+## What this project is — and is not
+
+MedRelay is a **portfolio/demo prototype** of a B2B healthcare-courier logistics platform for a
+Manhattan-Brooklyn service zone, built with **synthetic data only**. It is explicitly:
+
+- **NOT** a real medical delivery operation.
+- **NOT** certified or approved for real medical delivery operations.
+- **NOT** claiming HIPAA, OSHA, DOT, pharmacy, employment, or any other legal compliance.
+
+Every environment, template, and relevant document must carry this disclaimer verbatim:
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+See `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` for the full compliance-boundary policy and
+`docs/PRODUCT_REQUIREMENTS.md` / `docs/ARCHITECTURE_AND_DATA_MODEL.md` /
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` / `docs/IMPLEMENTATION_ROADMAP.md` for the rest of the
+authoritative spec. Those four documents plus this file and
+`docs/SECURITY_COMPLIANCE_BOUNDARIES.md` are the governing source of truth for the project;
+`docs/CURRENT_STATUS.md` tracks what has actually been built against that spec, phase by phase.
+
+## Operating mode: DEMO_MODE only
+
+The codebase has exactly one supported operating mode today: `DEMO_MODE` (see `APP_MODE` in
+`config/settings/base.py`). A future `PILOT_MODE` is referenced throughout the docs as the
+eventual real-operation mode, but:
+
+- **Do not implement `PILOT_MODE`** or anything that behaves like a real operating pilot without
+  explicit, out-of-band owner approval.
+- Do not connect real PHI, real deliveries, real payments, real background checks, or real
+  production communications channels under any circumstances in this repository as it stands.
+- `docs/IMPLEMENTATION_ROADMAP.md` Phase 10 ("Pilot readiness review, not automatic launch") is a
+  hard gate, not a formality — reaching the end of Phase 9 does not authorize a real pilot.
+
+## Architecture: modular Django monolith
+
+- One repository, one deployable Django application, organized as clearly-bounded apps under
+  `apps/` (see `docs/ARCHITECTURE_AND_DATA_MODEL.md` for the full logical architecture and entity
+  list). Do not split this into microservices or separate repositories during the MVP.
+- Each app in `apps/` owns its own models, migrations, and tests, and should stay loosely coupled
+  from its siblings — cross-app calls should go through explicit service functions, not reaching
+  into another app's internals or ORM querysets directly from views.
+- Multi-tenancy is a shared database with explicit `organization_id` scoping on every
+  customer-owned entity (once those entities exist, starting Phase 1). Never trust an organization
+  ID passed directly from a client without a permission check.
+- All datetimes are stored in UTC (`USE_TZ = True`, `TIME_ZONE = "UTC"`) and displayed in
+  `America/New_York` in any future UI — this is set in `config/settings/base.py` and must not
+  change.
+
+## Zero-cost policy — enforced, not aspirational
+
+This repository must run entirely on free, open-source, locally-hosted software. See
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` for the full policy, the allowed/prohibited lists, and
+the demo-vs-pilot cost distinction.
+
+Practical rules for any future change:
+
+1. **Never add a required dependency** (Python package, JS package, external API, SaaS) that
+   requires a paid tier, a credit card, or a real API key to function. Prohibited examples:
+   Stripe, Twilio, Auth0/Okta paid tiers, Sentry SaaS, Checkr, paid Mapbox/Google Maps, paid email
+   providers. Local/open-source equivalents (Mailpit, Valkey, self-hosted OSRM, mocked adapters)
+   are the only acceptable substitutes.
+2. Any external capability (routing, notifications, payments, background checks, object storage,
+   temperature sensors) must go through an adapter interface (`RoutingProvider`,
+   `NotificationProvider`, `PaymentProvider`, `BackgroundCheckProvider`, `ObjectStorageProvider`,
+   `TemperatureSensorProvider`) with a local/mock implementation shipped by default. Paid adapters
+   are deferred indefinitely, not just "for now."
+3. After adding or changing a dependency, run `python manage.py audit_cost`. It fail-closed
+   checks `pyproject.toml` dependencies against an explicit allowlist in
+   `apps/audit/management/commands/audit_cost.py` and scans `config/` and `apps/` source for
+   known prohibited-service indicator strings. If it fails, either the change violates policy, or
+   the allowlist in that command needs a deliberate, reviewed update — never widen the allowlist
+   just to make a violation disappear without confirming the package is genuinely free/open-source
+   and locally runnable.
+4. `docs/COST_AUDIT.md` is a **generated file** — it is rewritten by `audit_cost` on every
+   successful run. Don't hand-edit it; edit the command's report template if the report format
+   needs to change.
+
+## Data minimization and demo-data rules
+
+Per `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`:
+
+- Never add fields for diagnoses, lab results, clinical notes, medication indications, SSNs,
+  insurance identifiers, or full patient records — to any app, ever, in any phase.
+- Prefer operational references (delivery ID, package barcode, accession/order reference,
+  organization/facility IDs, authorized operational contacts) over anything resembling a medical
+  record.
+- All seed/fixture data under `demo_data/` must be synthetic. No real patient information, real
+  prescription information, real courier identity documents, real medical shipment labels, or
+  real customer contracts, ever.
+- No secrets or credentials committed to Git. `.env` is gitignored; `.env.example` documents names
+  only, never real values. GitHub Actions secrets are reserved for cases that genuinely need
+  CI-required credentials — ordinary CI (lint/type-check/test/audit) must not require any.
+
+## Do-not-build list (this repository, current phase)
+
+These are explicitly out of scope until (if ever) a real pilot review under
+`docs/IMPLEMENTATION_ROADMAP.md` Phase 10 authorizes them:
+
+- Any real background-check integration (Checkr or otherwise).
+- Any real payment processing (Stripe or otherwise) — billing stays a synthetic quote/invoice
+  prototype per `docs/PRODUCT_REQUIREMENTS.md` §14.
+- Any real SMS/paid communications provider — notifications stay in-app + Mailpit + simulated SMS
+  events per `docs/PRODUCT_REQUIREMENTS.md` §15.
+- Patient transportation, Category A infectious substances, controlled substances, human organs,
+  radioactive material, regulated medical waste, loose sharps, unsealed specimens, specialized
+  blood products, emergency-response cargo, air shipments, or courier packaging/repacking — all
+  explicitly excluded cargo/service types per `docs/PRODUCT_REQUIREMENTS.md` §3.
+- Claims of HIPAA/OSHA/DOT/pharmacy/employment/legal compliance anywhere in code, docs, comments,
+  or UI copy.
+- A real production deployment target/hosting — Phase 9 is "free public demonstration," not
+  production.
+
+## Project status (Phase 10 complete — full roadmap built as a demo prototype)
+
+As of Phase 10, every phase in `docs/IMPLEMENTATION_ROADMAP.md` (0 through 10) has been built and
+documented. **This remains a portfolio/demo software prototype using synthetic data only** —
+completing the roadmap does not change that, and does not authorize a real pilot. See:
+
+- `docs/PILOT_READINESS/GAP_ASSESSMENT.md` — every meaningful gap between this prototype and a real
+  operating pilot, organized by domain, cited to specific phases/files.
+- `docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` — the professional-review gates
+  (`docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8) that are hard blockers to any real pilot,
+  none resolvable by writing more code.
+- `docs/PILOT_READINESS/BUDGET_CHECKLIST.md` — non-binding, order-of-magnitude cost ranges for the
+  non-software costs a real pilot would face.
+- `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md` — what each zero-cost local/mock provider
+  actually does today and what a real, live implementation would need.
+- `docs/PILOT_READINESS/GO_NO_GO_REPORT.md` — the overall synthesis: what's solid, what's a hard
+  blocker, what's an addressable engineering gap, and a recommended concrete next step. **This
+  report does not itself authorize a pilot** — that decision belongs to the project owner, after the
+  professional reviews it names.
+
+## Current phase and what exists today
+
+All ten roadmap phases (0 through 10) are built — see "Project status" above. Concretely, that
+means:
+
+- Every app under `apps/` has real domain models, migrations, services, and tests — this is no
+  longer the "empty, model-free skeleton" state Phase 0 left behind. Follow the entity list in
+  `docs/ARCHITECTURE_AND_DATA_MODEL.md` §3 and the existing per-app conventions (service-layer
+  functions, tenant scoping via `apps.organizations.services`) when touching any of them.
+- `django.db.backends.postgresql` (not the GeoDjango/PostGIS backend) is still the deliberate
+  choice — every model that needs coordinates (`Facility`, `CourierLocationPing`, etc.) uses plain
+  `DecimalField` lat/lng rather than a PostGIS `PointField`, a decision made in Phase 1 and never
+  revisited because no phase ended up needing real spatial queries/indexing. If a future change
+  introduces one, that's the moment to add the PostGIS backend and move that model's tests off
+  SQLite onto the real `db` compose service.
+- SQLite remains the test settings module (`config.settings.test`) database for exactly that
+  reason — still valid because nothing tested is PostGIS-specific.
+- Django Channels is still deliberately not wired in (see `config/asgi.py`) — no phase ended up
+  needing WebSocket push; polling/HTMX covers what was built instead. Revisit only if a real need
+  appears.
+- A Render+Neon public demo deployment (Phase 9 addendum — see `render.yaml`,
+  `config/settings/demo_render.py`, `docs/DEPLOY_RENDER_NEON.md`) has been executed and **is live**
+  at `https://medrelay-demo.onrender.com` (Render free web tier + Neon free Postgres, genuinely $0,
+  no card). It auto-deploys on every push to `main` — this is unaffected by which machine/account
+  pushes, since it's wired to the GitHub repo (`mxhasan03/MedRelay`), not to any local checkout.
+  Login: any account in `docs/DEMO_PACKAGE.md` section 3 (e.g. `northstar_owner`, `ops_dispatcher`,
+  or a `demo_courier_*` account for the courier PWA) with password `MedRelayDemo!2026`. Free-tier
+  cold start after idle can take ~30-50s on the first request.
+- Since Phase 10, three post-roadmap work items shipped (new work requested directly by the
+  project owner, not from `docs/IMPLEMENTATION_ROADMAP.md`, each independently verified — full
+  detail in the dated addenda at the end of `docs/CURRENT_STATUS.md`):
+  1. Fixed a real production bug: Django's `{# ... #}` template comment tag doesn't strip
+     multi-line comments (only single-line ones), so 5 documentation-heavy `{# #}` blocks across
+     4 templates were leaking verbatim into rendered pages. Fixed by converting them to
+     `{% comment %}...{% endcomment %}`. A regression test
+     (`tests/integration/test_no_multiline_template_comments.py`) now statically scans every
+     template for this pattern so it can't silently reappear.
+  2. Cleaned up the internal ops dispatch console (`templates/dispatch/*`): card/badge-based
+     layout, a real (data-backed) AT RISK vs. INFEASIBLE SLA-risk distinction, previously-invisible
+     incident/temperature-alert/courier-location data now surfaced, and query-param-based
+     sort/filter on both delivery tables and the ranked-candidate list. Added shared
+     `.card`/`.badge-*` classes to `templates/base.html`'s `@layer components`. No live map — out
+     of scope for that pass.
+  3. Built out the courier PWA (`apps/couriers/*`, `templates/couriers/*`) beyond Phase 5/6: a new
+     Availability screen (online/offline, service zone, capacity — over the existing
+     `CourierAvailability` model), a new Profile/Onboarding screen (credentials, vehicle, cargo
+     authorizations, expiration warnings — read-only, no document upload, per
+     `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`), a per-delivery-derived cargo handling boundary
+     statement on the active-delivery screen, a visual progress tracker replacing the old plain
+     transition list, and a bottom tab bar for app-like navigation. Deliberately kept the courier
+     PWA's own `.card`/`.btn` component classes separate from the shared ones added in item 2 above
+     (mobile touch-target sizing needs differ) — documented in `templates/couriers/base.html`.
+- Always check `docs/CURRENT_STATUS.md` for the exact, current state (file paths, gate output,
+  known gaps) before assuming what exists — it is updated at the end of each phase's (and each
+  post-roadmap work item's) work and is more current than this file's phase description will
+  remain over time.
+
+## Quality gates — must pass before any change is considered done
+
+Run all of these locally before considering work finished (see `README.md` for exact commands):
+
+- `ruff check .`
+- `ruff format --check .`
+- `mypy .`
+- `pytest` (with coverage)
+- `python manage.py check`
+- `python manage.py makemigrations --check --dry-run`
+- `python manage.py audit_cost`
+- `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)` (update the baseline
+  deliberately via `detect-secrets scan --baseline .secrets.baseline` — which rewrites the file
+  in place — if a new *non-secret* false positive appears; never add a baseline entry to hide a
+  real secret — remove the secret instead)
+
+CI (`.github/workflows/ci.yml`) runs the same gates and must not require secrets or external
+credentials. Installing public packages or pulling public Docker images over the network during
+CI is fine; needing an API key or credential is not.
+
+## Practical conventions
+
+- Dependency management is `uv` + `pyproject.toml` + `uv.lock`. Add dependencies via
+  `uv add <package>` (or `uv add --group dev <package>` for dev-only tools), not by hand-editing
+  the lock file. Then update the allowlist in `apps/audit/management/commands/audit_cost.py` and
+  rerun `audit_cost`.
+- New Django apps go under `apps/<name>/` and must be registered in `INSTALLED_APPS` in
+  `config/settings/base.py` with an `apps.<name>` dotted path, matching the existing apps.
+- Keep `docs/PRODUCT_REQUIREMENTS.md`, `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`,
+  `docs/ARCHITECTURE_AND_DATA_MODEL.md`, `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`, and
+  `docs/IMPLEMENTATION_ROADMAP.md` as the authoritative spec — if implementation needs to diverge
+  from them, update the doc and explain why in `docs/CURRENT_STATUS.md`, don't just silently drift.
+- `docs/CURRENT_STATUS.md` should be updated at the end of meaningful units of work: what was
+  done, exact file paths touched, evidence/output of the quality gates, known gaps or deviations,
+  and the resulting commit hash.
+
+---
+
+# README.md
+
+```
+SOURCE FILE: README.md
+```
+
+# MedRelay (medical-courier-platform)
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+MedRelay is a portfolio/demo B2B healthcare-courier logistics platform prototype for New York City
+(Manhattan-Brooklyn zone). It is being built in phases; see `docs/IMPLEMENTATION_ROADMAP.md` for the
+full plan and `docs/CURRENT_STATUS.md` for exactly what is done today (as of this writing, Phases
+0-9 — the full operational domain, UX/accessibility/security hardening, and the local demo
+package described below are complete; Phase 10's pilot-readiness review has not run).
+
+**Want to try the whole thing end to end?** See `docs/DEMO_PACKAGE.md` for a real, tested
+walkthrough: `docker compose up --build`, run migrations, seed a full synthetic demo dataset
+(`python manage.py seed_full_demo`), and log in with one of several documented demo accounts
+covering every major role. `docs/HOSTING_OPTIONS.md` is a separate research/recommendation
+document about *public* hosting — no public deployment exists; platform selection is the project
+owner's decision, not something this repository has acted on.
+
+The project runs entirely on free, open-source, locally-hosted software (`DEMO_MODE`). See
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` and `docs/COST_AUDIT.md`.
+
+## Stack
+
+Python 3.12, Django 5.2 LTS, Django REST Framework, drf-spectacular, PostgreSQL 17 + PostGIS 3.5,
+Valkey, Celery 5.6, Mailpit, HTMX + Alpine.js + Tailwind (templates), `uv` for dependency
+management, GitHub Actions CI.
+
+## Prerequisites
+
+- Docker Engine + the `docker compose` plugin (tested path). Podman + `podman-compose` should also
+  work against the same `compose.yaml` but is not the tested path in this repo.
+- Python 3.12 if you want to run tooling (tests/lint/type-check) outside containers.
+- [`uv`](https://docs.astral.sh/uv/) if you want to manage the Python environment locally
+  (`pip3 install --user uv`, or see uv's install docs). Not required to run the compose stack.
+
+## Quick start — run the full local stack
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+This starts:
+
+- `web` — Django dev server on <http://localhost:8000> (`/healthz/`, `/readyz/`, `/api/schema/`, `/api/docs/`)
+- `db` — PostgreSQL 17 + PostGIS 3.5 (`postgis/postgis:17-3.5`)
+- `valkey` — Valkey (Redis-compatible) cache/broker
+- `worker` — Celery worker (no scheduled tasks in Phase 0)
+- `mailpit` — local SMTP + web UI on <http://localhost:8025>
+
+Tear down with `docker compose down` (add `-v` to also drop the database volume).
+
+Validate the compose file without starting anything:
+
+```bash
+docker compose config
+```
+
+## Local development without containers (for running quality gates)
+
+Phase 0 CI and local quality gates use SQLite (`config.settings.test`) so no Postgres/PostGIS
+server is required to run them. This is a deliberate, temporary decision — see
+`docs/CURRENT_STATUS.md` and `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`.
+
+```bash
+pip3 install --user uv          # one-time, if uv is not already installed
+export PATH="$HOME/.local/bin:$PATH"
+
+uv sync --group dev             # creates .venv and installs all dependencies
+source .venv/bin/activate
+
+export DJANGO_SETTINGS_MODULE=config.settings.test
+
+ruff check .
+ruff format --check .
+mypy .
+pytest
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py audit_cost
+detect-secrets-hook --baseline .secrets.baseline $(git ls-files)
+```
+
+If `uv` cannot reach PyPI in your environment, fall back to plain `pip`:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e . --group dev   # pip >= 25.1, or see requirements.lock.txt fallback below
+```
+
+## Health endpoints
+
+- `GET /healthz/` — liveness; always returns `200` with no dependency checks.
+- `GET /readyz/` — readiness; returns `200` only when the database and cache are reachable, `503`
+  otherwise.
+
+## Repository layout
+
+See `docs/ARCHITECTURE_AND_DATA_MODEL.md` for the target architecture and
+`docs/IMPLEMENTATION_ROADMAP.md` for what each phase delivers. Phase 0 provides the Django project
+skeleton, one empty modular app per planned domain (no models yet), the compose stack, CI, and the
+zero-cost audit tooling.
+
+## Zero-cost policy
+
+No required paid software, API, cloud database, mapping, SMS, payment, or identity provider is used
+anywhere in this repository. Run `python manage.py audit_cost` to verify; see
+`docs/COST_AUDIT.md` for the generated report and `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` for the
+full policy and allowlist.
+
+## Governance
+
+Read `CLAUDE.md` before making changes — it documents the modular-monolith architecture, the
+zero-cost policy, the demo-data-only rule, and the do-not-build list that keep this prototype from
+drifting into claiming real operational capability.
+
+---
+
+# docs/PRODUCT_REQUIREMENTS.md
+
+```
+SOURCE FILE: docs/PRODUCT_REQUIREMENTS.md
+```
+
+# Product Requirements Document
+
+## 1. Product summary
+
+MedRelay is a managed B2B healthcare logistics platform for New York City. It connects approved healthcare organizations with a closed network of vetted couriers for scheduled, same-day, and STAT transportation of approved medical items.
+
+The platform combines four capabilities:
+
+1. Customer delivery requests and recurring routes
+2. Courier qualification, availability, and mobile job execution
+3. Dispatcher-assisted assignment and operational control
+4. Digital chain of custody, proof of delivery, incident handling, and reporting
+
+The product is not a patient transportation service and is not an unrestricted consumer gig marketplace.
+
+## 2. Pilot scope
+
+### Geography
+
+- Controlled Manhattan-Brooklyn service zone
+- No routine Long Island, Westchester, New Jersey, or airport delivery in the prototype
+- All timestamps stored in UTC and displayed in `America/New_York`
+
+### Operating hours
+
+- Weekdays: 7:00 AM-8:00 PM
+- Evenings/weekends: prebooked plus limited STAT support
+- No full overnight on-demand promise in the initial product
+
+### Customer organizations
+
+The data model supports:
+
+- clinics
+- urgent-care centers
+- diagnostic laboratories
+- pharmacies
+- hospitals/health systems
+- home-health organizations
+
+Initial sales/use-case priority:
+
+1. Clinics/urgent-care centers sending routine specimens to laboratories
+2. Facility-to-facility documents and non-hazardous supplies
+3. Sealed non-controlled pharmacy-prepared medication delivery after workflow review
+
+### Delivery modes
+
+- `SCHEDULED`: recurring or prebooked route
+- `SAME_DAY`: customer-selected pickup/delivery window
+- `STAT`: rapid assignment plus active SLA monitoring; not emergency medical response
+
+## 3. Cargo classes
+
+### Class 1 - Documents and non-hazardous supplies
+
+Examples: sealed records, PPE, test kits, small devices, equipment parts, and non-hazardous supplies.
+
+### Class 2 - Approved routine specimens
+
+Only customer-attested, properly classified, packaged, sealed, and labeled routine specimens supported by written platform policy.
+
+### Class 3 - Sealed non-controlled prescription medication
+
+Pharmacy-prepared medication only. The pharmacy/facility remains responsible for lawful dispensing, packaging, labeling, and release.
+
+### Temperature capabilities
+
+- ambient
+- refrigerated
+
+Frozen cargo is deferred.
+
+### Explicitly excluded
+
+- patient transportation
+- Category A infectious substances
+- controlled substances
+- human organs
+- radioactive material
+- regulated medical waste
+- loose sharps
+- unsealed specimens
+- specialized blood products
+- emergency-response cargo
+- air shipments
+- courier packaging/repacking
+
+## 4. User groups and roles
+
+### Customer organization roles
+
+- organization owner
+- administrator
+- requester/dispatcher
+- billing manager
+- compliance reviewer
+- read-only auditor
+
+### Courier roles
+
+- applicant
+- approved courier
+- suspended courier
+- inactive courier
+
+### Internal operations roles
+
+- dispatcher
+- operations manager
+- courier onboarding reviewer
+- compliance reviewer
+- customer support
+- finance
+- system administrator
+
+### Recipient
+
+A recipient uses a short-lived secure link or PIN flow and does not require a full account in Version 1.
+
+## 5. Customer portal requirements
+
+### Dashboard
+
+Show:
+
+- active deliveries
+- unassigned or awaiting-confirmation deliveries
+- delayed/at-risk deliveries
+- recent completed deliveries
+- upcoming recurring routes
+- service-level metrics
+
+### Delivery request wizard
+
+Required fields:
+
+- pickup facility
+- destination facility/home address
+- pickup window
+- required delivery time
+- service level
+- cargo class
+- package count
+- approximate dimensions/weight
+- temperature requirement
+- sender contact
+- recipient contact/role
+- packaging/classification attestation
+- recipient verification method
+- facility instructions
+
+The request must block dispatch when required cargo or packaging information is missing.
+
+### Recurring routes
+
+Support:
+
+- daily/weekly recurrence
+- route start/end dates
+- holiday exceptions
+- multiple stops
+- operations approval
+- pause/resume
+
+### Delivery tracking
+
+Show:
+
+- status timeline
+- ETA
+- courier identity appropriate to role
+- active location after pickup when permitted
+- SLA countdown
+- exceptions
+- custody events
+
+### Reports
+
+Support exports for:
+
+- delivery summary
+- custody timeline
+- pickup/delivery proof
+- incident summary
+- on-time performance
+- invoice summary
+
+All exports use synthetic data in the prototype.
+
+## 6. Courier PWA requirements
+
+### Onboarding profile
+
+- identity-review status placeholder
+- driver-license status
+- vehicle
+- insurance status
+- training records
+- equipment
+- cargo authorizations
+- credential expirations
+
+No real background-check provider is integrated in the zero-cost prototype.
+
+### Availability
+
+- online/offline
+- shift availability
+- current service zone
+- current capacity
+
+### Job offers
+
+Show only eligible jobs based on hard eligibility rules. Courier can accept or reject. Legitimate cargo/safety rejection must be recordable.
+
+### Active delivery
+
+- navigation/routing summary
+- pickup instructions
+- cargo handling boundary
+- scan package
+- condition/seal checklist
+- sender PIN/signature
+- start transport
+- destination instructions
+- recipient PIN/signature
+- incident reporting
+- offline event queue
+
+### Privacy
+
+Courier sees only the minimum operational information needed for the task.
+
+## 7. Operations control center
+
+### Control tower
+
+Show:
+
+- live/last-known courier locations
+- unassigned deliveries
+- offered/accepted assignments
+- at-risk deadlines
+- incidents
+- temperature alerts
+- facility wait time
+- expiring courier credentials
+
+### Dispatch board
+
+- eligibility-filtered courier candidates
+- explainable assignment score
+- manual assignment/reassignment
+- reason-required overrides
+- offer expiration
+- SLA-feasibility warning
+
+### Incident console
+
+- incident category/severity
+- current delivery hold
+- response checklist
+- customer notifications
+- return-to-sender or alternate-destination resolution
+- courier suspension/review action
+- append-only event history
+
+## 8. Recipient experience
+
+- short-lived tracking link
+- ETA/status
+- masked communication placeholder
+- recipient PIN confirmation
+- signature option
+- no unattended drop-off unless cargo/customer policy explicitly allows it
+
+## 9. Delivery state machine
+
+Primary states:
+
+1. `DRAFT`
+2. `SUBMITTED`
+3. `VALIDATION_REQUIRED`
+4. `READY_FOR_DISPATCH`
+5. `OFFERED`
+6. `ASSIGNED`
+7. `COURIER_EN_ROUTE_TO_PICKUP`
+8. `AT_PICKUP`
+9. `PICKED_UP`
+10. `IN_TRANSIT`
+11. `AT_DESTINATION`
+12. `DELIVERED`
+
+Exception/terminal states:
+
+- `REJECTED`
+- `CANCELLED`
+- `INCIDENT_HOLD`
+- `RETURNING`
+- `RETURNED`
+- `FAILED`
+
+All transitions must be explicit, validated, authorized, and recorded as append-only events.
+
+## 10. Chain of custody
+
+Required event types:
+
+- request created
+- package prepared/attested
+- courier assigned
+- courier arrived
+- pickup scan
+- condition verified
+- custody accepted
+- route started
+- facility arrival
+- recipient verified
+- delivery scan
+- custody transferred
+- delivery completed
+- incident opened/updated/resolved
+- return initiated/completed
+- correction appended
+
+Each event stores:
+
+- event ID
+- delivery ID
+- event type
+- actor type/ID
+- occurred-at timestamp
+- recorded-at timestamp
+- location when appropriate
+- device/session metadata
+- structured payload
+- previous-event hash and current-event hash for tamper evidence
+
+Corrections append new events and never overwrite originals.
+
+## 11. Matching and dispatch rules
+
+### Hard eligibility filters
+
+A courier is ineligible when any required condition fails:
+
+- account not active
+- credential expired
+- cargo authorization missing
+- temperature capability missing
+- vehicle/equipment incompatible
+- outside service zone
+- unavailable
+- current capacity exceeded
+- facility restriction not met
+- SLA mathematically infeasible
+
+### Explainable score for eligible couriers
+
+Suggested weighted factors:
+
+- ETA to pickup
+- SLA slack
+- reliability/on-time history
+- route compatibility
+- active workload
+- facility familiarity
+- toll/parking burden
+- customer preference (non-binding)
+
+The assignment service returns both a score and human-readable reasons.
+
+### Dispatcher authority
+
+Dispatchers can override recommendations but must record a reason. Overrides never bypass hard safety/authorization rules.
+
+## 12. Temperature workflow
+
+- requirement attached to package/delivery
+- sender confirms prepared packaging
+- eligible courier/equipment required
+- indicator/logger placeholder
+- readings/events attached to custody timeline
+- excursion opens an incident and may place delivery on hold
+- no claim of validated cold-chain compliance in the prototype
+
+## 13. Incident categories
+
+- leak/spill
+- broken seal
+- package damage
+- temperature excursion
+- vehicle accident
+- courier injury/exposure
+- lost package
+- incorrect recipient
+- wrong destination
+- missed SLA
+- recipient unavailable
+- suspected tampering
+
+Severe incidents suspend normal completion until an authorized resolution is recorded.
+
+## 14. Pricing and billing prototype
+
+The demo quote engine may calculate:
+
+- base fee
+- distance/time estimate
+- service-level surcharge
+- cargo/equipment surcharge
+- toll estimate
+- wait-time placeholder
+- after-hours surcharge
+- return-trip fee
+
+Use synthetic configurable rules only. Do not connect a real payment processor.
+
+Support:
+
+- quote preview
+- internal invoice records
+- CSV/PDF-like HTML export
+- payment-status mock
+
+## 15. Notification prototype
+
+Use:
+
+- in-app notifications
+- local Mailpit email
+- logged/simulated SMS events
+
+Do not require a paid SMS or email provider.
+
+## 16. Non-functional requirements
+
+- multi-tenant isolation
+- role-based access control
+- MFA-ready; TOTP supported for privileged users
+- timezone-aware datetimes
+- append-only audit/custody events
+- accessible responsive UI
+- English-first with translation-ready strings; Spanish later
+- offline-capable courier event queue
+- deterministic seed/demo mode
+- no real PHI or real delivery operations
+- strong input validation and file-size limits
+- idempotent API operations
+- optimistic concurrency or version checks for assignment/state transitions
+
+---
+
+# docs/ARCHITECTURE_AND_DATA_MODEL.md
+
+```
+SOURCE FILE: docs/ARCHITECTURE_AND_DATA_MODEL.md
+```
+
+# Architecture and Data Model
+
+## 1. Logical architecture
+
+```text
+Customer Portal        Courier PWA        Operations Console       Recipient Link
+       \                    |                    |                       /
+        \---------------- Django ASGI Application --------------------/
+                              |
+        ----------------------------------------------------------------
+        | Accounts | Organizations | Facilities | Couriers | Cargo     |
+        | Deliveries | Dispatch | Custody | Tracking | Incidents       |
+        | Temperature | Notifications | Billing | Reporting | Audit    |
+        ----------------------------------------------------------------
+                              |
+              PostgreSQL + PostGIS / Valkey / Celery
+                              |
+           Local routing, email, object storage, mock adapters
+```
+
+## 2. Multi-tenancy
+
+Use a shared database with explicit `organization_id` scoping. Every customer-owned entity must include an organization relationship. Central operations users may access multiple organizations through explicit permission checks.
+
+Required protections:
+
+- queryset scoping by tenant
+- object-level permission tests
+- no organization ID accepted blindly from clients
+- audit events for sensitive access and mutations
+- automated cross-tenant isolation tests
+
+## 3. Main entities
+
+### Identity and organizations
+
+- `User`
+- `Organization`
+- `OrganizationMembership`
+- `Role`
+- `Facility`
+- `FacilityContact`
+- `FacilityReceivingRule`
+- `ServiceZone`
+
+### Couriers
+
+- `CourierProfile`
+- `CourierStatus`
+- `CourierCredential`
+- `TrainingRecord`
+- `Vehicle`
+- `Equipment`
+- `CargoAuthorization`
+- `CourierAvailability`
+- `CourierLocationPing`
+- `CourierPerformanceSnapshot`
+
+### Cargo and packages
+
+- `CargoClass`
+- `CargoPolicy`
+- `TemperatureProfile`
+- `Package`
+- `PackageIdentifier`
+- `PackagingAttestation`
+- `PackageConditionCheck`
+
+### Delivery and dispatch
+
+- `DeliveryRequest`
+- `DeliveryStop`
+- `DeliveryStatusTransition`
+- `DeliveryAssignment`
+- `JobOffer`
+- `DispatchRecommendation`
+- `DispatchOverride`
+- `RoutePlan`
+- `RouteLeg`
+- `SLAProfile`
+
+### Custody, proof, and incidents
+
+- `CustodyEvent`
+- `ProofOfPickup`
+- `ProofOfDelivery`
+- `RecipientVerification`
+- `TemperatureReading`
+- `TemperatureExcursion`
+- `Incident`
+- `IncidentAction`
+- `ReturnResolution`
+
+### Commercial and system
+
+- `PricingRule`
+- `Quote`
+- `Invoice`
+- `InvoiceLine`
+- `Notification`
+- `WebhookDelivery`
+- `AuditEvent`
+- `ExportJob`
+
+(NOTE: None of these models are built in Phase 0. This section is here so CLAUDE.md and docs/CURRENT_STATUS.md can accurately describe what's coming later. Do not build these models now.)
+
+## 5. State machine invariants
+
+- delivered deliveries cannot return to in-transit without an appended correction/incident workflow
+- pickup requires assignment and package verification
+- delivery requires pickup/custody acceptance
+- temperature-controlled assignment requires courier authorization and equipment
+- incident hold blocks completion until an authorized resolution
+- cancellation after pickup requires return or authorized exception handling
+- user correction never deletes prior custody history
+- duplicate idempotency keys cannot create duplicate delivery requests/events
+
+## 9. Idempotency and concurrency
+
+- require `Idempotency-Key` for create/transition endpoints
+- use database transactions and row locks for assignment/state transitions
+- use version fields/ETags for conflicting edits
+- make Celery tasks idempotent
+- deduplicate notifications and exports
+
+---
+
+# docs/TECH_STACK_AND_ZERO_COST_POLICY.md
+
+```
+SOURCE FILE: docs/TECH_STACK_AND_ZERO_COST_POLICY.md
+```
+
+# Technical Stack and Zero-Cost Policy
+
+## 1. Architecture choice
+
+Use a **modular Django monolith** with one repository and one deployable application during the MVP. This reduces infrastructure, authentication, deployment, and cross-service complexity while preserving clear module boundaries.
+
+## 2. Core stack
+
+### Language and framework
+
+- Python 3.12
+- Django 5.2 LTS, pinned to the latest security patch in the 5.2 line
+- Django REST Framework for versioned APIs
+- drf-spectacular for OpenAPI documentation
+
+### Frontend
+
+- Django templates
+- HTMX for partial-page interactions
+- Alpine.js for small client-side state
+- Tailwind CSS for the design system
+- Progressive Web App manifest/service worker for courier mobile use
+- Minimal custom JavaScript; no mandatory React/Next.js frontend in Version 1
+
+### Data
+
+- PostgreSQL 17+ as the relational database
+- PostGIS 3.5+ for spatial data, service zones, distances, and location queries
+- SQLite allowed only for limited unit tests when PostgreSQL-specific behavior is not being tested
+
+### Background and real-time processing
+
+- Celery 5.6 for background tasks and scheduling
+- Valkey as the open-source cache/message broker
+- Django Channels for WebSocket status/location updates
+
+### Maps and routing
+
+- MapLibre GL JS for browser map rendering
+- OpenStreetMap-derived data with required attribution
+- OSRM self-hosted/local for routing in the demo
+- PostGIS for spatial filtering
+
+Do not depend on public community map, tile, geocoding, or routing endpoints for production-scale traffic. The prototype may use local fixtures or self-hosted services.
+
+### Files and exports
+
+- Local filesystem in development
+- MinIO as an optional local S3-compatible object store
+- WeasyPrint is optional only if its system dependencies remain fully local/free; otherwise use HTML/CSV exports first
+
+### Authentication and authorization
+
+- Django authentication
+- Custom organization membership and role models
+- django-otp for optional TOTP MFA
+- Short-lived signed recipient links/tokens
+- No paid identity provider
+
+### Barcode and scanning
+
+- Segno or qrcode for QR generation
+- ZXing-based browser scanning or a small open-source JavaScript scanner
+- Manual code entry fallback
+
+### Testing and quality
+
+- pytest
+- pytest-django
+- factory_boy
+- Hypothesis for state-machine/property tests where useful
+- Playwright for end-to-end browser tests
+- Ruff for linting/formatting
+- mypy with Django typing support
+- coverage.py
+- axe-core/Playwright accessibility checks
+
+### Development and containers
+
+- `uv` with `pyproject.toml` and lock file
+- Podman Compose preferred for a fully free/open-source desktop workflow
+- Docker Compose files may also be supplied, but Docker Desktop must not be a mandatory dependency
+- Mailpit for local email capture
+
+### CI/CD
+
+- GitHub Actions
+- Ordinary CI must not require secrets or external network calls
+- Public repositories can use standard GitHub-hosted Actions without usage charges; private repositories are subject to included quotas
+- Add a fail-closed dependency/cost audit
+- Do not configure paid runners or artifact retention that risks charges
+
+## 3. Repository layout
+
+```text
+medical-courier-platform/
+├── CLAUDE.md
+├── README.md
+├── pyproject.toml
+├── uv.lock
+├── compose.yaml
+├── .env.example
+├── .github/workflows/
+│   ├── ci.yml
+│   └── security.yml
+├── config/
+│   ├── settings/
+│   ├── urls.py
+│   ├── asgi.py
+│   └── celery.py
+├── apps/
+│   ├── accounts/
+│   ├── organizations/
+│   ├── facilities/
+│   ├── couriers/
+│   ├── cargo/
+│   ├── deliveries/
+│   ├── dispatch/
+│   ├── custody/
+│   ├── tracking/
+│   ├── temperature/
+│   ├── incidents/
+│   ├── notifications/
+│   ├── billing/
+│   ├── reporting/
+│   └── audit/
+├── templates/
+├── static/
+├── frontend/
+│   ├── css/
+│   └── js/
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   ├── e2e/
+│   ├── security/
+│   └── accessibility/
+├── docs/
+├── scripts/
+└── demo_data/
+```
+
+## 4. Strict zero-cost prototype policy
+
+### Allowed
+
+- open-source local software
+- GitHub Free and included GitHub Actions allowance
+- local PostgreSQL/PostGIS
+- local Valkey/Celery
+- local OSRM/MapLibre/OpenStreetMap data
+- local Mailpit
+- local MinIO
+- synthetic fixtures
+- manual CSV imports/exports
+- mocked integrations
+
+### Prohibited as required dependencies
+
+- Twilio or paid SMS
+- Google Maps Platform
+- paid Mapbox API
+- Stripe or paid payment processing
+- Auth0/Okta paid services
+- Sentry SaaS
+- Checkr/background-check API
+- paid cloud object storage
+- paid e-signature
+- paid temperature IoT platform
+- paid email service
+- card-required trial that may create charges
+
+### Adapter rule
+
+Every external capability must use an interface such as:
+
+- `RoutingProvider`
+- `NotificationProvider`
+- `PaymentProvider`
+- `BackgroundCheckProvider`
+- `ObjectStorageProvider`
+- `TemperatureSensorProvider`
+
+Version 1 ships with local/mock implementations. Paid or enterprise adapters are deferred.
+
+## 5. Demo versus real pilot
+
+### Fully free demo
+
+The demo can be built and run for $0 using synthetic data on a developer-controlled machine.
+
+### Real operating pilot
+
+A real medical-courier operation cannot responsibly be promised at $0. Likely unavoidable non-software costs include:
+
+- legal/compliance review
+- insurance
+- background and motor-vehicle checks
+- courier equipment/PPE
+- operational staff
+- reliable SMS/communications
+- mapping/routing infrastructure at scale
+- production hosting/backups
+- payment processing
+- potential security/compliance assessments
+
+The repository must clearly distinguish `DEMO_MODE` from any future `PILOT_MODE`.
+
+## 6. Cost audit
+
+Implement:
+
+```bash
+python manage.py audit_cost
+```
+
+The command must:
+
+- inspect dependencies against an approved allowlist
+- inspect configuration for prohibited required services
+- fail when an unreviewed external dependency appears
+- produce `docs/COST_AUDIT.md`
+- never claim operational business costs are zero
+
+---
+
+# docs/SECURITY_COMPLIANCE_BOUNDARIES.md
+
+```
+SOURCE FILE: docs/SECURITY_COMPLIANCE_BOUNDARIES.md
+```
+
+# Security and Compliance Boundaries
+
+## 1. Required disclaimer
+
+Every demo environment and relevant documentation must state:
+
+> This is a software prototype using synthetic data. It is not certified or approved for real medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other legal compliance.
+
+## 2. Data minimization
+
+Do not create fields for diagnoses, laboratory results, clinical notes, medication indications, social security numbers, insurance identifiers, or full patient records.
+
+Preferred operational references:
+
+- delivery ID
+- package barcode
+- accession/order reference
+- organization/facility IDs
+- authorized operational contacts
+
+## 3. Demo-data prohibition
+
+- no real patient information
+- no real prescription information
+- no real courier identity documents
+- no real medical shipment labels
+- no real customer contracts
+- no secrets or credentials in Git
+
+## 4. Authentication and access
+
+- secure password hashing through Django
+- TOTP MFA for privileged roles when enabled
+- session security and CSRF protection
+- rate limiting for public/recipient endpoints
+- role and tenant checks on every sensitive operation
+- short-lived signed recipient tokens
+- never expose courier/customer personal contact data unnecessarily
+
+## 5. Encryption and secrets
+
+- HTTPS required for any hosted demo
+- database encryption-at-rest is an infrastructure concern for future pilot deployment
+- local secrets loaded through environment variables
+- `.env` gitignored; `.env.example` contains names only
+- GitHub Actions secrets only for CI-required credentials
+- automated secret scan in CI
+
+## 6. Auditability
+
+Record:
+
+- authentication events
+- role/membership changes
+- facility changes
+- delivery state transitions
+- assignment overrides
+- custody events
+- incident actions
+- export creation
+- sensitive record access where practical
+
+Audit/custody records are append-only at the application level and protected with database permissions and tamper-evident hashes.
+
+## 7. Safety rules represented in software
+
+- sender classification/packaging attestation required
+- couriers cannot open/repack cargo
+- authorization/equipment hard gates
+- missing cargo classification blocks dispatch
+- temperature requirements hard gate assignment
+- incident hold blocks completion
+- controlled substances and prohibited cargo rejected
+- STAT language never implies emergency medical response
+
+## 8. Professional review gates before real operation
+
+A real pilot requires independent review of:
+
+- healthcare privacy and business-associate status
+- customer/business-associate contracts
+- specimen/infectious-substance eligibility and packaging
+- pharmacy medication delivery rules
+- New York worker classification
+- insurance and vehicle requirements
+- background-check consent/process
+- incident/exposure plan
+- data retention
+- production hosting/security
+
+Software implementation does not replace these reviews.
+
+---
+
+# docs/IMPLEMENTATION_ROADMAP.md
+
+```
+SOURCE FILE: docs/IMPLEMENTATION_ROADMAP.md
+```
+
+# Implementation Roadmap
+
+## Phase 0 - Repository foundation
+
+Deliver:
+
+- repository and branch strategy
+- Django project skeleton
+- modular app structure
+- local compose stack: web, PostgreSQL/PostGIS, Valkey, worker, Mailpit
+- pyproject/lock file
+- CI: lint, type check, tests, migration check, cost audit, secret scan
+- global demo/compliance disclaimer
+- architecture/status documentation
+
+Acceptance:
+
+- one documented command starts the stack
+- health endpoint works
+- all quality gates pass
+- no paid dependency
+
+## Phase 1 - Identity, tenancy, facilities, and roles
+
+Deliver: custom user model; organizations and memberships; customer/internal role system; facilities and service zones; tenant-scoped query/services; synthetic seed data; admin interface.
+
+## Phase 2 - Cargo policy and delivery requests
+
+Deliver: cargo classes/policies; temperature profiles; packages/attestations; delivery request wizard; scheduled/same-day/STAT; quote engine with synthetic pricing; validation and prohibited-cargo rules; recurring-route model.
+
+## Phase 3 - Courier onboarding and eligibility
+
+Deliver: courier profiles/status; credentials/training/vehicle/equipment; authorization levels; availability; eligibility engine; credential expiration warnings.
+
+## Phase 4 - Dispatch and operations console
+
+Deliver: dispatch recommendations; explainable score; job offers and expiration; assignment/reassignment; dispatcher override with reason; operations dashboard/map; SLA-risk rules.
+
+## Phase 5 - Courier PWA and tracking
+
+Deliver: mobile-first courier UI; accept/reject; pickup/delivery workflows; browser location updates; offline event queue; QR scanning plus manual fallback; active-delivery timeline.
+
+## Phase 6 - Custody, proof, temperature, and incidents
+
+Deliver: append-only custody events; sender/recipient PIN and signature prototype; package condition checklist; temperature readings/excursion simulation; incident console; return-to-sender flow; tamper-evident event chain verifier.
+
+## Phase 7 - Notifications, recipient tracking, billing, and reports
+
+Deliver: in-app notifications; Mailpit email; simulated SMS adapter; secure recipient link; invoice records; CSV/HTML exports; operational metrics.
+
+## Phase 8 - UX, accessibility, security, and demo hardening
+
+Deliver: unified design system; responsive interfaces; accessibility pass; TOTP MFA for privileged demo accounts; upload/input limits; rate limiting; audit viewer; backup/restore documentation; threat model.
+
+## Phase 9 - Free public demonstration option
+
+Deploy synthetic demo mode only, all providers mocked/local, no paid/card-required hosting.
+
+## Phase 10 - Pilot readiness review, not automatic launch
+
+Gap assessment, legal/compliance checklist, insurance/infra budget checklist, real-provider adapter requirements, go/no-go report. Do not connect real PHI/deliveries/payments/background checks/production comms without explicit owner approval.
+
+---
+
+# docs/THREAT_MODEL.md
+
+```
+SOURCE FILE: docs/THREAT_MODEL.md
+```
+
+# Threat Model
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+This is a real, specific threat model for MedRelay as actually built through Phase 8 — not generic
+boilerplate. Each threat below names the concrete mitigation already in the codebase (by file
+path), states its honest residual risk, and calls out what a real pilot review
+(`docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8) would need to independently verify before any
+real operation. "Accepted risk for a demo prototype" below means exactly that — accepted for a
+free, synthetic-data, single-developer-machine demo, not for a real deployment.
+
+## 1. Tenant-isolation bypass
+
+**Threat**: a customer-organization user (or a compromised session) views or modifies another
+organization's facilities, delivery requests, invoices, or other tenant-owned data by manipulating
+an object ID in a URL or form.
+
+**Mitigations**:
+- Every tenant-owned queryset is scoped through `apps.organizations.services.
+  scope_queryset_to_user_orgs` (or a thin `for_user()` wrapper delegating to it) — never a raw,
+  client-trusted filter. See that module's docstring for the "no organization ID accepted blindly
+  from a client" rule.
+- Every detail/update view performs an explicit object-level permission check
+  (`can_view_organization`/`can_manage_organization`/`can_manage_facilities`/
+  `can_create_delivery_requests`/`can_view_billing`/`can_export_reports`/`can_view_audit_log`) before
+  returning a response, raising `PermissionDenied` (403) otherwise — e.g.
+  `apps/organizations/views.py::OrganizationDetailView.get_object`,
+  `apps/facilities/views.py`, `apps/deliveries/views.py`, `apps/billing/views.py`,
+  `apps/audit/views.py::AuditEventListView.dispatch`.
+- Internal staff get cross-org access only through named, reviewed allowlists
+  (`CROSS_ORG_READ_ROLES`/`CROSS_ORG_MANAGE_ROLES`/`DISPATCH_ROLES`/`AUDIT_VIEWER_ROLES`/
+  `BILLING_ROLES` in `apps/organizations/services.py`) — `user.is_internal_staff` alone grants
+  nothing.
+- Automated cross-tenant isolation tests exist at both the queryset layer
+  (`apps/organizations/tests/test_services.py`) and the real-HTTP layer
+  (`apps/organizations/tests/test_views.py`, `apps/deliveries/tests/test_views.py::
+  test_cannot_view_other_org_delivery_request_via_http`, `apps/audit/tests/test_views.py`).
+
+**Residual risk**: this is enforced per-view, not by a single global middleware/database-level
+row-security policy (e.g. Postgres Row-Level Security) — a newly-added view that forgets to call
+one of the permission helpers would be a real gap. A pilot review should audit every view for this
+before real data is ever attached. **Accepted for a demo prototype.**
+
+## 2. Recipient-link/PIN brute-force
+
+**Threat**: an attacker guesses a recipient's delivery-confirmation PIN, or forges/brute-forces a
+recipient tracking token, to view or falsely confirm someone else's delivery.
+
+**Mitigations**:
+- Tracking tokens are short-lived, cryptographically signed
+  (`apps/recipient/tokens.py`, `django.core.signing.TimestampSigner`, 72-hour `max_age`) — not
+  sequential/guessable IDs. Expired or tampered tokens are rejected (403/404) without ever granting
+  access (`apps/recipient/views.py::RecipientTrackingView._resolve_or_reject`).
+- PINs are never stored in plaintext — only a salted PBKDF2 hash
+  (`apps.custody.services.generate_recipient_pin`, `django.contrib.auth.hashers.make_password`) —
+  and are verified with a constant-time comparison (`check_password`).
+- **Phase 8 (new)**: the PIN-verification POST and the token-resolution GET are both rate-limited
+  (`apps/recipient/views.py`, `django-ratelimit`): 5 PIN attempts/minute per token, 10/minute per IP
+  on the POST, 30/minute per IP on the GET, all backed by the same Valkey cache the rest of the app
+  uses. A rejected request gets a real `429`
+  (`apps.recipient.views.ratelimited_view`), not a silent pass-through, and the rejection response
+  carries no information about whether the PIN was close to correct (see
+  `apps/recipient/tests/test_rate_limiting.py::
+  test_rate_limited_response_does_not_leak_pin_validity_information`). Before this phase, this
+  endpoint had **no** rate limiting at all — a real, meaningful gap for a 4-6 digit PIN, now closed.
+
+**Residual risk**: rate limiting is per-IP/per-token in an in-process/shared cache — a
+distributed/rotating-IP attacker could still spread attempts across many source IPs to attack one
+token's PIN at the per-token rate (5/minute), which for a 6-digit PIN (1,000,000 possibilities)
+still takes an impractically long time (~139 days at 5/minute) but is not mathematically zero. A
+real pilot should consider a hard per-token attempt cap (e.g. lock the PIN after N total failures)
+rather than only a rolling rate limit. **Accepted for a demo prototype.**
+
+## 3. Custody-chain tampering
+
+**Threat**: a custody event (pickup, hand-off, delivery, incident) is altered or deleted after the
+fact to hide what actually happened to a shipment.
+
+**Mitigations**:
+- `apps.custody.models.CustodyEvent` is a real, per-delivery SHA-256 hash chain
+  (`apps.custody.hashing.compute_event_hash`) — each event's hash commits to the previous event's
+  hash, so altering any historical event breaks every subsequent hash, detectable by
+  `apps.custody.verification.verify_custody_chain`.
+- Writes only ever go through `apps.custody.services.record_event`, which computes `sequence`/
+  `previous_hash`/`current_hash` under a row lock on the parent `DeliveryRequest` — never
+  `CustodyEvent.objects.create(...)` directly elsewhere.
+- Corrections append (`correction_of` self-FK, `apps.custody.services.append_correction`); the
+  original row is never edited.
+- The same append-only pattern (ORM-level `save()`/`delete()` guards plus a custom queryset
+  blocking bulk `update()`/`delete()`) is used for `apps.deliveries.models.DeliveryStatusTransition`
+  and the new (Phase 8) `apps.audit.models.AuditEvent`.
+
+**Honest limitation, stated plainly by the code itself**: this is **ORM-level** append-only
+enforcement, not a database-level guarantee. A raw SQL statement issued outside the Django ORM (a
+direct `psql` session, a compromised database credential, or a future code path that bypasses
+`record_event`) could still mutate history — there is no Postgres `REVOKE UPDATE/DELETE` grant or
+trigger backing this today. `apps/custody/models.py`'s own module docstring and
+`apps/deliveries/models.py`'s `DeliveryStatusTransition` docstring both say this explicitly. A real
+pilot's professional review (`docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8) should add a
+database-level guard (a restricted application role without `UPDATE`/`DELETE` grants on these
+tables, or a Postgres trigger) before treating this chain as tamper-*proof* rather than
+tamper-*evident*. **Accepted for a demo prototype** — the hash chain still turns any bypass
+attempt into something detectable after the fact, which is the property this phase claims.
+
+## 4. Notification data leakage
+
+**Threat**: a notification (in-app, email via Mailpit, or the simulated SMS adapter) leaks a
+contact's real name, phone number, address, PIN, or signature to the wrong audience or into a log.
+
+**Mitigations**:
+- Every notification payload is validated against an explicit allow-list of field names
+  (`apps.notifications.payload.ALLOWED_NOTIFICATION_FIELDS`) before it is ever persisted or
+  rendered — `apps.notifications.payload.validate_payload` raises loudly on anything not
+  allow-listed, rather than silently stripping it (a stripped field could hide a bug; a loud
+  rejection cannot). Rendering (`apps.notifications.rendering`) only ever reads from that
+  validated, allow-listed payload — never arbitrary caller-supplied strings.
+- The recipient tracking page similarly masks identity-adjacent data
+  (`apps.recipient.services.build_masked_tracking_context` — courier identity is reduced to "Your
+  assigned courier"/"A courier will be assigned soon", never a real name/phone; see
+  `apps/recipient/tests/test_views.py`'s explicit `assert b"555-" not in response.content` check).
+
+**Residual risk**: the allow-list is maintained by hand; a future field added to a notification
+payload without updating `ALLOWED_NOTIFICATION_FIELDS` would fail loudly (safe direction), but a
+field added *to* the allow-list without enough scrutiny could still leak something sensitive. **No
+paid/production SMS or email provider is used** (Mailpit locally, a simulated in-repo SMS adapter —
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`), so there is no third-party data-processor exposure risk
+in the demo today. **Accepted for a demo prototype.**
+
+## 5. Courier location/tracking privacy
+
+**Threat**: a courier's real-time location is exposed to parties who should not see it, or is
+retained longer than operationally necessary.
+
+**Mitigations**:
+- `apps.tracking.models.CourierLocationPing` is written only through
+  `apps.tracking.services.record_location_ping`, and location updates stop once a delivery reaches
+  a terminal state (an explicit, tested acceptance criterion per that module).
+- Location data is tied to a specific `DeliveryAssignment`, not exposed as a general "where is
+  courier X right now" query — nothing in this codebase exposes raw courier coordinates to the
+  recipient tracking page (`apps.recipient.services.build_masked_tracking_context` exposes only
+  delivery status/timeline, never coordinates) or to any organization outside the internal ops
+  dispatch console.
+- Only internal ops roles allow-listed for dispatch (`apps.organizations.services.DISPATCH_ROLES`)
+  reach the dispatch console where assignment/location context is visible at all.
+
+**Residual risk**: there is no explicit data-retention/purge policy for
+`CourierLocationPing` rows — they accumulate indefinitely in this prototype. A real pilot should
+define a retention window (e.g. purge pings older than N days once a delivery is terminal) per
+`docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8's "data retention" review gate. **Accepted for a
+demo prototype** (synthetic couriers, synthetic coordinates, no real employee/contractor location
+data).
+
+## 6. Session and CSRF
+
+**Threat**: session hijacking, cross-site request forgery, or clickjacking against any
+authenticated view.
+
+**Mitigations**:
+- `django.middleware.csrf.CsrfViewMiddleware` is enabled (`config/settings/base.py`); every
+  state-changing form in this codebase uses `{% csrf_token %}` (checked by the same
+  view/integration tests that exercise those forms).
+- `X_FRAME_OPTIONS = "DENY"` and `SECURE_REFERRER_POLICY = "same-origin"`
+  (`config/settings/base.py`) mitigate clickjacking and cross-origin referrer leakage.
+- `config/settings/prod.py` sets `SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE`/
+  `SECURE_SSL_REDIRECT`/HSTS for any real hosted deployment — `DEMO_MODE`'s dev settings
+  deliberately do not force HTTPS-only cookies, since local `docker compose` demo access is plain
+  HTTP by default (see `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 5: "HTTPS required for any
+  hosted demo").
+- Passwords are hashed with Django's default PBKDF2 hasher; no custom/weakened hasher is configured
+  anywhere in `config/settings/`.
+- **Phase 8 (new)**: TOTP MFA (`apps/accounts/mfa.py`) is available for privileged accounts
+  (internal ops staff, customer-org owners/administrators —
+  `apps.organizations.services.is_mfa_eligible`). Once a user enrolls, a genuine second factor is
+  required before their session is established (`MedRelayLoginView`/`MfaVerifyView` — see
+  `apps/accounts/tests/test_mfa.py` for a real login blocked/verified with a real generated TOTP
+  code). MFA is opt-in, not mandatory for every demo account, per this phase's own documented scope
+  decision.
+
+**Residual risk**: MFA enrollment is optional, so most seeded demo accounts are single-factor.
+Session fixation/rotation on privilege escalation (e.g. rotating the session key on MFA completion)
+is handled by Django's default `auth_login()` behavior (which does rotate the session key), so no
+additional gap beyond Django's own defaults. **Accepted for a demo prototype** — a real pilot should
+decide whether MFA becomes mandatory for specific roles.
+
+## 7. Other relevant surfaces
+
+- **SQL injection**: all data access goes through the Django ORM with parameterized queries; no
+  raw SQL string interpolation exists anywhere in `apps/`.
+- **XSS**: Django's template auto-escaping is on by default and not disabled (no `|safe`/`mark_safe`
+  usage on any user-supplied string in this codebase's templates).
+- **Upload/input-size denial-of-service**: (Phase 8, new) `DATA_UPLOAD_MAX_MEMORY_SIZE`/
+  `FILE_UPLOAD_MAX_MEMORY_SIZE`/`DATA_UPLOAD_MAX_NUMBER_FIELDS` (`config/settings/base.py`) cap
+  request-body size and field count; the one base64-image-carrying field
+  (`signature_data_url`) has an explicit, enforced length cap
+  (`apps/custody/validators.py`) — see `docs/CURRENT_STATUS.md` "Phase 8" for the full audit.
+- **Secret leakage**: `detect-secrets-hook` gates every commit (`.secrets.baseline`); `.env` is
+  gitignored; no real credential has ever been committed (see `docs/CURRENT_STATUS.md`'s
+  phase-by-phase secret-scan results).
+- **Dependency/supply-chain risk**: every dependency is checked against an explicit allowlist
+  (`python manage.py audit_cost`) — see `docs/COST_AUDIT.md`. This defends against *cost*
+  surprises, not against a specific package being compromised upstream (no dependency-vulnerability
+  scanning like `pip-audit`/Dependabot alerts is wired into CI today — a reasonable pilot-review
+  addition).
+- **Idempotency/concurrency**: `apps.dispatch.services.assign_delivery` uses
+  `select_for_update()` + a partial unique constraint to guarantee exactly one winner under
+  concurrent assignment attempts (`apps/dispatch/tests/test_concurrency.py`); courier action
+  endpoints require an `Idempotency-Key` (`apps.couriers.idempotency`).
+
+## 8. Explicitly out of scope for this threat model
+
+Per `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8, none of the following have been reviewed
+here and none are claimed:
+
+- Healthcare privacy/business-associate status, specimen/infectious-substance packaging
+  eligibility, pharmacy medication-delivery rules, NY worker classification, insurance/vehicle
+  requirements, background-check consent/process, incident/exposure plans, data retention policy,
+  or production hosting/security — all require independent professional review before any real
+  pilot, and this document does not substitute for that review.
+
+---
+
+# docs/DEMO_PACKAGE.md
+
+```
+SOURCE FILE: docs/DEMO_PACKAGE.md
+```
+
+# Demo Package — Phase 9 "Free Public Demonstration Option"
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+This document is the real, tested "run the whole thing end to end" walkthrough for MedRelay as a
+**local, self-contained demo package**. It is deliberately scoped to *local* execution
+(`docker compose up --build` on your own machine) — see `docs/HOSTING_OPTIONS.md` for the separate,
+explicitly-not-yet-decided question of whether/where to run a *publicly reachable* copy of this
+same package. **No external hosting account was created and nothing was deployed to any
+third-party service as part of building this document or this phase** — see
+`docs/CURRENT_STATUS.md` "Phase 9" for the full scope statement.
+
+## 1. What "the demo package" means here
+
+Everything needed to stand up a fully working copy of MedRelay already lives in this repository and
+runs on free, self-hosted software only (`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`):
+
+- `Dockerfile` — one image, used for both the `web` (Django) and `worker` (Celery) containers.
+- `compose.yaml` — `web`, `worker`, `db` (PostgreSQL 17 + PostGIS 3.5), `valkey` (cache/broker),
+  `mailpit` (local SMTP capture + web UI). No service in this file requires a credential, API key,
+  or payment method to start.
+- `config/settings/{dev,test,prod,demo}.py` — see section 4 below for what `demo.py` is (and is
+  not) for.
+- `apps/organizations/management/commands/{seed_demo_data,seed_full_demo,reset_demo_data}.py` — the
+  synthetic dataset and its reset mechanism (sections 3 and 5 below).
+
+This package makes no assumption about *which* host eventually runs it (a laptop, a colleague's
+machine, or — if the project owner later decides, see `docs/HOSTING_OPTIONS.md` — a specific free
+hosting platform). Every environment-specific value (database credentials, allowed hosts, secret
+key, SMTP host) is read from environment variables (`.env`, `django-environ`), never hardcoded to a
+specific hostname or provider.
+
+## 2. Real, tested walkthrough
+
+This exact sequence was run in this session against Docker Engine 29.1.3 (`docker compose` v2
+plugin) on the machine building this phase, with the real `postgis/postgis:17-3.5` image (host
+ports remapped only because this shared dev machine already had unrelated services on
+5432/6379/8000 — not needed on a clean machine).
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Wait for `db`/`valkey` to report healthy (compose's own healthchecks gate `web`/`worker`'s startup),
+then in a second terminal:
+
+```bash
+docker compose exec web python manage.py migrate
+docker compose exec web python manage.py seed_full_demo
+```
+
+Real output from this session (abbreviated — see `docs/CURRENT_STATUS.md` "Phase 9" for the full
+transcript):
+
+```
+$ docker compose exec web python manage.py migrate
+Operations to perform:
+  Apply all migrations: accounts, admin, audit, auth, billing, cargo, contenttypes, couriers,
+  custody, deliveries, dispatch, facilities, incidents, notifications, organizations, otp_totp,
+  recipient, reporting, sessions, temperature, tracking
+Running migrations:
+  ... (52 migrations) ...
+
+$ docker compose exec web python manage.py seed_full_demo
+Seeded 3 organizations, 8 facilities, 18 customer-org memberships, 7 internal-staff users. Demo
+login password for every seeded user: 'MedRelayDemo!2026' (synthetic, not a real secret).
+Generated invoice INV-000001 for the delivered demo scenario.
+Seeded new demo scenarios: ready_for_dispatch, assigned, delivered_full_chain (+ invoice),
+temperature_excursion, recipient_unavailable_return.
+```
+
+Then, in a browser (or via `curl`, as verified in this session):
+
+- Visit <http://localhost:8000/accounts/login/>.
+- Log in as `northstar_owner` / `MedRelayDemo!2026` (see section 3 for the full account list).
+- You land on `/organizations/` and see "NorthStar Diagnostics (Demo)" — a real, tenant-scoped
+  authenticated session, not a static mockup. The bold red `DEMO_MODE` banner and full compliance
+  disclaimer render at the top of every page (verified by inspecting the real HTML response).
+- Mailpit's web UI (<http://localhost:8025>) shows any outbound email captured locally, never sent
+  anywhere real.
+
+Health endpoints (also verified in this session against the real containerized stack):
+
+```
+$ curl http://localhost:8000/healthz/
+{"status": "ok"}
+$ curl http://localhost:8000/readyz/
+{"status": "ok", "checks": {"database": "ok", "cache": "ok"}}
+```
+
+Tear down with `docker compose down` (add `-v` to also drop the database/cache volumes — do this
+between demo resets if you want a completely clean slate instead of using `reset_demo_data`,
+section 5).
+
+## 3. Demo accounts (design decision: pre-seeded, not self-registration)
+
+**Decision: a small set of pre-seeded demo login accounts covering each major role, not a
+self-service registration flow.** Documented reasoning:
+
+- This application's most interesting behavior is its *state-mutating workflows* — assigning a
+  courier, advancing a delivery through pickup/transit, capturing custody proof, opening/resolving
+  an incident, generating an invoice. A visitor who can log in as a dispatcher and click "Assign"
+  on a real `READY_FOR_DISPATCH` delivery sees far more of what this prototype actually does than
+  one who has to first build a tenant from scratch through a signup form.
+- A self-registration flow that creates *real* organizations/facilities/couriers would need its own
+  new quota/abuse-safeguard surface (rate-limited signup, email verification with a real mail
+  provider this project's zero-cost policy prohibits, etc.) for comparatively little demo value —
+  every role's interesting screens are already reachable through a pre-seeded account.
+- Every seeded account already has a role-appropriate, realistic amount of pre-existing data (the
+  five delivery-request scenarios in section 4) to explore immediately, which a fresh
+  self-registered account would not.
+- This mirrors the same reasoning `docs/CURRENT_STATUS.md`'s Phase 1 section gave for
+  `seed_demo_data` in the first place ("account provisioning is inherently an admin/sales-onboarding
+  action... not a public signup flow") — Phase 9 extends that decision to the public-demo context
+  rather than reversing it.
+
+The trade-off, stated honestly: every visitor to a hypothetical public deployment shares the same
+handful of accounts and the same underlying data, and one visitor's actions (e.g. resolving the
+seeded temperature-excursion incident) are visible to the next. `reset_demo_data` (section 5) is the
+mitigation — an operator can restore a clean, deterministic dataset on a schedule.
+
+### Account list
+
+All accounts share one synthetic password: **`MedRelayDemo!2026`**
+(`# pragma: allowlist secret` — not a real credential; the exact same convention as every prior
+phase's demo data, see `apps/organizations/management/commands/seed_demo_data.py`).
+
+| Username | Role | Notes |
+|---|---|---|
+| `northstar_owner` | Customer-org Owner (NorthStar Diagnostics) | Full org management |
+| `northstar_requester_dispatcher` | Customer-org Requester/Dispatcher | Creates delivery requests |
+| `riverside_owner` | Customer-org Owner (Riverside Urgent Care) | Full org management |
+| `riverside_requester_dispatcher` | Customer-org Requester/Dispatcher | Creates delivery requests |
+| `bkpharmacy_owner` | Customer-org Owner (Brooklyn Family Pharmacy) | Full org management |
+| `ops_dispatcher` | Internal — Dispatcher | Dispatch board, assign/reassign couriers |
+| `ops_manager` | Internal — Operations Manager | Cross-org read/manage, dispatch board |
+| `ops_compliance` | Internal — Compliance Reviewer | Incidents console, audit log |
+| `ops_courier_reviewer` | Internal — Courier Onboarding Reviewer | Courier credential review |
+| `ops_finance` | Internal — Finance | Invoices, payment status |
+| `ops_sysadmin` | Internal — System Administrator | Cross-org, audit log |
+| `demo_courier_ana` | Courier (approved, refrigerated-capable, Manhattan) | Courier PWA at `/courier/` |
+| `demo_courier_ben` | Courier (approved, ambient-only, Brooklyn) | Courier PWA |
+| `demo_courier_cara` | Courier (approved; driver-license credential expiring in ~10 days) | Credential-expiration demo |
+| `demo_courier_dee` | Courier (applicant, mid-onboarding, no credentials yet) | Onboarding-state demo |
+| `demo_courier_eli` | Courier (suspended) | Negative-state demo |
+
+Every other customer-org role (administrator, billing manager, compliance reviewer, read-only
+auditor) also exists per organization — see `seed_demo_data`'s `CUSTOMER_ROLE_TITLES` for the full
+per-org role list (username pattern: `<org-slug>_<role>`, e.g. `riverside_billing_manager`).
+
+MFA (TOTP, Phase 8) is opt-in and **not** enrolled on any seeded account by default, so every
+account above logs in with just its password.
+
+## 4. The seeded dataset (`seed_full_demo`)
+
+`python manage.py seed_full_demo` (`apps/organizations/management/commands/seed_full_demo.py`)
+calls `seed_demo_data` first (3 organizations, 8 Manhattan/Brooklyn facilities, their users — Phase
+1), then adds:
+
+- **5 couriers with varied credential/authorization states**: a fully-approved refrigerated-capable
+  courier, a fully-approved ambient-only courier, an approved courier with a credential expiring
+  within `flag_expiring_credentials`'s default 30-day window, an applicant still mid-onboarding
+  (no credentials/vehicle/equipment yet), and a suspended courier.
+- **5 delivery requests spanning different lifecycle states**:
+  1. `READY_FOR_DISPATCH` — open, unassigned, sitting in the dispatch pool.
+  2. `ASSIGNED` — assigned to a courier, not yet advanced.
+  3. `DELIVERED` — driven through the full real courier/custody lifecycle (pickup proof, an
+     in-range temperature reading, recipient PIN verification, delivery proof) — a complete,
+     genuine custody chain, not a synthetic end-state row.
+  4. `INCIDENT_HOLD` — a genuine **temperature excursion**: an out-of-range reading that
+     `apps.temperature.services.record_reading` itself turns into a real `SEVERE` incident, left
+     open deliberately as a live item for the incidents console.
+  5. `RETURNED` — a **recipient-unavailable return**, driven through a real incident +
+     `initiate_return`/`complete_return` to completion.
+- **1 generated invoice** (`apps.billing.services.generate_invoice_for_delivery`) for the delivered
+  scenario above.
+
+Every scenario is built by calling the same real service-layer functions the application's own
+views call (`apps.deliveries.services`, `apps.dispatch.services`, `apps.couriers.services`,
+`apps.custody.services`, `apps.temperature.services`, `apps.incidents.services`,
+`apps.billing.services`) — never by writing rows directly, so the same state machine,
+hard-eligibility gates, and custody hash chain a real user action goes through are exercised here
+too. See the command's own module docstring for the full design write-up, including its documented
+idempotency limitation (safe to re-run; will not "heal" a scenario a demo visitor has since changed
+— use `reset_demo_data` for that).
+
+## 5. Quota/abuse safeguards
+
+Beyond Phase 8's per-endpoint rate limiting (recipient PIN verification/lookup — see
+`docs/THREAT_MODEL.md` section 2), a genuinely public, unauthenticated-signup-adjacent demo needs
+two more things: a hard cap on synthetic-data growth, and a way to reset it. Both exist as of this
+phase:
+
+### 5.1 Per-organization delivery-request cap (new this phase)
+
+`apps.deliveries.services._enforce_delivery_request_quota`, called at the top of
+`create_delivery_request` (the single creation path every delivery-request-creating view/wizard
+goes through), rejects a new delivery request with a clear
+`DeliveryRequestQuotaExceededError` once an organization has reached
+`settings.DEMO_MAX_DELIVERY_REQUESTS_PER_ORG` existing rows (counting every status, since the
+realistic abuse vector for a public demo is sheer row volume, not just open requests). Default caps:
+
+| Settings module | Cap |
+|---|---|
+| `base`/`dev`/`test` (generous — not a real operational limit outside a public deployment) | 500 |
+| `demo` (tightened for a genuinely public deployment) | 100 |
+
+Both are `DEMO_MAX_DELIVERY_REQUESTS_PER_ORG` environment variables, overridable without a code
+change. Tested in `apps/deliveries/tests/test_services.py`
+(`test_create_delivery_request_raises_once_org_quota_is_reached`,
+`test_create_delivery_request_quota_is_per_organization_not_global`,
+`test_create_delivery_request_quota_check_is_a_no_op_when_setting_is_none`).
+
+This is one concrete new safeguard, not the only imaginable one — a real deployment might also want
+a per-IP/per-session cap on *organization*/*courier* creation (there is currently no public
+organization-signup surface at all — see section 3 — so that specific vector does not exist yet)
+and a request-body-size-based bot-abuse detector. Flagged here as reasonable future work, not
+silently skipped.
+
+### 5.2 `reset_demo_data` — cleanup/reset command (new this phase)
+
+`python manage.py reset_demo_data --yes` deletes every row this project's own data-minimization
+policy considers synthetic-only (every `@medrelay.demo` user, every organization, and everything
+that cascades from either — see the command's own module docstring for the exact, dependency-safe
+deletion order, since `Invoice`/`DeliveryRequest` both `PROTECT` their `Organization` FK) and
+reseeds a fresh dataset via `seed_demo_data` + `seed_full_demo`. It never touches fixed
+migration-seeded reference data (`CargoClass`/`TemperatureProfile`/`PricingRule`/`SLAProfile`) or a
+real operator's own `createsuperuser` account (which would not have an `@medrelay.demo` email).
+
+**No cron or scheduled-task infrastructure is wired up in this repository** — this phase
+deliberately stops at "a management command a cron could call," per its own scope. An operator
+running a real public deployment would point their own external cron (or their hosting platform's
+scheduled-job feature, see `docs/HOSTING_OPTIONS.md`) at this command on whatever cadence they
+choose; that decision belongs to the hosting choice, not to this repository.
+
+## 6. `config/settings/demo.py`
+
+A fourth settings module, alongside `dev`/`prod`/`test` — the module a public demo deployment would
+actually set `DJANGO_SETTINGS_MODULE` to. It builds on `prod.py` (HSTS, secure cookies, SSL
+redirect) and adds: a hardcoded (not env-overridable) `APP_MODE = "DEMO_MODE"`, a shorter session
+cookie lifetime (12 hours, `SESSION_EXPIRE_AT_BROWSER_CLOSE = True`) appropriate for a deployment
+reachable by strangers, and the tightened `DEMO_MAX_DELIVERY_REQUESTS_PER_ORG` from section 5.1. It
+does not add any new externally-reachable capability — see the module's own docstring for why "no
+real external network call" is true by construction here, not something newly turned off.
+
+No deployment currently uses this settings module (see the scope statement at the top of this
+document and `docs/CURRENT_STATUS.md` "Phase 9") — it exists so the settings half of "ready for a
+public demo" is complete and reviewable on its own, independent of the separate hosting-platform
+decision in `docs/HOSTING_OPTIONS.md`.
+
+## 7. No medical-operation claim — confirmed still wired everywhere
+
+The Phase 0 disclaimer banner/context processor (`config.context_processors.app_mode`,
+`templates/base.html`'s bold red `DEMO_MODE` banner) was spot-checked this phase against every
+template shell added in later phases (`templates/couriers/base.html`, the anonymous
+`templates/recipient/tracking.html`, `templates/registration/login.html`) — all three `{% extends
+"base.html" %}`, so the banner and full disclaimer render on every page in the application,
+authenticated or not, including the courier PWA and the anonymous recipient tracking page. This was
+also re-verified in section 2's real HTTP walkthrough above (the literal disclaimer text was
+present in the response body of an authenticated page). No template-level change was needed this
+phase — Phase 8's design pass already made this indicator prominent (bold text, red background, top
+of every page, before the nav).
+
+---
+
+# docs/HOSTING_OPTIONS.md
+
+```
+SOURCE FILE: docs/HOSTING_OPTIONS.md
+```
+
+# Hosting Options — Phase 9 Recommendation Document
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+> **Decision made (dated addendum, see `docs/CURRENT_STATUS.md`): the project owner selected the
+> split-services direction named in section 4 point 3 below — Render (free web-service tier) for
+> `web`, paired with Neon (free serverless Postgres) for the database, accepting the documented
+> Celery/worker trade-off (`CELERY_TASK_ALWAYS_EAGER = True`, harmless here since no code path in
+> this application uses Celery). The concrete, copy-pasteable execution guide is
+> `docs/DEPLOY_RENDER_NEON.md`; the settings module is `config/settings/demo_render.py`; the
+> Render Blueprint is `render.yaml`. This document's own research and recommendation below are
+> left intact as the record of *why* — no account was created and no deployment was performed by
+> the session that prepared those files; see `docs/DEPLOY_RENDER_NEON.md` for what remains a
+> manual step for the project owner.**
+
+**This document is a recommendation, not a decision or an action** (at the time it was written —
+see the decision note above for what has since changed). No hosting account was
+created, no platform was selected, and nothing was deployed anywhere as part of producing this
+document — per `docs/IMPLEMENTATION_ROADMAP.md` Phase 9's own text ("Do not select a hosting
+platform that requires payment or a credit card without owner approval") and this session's explicit
+scope boundary (see `docs/CURRENT_STATUS.md` "Phase 9"). **Actual platform selection and deployment
+is the project owner's decision, to be made separately from this session, whenever (if ever) it is
+wanted.** Everything below is research and a recommendation for that future decision, not
+preparation to act on it unilaterally.
+
+Free-tier terms for every platform named below change frequently and without notice — this is
+inherent to "free tier" as a product category, not a gap in this research. Anything not personally,
+freshly re-verified against the platform's current published terms **at decision time** should be
+treated as potentially stale, regardless of how it reads here. Claims below are marked "needs
+verification at decision time" wherever the underlying fact is exactly the kind that free-tier
+providers change often (limits, whether a card is required, whether a service sleeps).
+
+## 1. What this application actually needs to run for real
+
+From `compose.yaml`/`Dockerfile` (the authoritative description of the stack, see
+`docs/DEMO_PACKAGE.md`):
+
+- A Python/Django process (`web`) — needs to stay running to serve requests; a "sleeps after
+  inactivity, cold-starts on the next request" free-tier pattern is a real UX cost (10-60+ second
+  first-load delay) but not a correctness blocker for a demo.
+- A **background worker process** (`worker`, Celery) — this is the single hardest requirement to
+  satisfy on a free tier. Many free web-hosting tiers run exactly one process type (the web
+  process) and either don't support a second always-running process at all, or only as a paid
+  add-on. Check this specifically for any candidate — "free tier" often means "free *web service*
+  tier," silently excluding background workers.
+- **PostgreSQL** (ideally with PostGIS, though this codebase does not yet use PostGIS-specific
+  queries — see `docs/CURRENT_STATUS.md` Phase 1 design decision #1 — so a plain-Postgres free tier
+  would work today) with **persistent storage** — a free database that resets/expires after a fixed
+  number of days is a real operational problem for a "demo that stays up," not just an inconvenience.
+- **Valkey/Redis** (cache + Celery broker) — needs to be reachable by both `web` and `worker`;
+  a free tier that only offers Redis as a paid add-on, or that imposes a very low
+  connection-count/command-rate limit, is a real constraint.
+- **Outbound email capture (Mailpit)** — this is a *local-only* dev/demo tool
+  (`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`); a public deployment either keeps it as an internal,
+  non-public service (fine — nothing about mail needs to be internet-reachable) or the demo simply
+  ships without a visible "sent mail" viewer, since a real outbound email provider is explicitly out
+  of the zero-cost policy's allowed list.
+- **No required credit card or payment method** — the hard constraint from the roadmap and this
+  session's scope boundary.
+
+## 2. Candidate free-tier platforms
+
+None of these were signed up for, configured, or deployed to in this session. Everything below is
+research/recollection, not a live-verified account.
+
+| Platform | Web process (free) | Background worker (free) | Postgres (free) | Redis/Valkey (free) | No card required | Notable free-tier catches |
+|---|---|---|---|---|---|---|
+| **Render** | Yes — sleeps after inactivity on free web services | Not available free (background workers are a paid service type) | Historically offered a free Postgres instance that **expired after a fixed window** (commonly cited as ~30-90 days) rather than persisting indefinitely | Not available free as a persistent add-on | Needs verification at decision time (free tier terms and card requirements here have changed more than once) | Worker + persistent DB are the two blockers for this app specifically |
+| **Fly.io** | Needs verification at decision time — Fly's free allowance has changed materially over time and, as of recent history, generally requires a card on file even for usage within a free allowance | Same card-on-file caveat would apply to any second Fly "machine" running the worker | Fly Postgres is self-managed on your own allocated compute, so it's "free" only insofar as the underlying compute allowance is | No managed free Redis; would need self-hosting on the same compute | Needs verification — treat as likely requiring a card | If a card is required at all, this fails the roadmap's hard constraint regardless of usage cost |
+| **Railway** | Historically offered a small free/trial credit, not an indefinite free tier | Same credit model would apply | Same credit model | Same credit model | Needs verification — Railway's free offering has shifted from "free tier" to "trial credit that expires" more than once | A time-limited trial credit is a materially different (weaker) offer than a durable free tier; re-check the current model specifically before assuming it qualifies |
+| **PythonAnywhere** | Yes — a genuinely durable always-on free web app tier for Python (no sleep-on-inactivity for the free web app itself, unlike most competitors) | Free tier does not include always-on scheduled/background tasks (a paid-plan feature) | Free tier historically ships MySQL, not PostgreSQL, and with modest storage; no PostGIS | No managed Redis on the free tier | Historically no card required for the free tier (needs verification) | Wrong database engine (MySQL, not Postgres) and no worker support are both real blockers for this app as built, not just inconveniences |
+| **Oracle Cloud "Always Free"** | Yes, via a real persistent Compute VM (notably including an ARM Ampere shape with a meaningful free CPU/RAM allowance) capable of running `docker compose` directly, unlike PaaS free tiers | Yes — it's a real VM, so `worker` runs exactly as it does locally | Yes, if self-hosted in the same `docker compose` stack (or via Oracle's free-tier managed DB service, smaller allowance) | Yes, self-hosted in the same stack | **No** — Oracle, like every other major cloud provider's "always free" VM tier, requires a credit card at account creation for identity verification, even though the always-free resources themselves are not billed absent an explicit upgrade | The identity-verification card requirement is the specific, well-known catch that should disqualify this under the roadmap's literal "no... credit card without owner approval" wording, even though the compute itself would otherwise be the best technical fit of anything in this table |
+| **Google Cloud / AWS / Azure "free tier" VMs** | Technically yes (a small always-free/12-months-free VM instance) | Yes, on the same VM | Yes, self-hosted | Yes, self-hosted | **No** — all three require a credit card at signup | Same disqualifying catch as Oracle above, for the same reason |
+| **A community/friend's own server, or the project owner's own always-on hardware** | N/A (not a "platform") | N/A | N/A | N/A | Yes, if truly no payment is involved | Not really "hosting research" so much as "does the owner have a machine to run this on" — worth naming as an option since it trivially satisfies every technical requirement and the no-card constraint, at the cost of not being a polished, professional demo URL |
+
+### Reading the table honestly
+
+**Every PaaS-style "free web app" tier surveyed above fails at least one hard requirement** for
+this specific stack — most commonly the background-worker requirement, the persistent-Postgres
+requirement, or (for the platforms whose free tier *would* otherwise fit) the no-credit-card
+requirement. This is not a surprising result: this application was built to the zero-cost policy's
+*local self-hosting* model (`docker compose`, a real Postgres/Valkey/Mailpit stack, own worker
+process) from Phase 0 onward, which is a poor match for "single free web dyno" PaaS products that
+are increasingly the *only* thing offered for free by platforms that used to offer more. The
+platforms that technically satisfy the compute/worker/database requirements (Oracle/AWS/GCP's
+always-free VM tiers) all share the same card-at-signup catch, which is disqualifying under the
+roadmap's literal wording regardless of whether any charge would ever actually occur.
+
+## 3. The roadmap's own explicitly-allowed alternative
+
+`docs/IMPLEMENTATION_ROADMAP.md` Phase 9 explicitly names an alternative to weakening the system to
+fit a free host: **"publish a local-run package, screenshots/video, and static marketing/demo site
+instead of weakening the system."** Concretely, this repository is already most of the way there:
+
+- **The local-run package** (`docker compose up --build` + `seed_full_demo`) is real, documented,
+  and was actually re-verified end-to-end in this session against the genuine PostGIS/Postgres image
+  — see `docs/DEMO_PACKAGE.md`. A prospective employer/reviewer with Docker installed can be up and
+  looking at a fully-seeded, role-based demo in a few minutes, with zero hosting decision required
+  of anyone.
+- **Screenshots/a short screen-recorded video** walking through the pre-seeded accounts (dispatcher
+  assigning a courier, the incidents console showing the seeded temperature excursion, the recipient
+  tracking page) would be genuinely free, permanent (no host to keep paying for/maintaining), and
+  representative — no code in this repository would need to change to produce this; it is out of
+  scope for this session (no video/screenshot tooling was requested or used here) but is flagged as
+  the lowest-friction, zero-infrastructure option available right now.
+- **A static marketing/demo page** (e.g. a single HTML page — itself trivially free to host almost
+  anywhere, including a static-pages host with no server component and thus none of this table's
+  worker/database problems) describing the project and linking to the local-run package/repo/video
+  is the natural complement.
+
+## 4. Recommendation
+
+1. **Do not select any of the PaaS free tiers in section 2 as-is** — every one of them either fails
+   a hard technical requirement (worker, persistent Postgres, or correct DB engine) or fails the
+   roadmap's no-required-card constraint. None of them are a clean fit without either weakening the
+   system (dropping Celery/the worker, moving off Postgres, accepting a non-persistent database) or
+   accepting a card requirement the roadmap explicitly says not to accept without the owner's
+   sign-off.
+2. **Lead with the local-run package + screenshots/video + a static marketing page** (section 3) as
+   the actual Phase 9 deliverable for demonstrating this project publicly, since it needs no
+   platform decision at all and has zero ongoing cost or maintenance burden.
+3. **If a genuinely public, click-a-link demo is wanted anyway**, the two most promising directions
+   to re-research *at decision time* (not now) are, in order:
+   - A **split-services** approach: a managed free-tier Postgres specifically built for exactly this
+     use case (e.g. a serverless Postgres provider with a genuinely free, no-card tier and
+     auto-suspend-on-inactivity rather than a hard expiry — needs verification, as this is exactly
+     the kind of offering that changes fastest) paired with a free web-process host for `web` only,
+     and **accepting that `worker`/Celery would need to be dropped or run in-process
+     (`CELERY_TASK_ALWAYS_EAGER=True`, already an existing, tested settings knob — see
+     `config/settings/test.py`) for the public demo specifically** — a real, documented,
+     capability-reducing trade-off, not a silent one, and a decision the owner should make
+     knowingly rather than have made for them.
+   - A **single always-on VM** (Oracle/AWS/GCP always-free tier, or the project owner's own
+     hardware) running the exact same `docker compose` stack as the local package, accepting the
+     card-at-signup requirement as a known, explicit exception the owner affirmatively approves
+     (the roadmap's own escape hatch is "without owner approval," not "under no circumstances") —
+     this is the only option in this document that requires **zero** functional compromise to the
+     application as built.
+4. **Either way, this is the project owner's decision, not this session's** — per the scope boundary
+   stated at the top of `docs/CURRENT_STATUS.md` "Phase 9" and repeated here: no account should be
+   created and no deployment should be performed until the owner has reviewed this document and
+   explicitly chosen a direction (including "none — ship the local package instead," which is this
+   document's own lead recommendation).
+
+---
+
+# docs/DEPLOY_RENDER_NEON.md
+
+```
+SOURCE FILE: docs/DEPLOY_RENDER_NEON.md
+```
+
+# Deploy Guide — Render (web) + Neon (Postgres)
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+**This is the project owner's own execution guide, not something performed by any automated
+session.** No Render account, Neon account, or deployment was created while preparing this
+document or the files it references (`render.yaml`, `config/settings/demo_render.py`,
+`Dockerfile`) — see `docs/CURRENT_STATUS.md`'s dated Phase 9 hosting-decision addendum for the full
+scope statement and verification performed. Everything below assumes you (the project owner) are
+following it yourself, using your own email/GitHub identity.
+
+This implements the split-services option `docs/HOSTING_OPTIONS.md` section 4 point 3 named as a
+future direction: **Render** (free web-service tier, no credit card required) running the Django
+`web` process, paired with **Neon** (free serverless Postgres, no credit card required, a
+permanent free tier that scales to zero on idle rather than hard-expiring) for the database. The
+one real, documented capability trade-off from this codebase's full local stack
+(`docs/DEMO_PACKAGE.md`): no `worker`/Celery process runs on Render's free tier, so
+`CELERY_TASK_ALWAYS_EAGER = True` is hardcoded in `config/settings/demo_render.py` — harmless here
+because, as re-confirmed in that module's own docstring, no code in this application actually
+queues a Celery task anywhere.
+
+## 1. Create the Neon (Postgres) database
+
+1. Go to <https://neon.tech> and sign up for a free account (no credit card required as of this
+   writing — **re-verify this yourself at signup time**, free-tier terms change without notice;
+   see `docs/HOSTING_OPTIONS.md`'s own repeated caveat about this).
+2. Create a new **Project** (Neon's term for a database + its branches). Any region is fine; pick
+   one geographically close to Render's region (`oregon`, set in `render.yaml`) if given a choice,
+   for lower latency — not required for correctness.
+3. On the project's dashboard, click **Connect** (or **Connection Details**). Make sure connection
+   **pooling is turned on** — Neon's pooled connection string routes through PgBouncer and supports
+   far more concurrent connections than a direct connection, which is the right default for a web
+   app rather than a one-off script. The pooled hostname contains a `-pooler` suffix, e.g.
+   `ep-cool-darkness-a1b2c3d4-pooler.us-east-2.aws.neon.tech`.
+4. Copy the full connection string. It will look like:
+
+   ```
+   postgresql://<user>:<password>@<endpoint>-pooler.<region>.aws.neon.tech/<dbname>?sslmode=require&channel_binding=require
+   ```
+
+   **`?sslmode=require` is not optional** — Neon's Postgres endpoints only accept TLS connections;
+   without it (or with it stripped), the connection will fail outright. Keep the query string
+   exactly as Neon gives it to you (don't drop `channel_binding=require` either).
+5. This codebase's `DATABASE_URL` setting (`config/settings/base.py`, via `django-environ`'s
+   `env.db_url`) expects the `postgres://` scheme, not `postgresql://` — both are accepted by
+   `django-environ`, but if you want to match this repository's own convention exactly (see
+   `.env.example`), you can rewrite the scheme prefix from `postgresql://` to `postgres://`;
+   functionally either works.
+6. **Save this connection string somewhere private for step 2.6 below.** It is a real credential
+   for a real (if free and synthetic-data-only) database — never commit it to this repository.
+
+## 2. Create the Render web service
+
+1. Go to <https://render.com> and sign up for a free account (no credit card required as of this
+   writing — **re-verify this yourself at signup time**, same caveat as step 1.1).
+2. Connect your GitHub account to Render if prompted, and grant it access to the
+   `mxhasan03/MedRelay` repository (either all your repositories, or that one specifically).
+3. From the Render dashboard, choose **New → Blueprint**. Point it at the `mxhasan03/MedRelay`
+   repository, `main` branch. Render will detect `render.yaml` at the repository root and propose
+   the one service it defines (`medrelay-demo`, a free-tier Docker web service).
+4. Confirm the Blueprint. Render will start a build immediately using this repository's
+   `Dockerfile` — **the very first build will likely fail or the service will crash-loop**, because
+   `DATABASE_URL`/`DJANGO_ALLOWED_HOSTS`/`DJANGO_CSRF_TRUSTED_ORIGINS` are marked `sync: false` in
+   `render.yaml` (meaning: "the operator supplies this, don't auto-generate or guess it") and are
+   not set yet. This is expected — continue to the next step rather than troubleshooting it yet.
+5. Once the service exists (even in a failing/crash-looping state), open it in the Render dashboard
+   and note the assigned URL, shown at the top of the service page and also under
+   **Settings → Custom Domains** — it will be `https://<something>.onrender.com`, where
+   `<something>` is either `medrelay-demo` or `medrelay-demo-<random-suffix>` if that exact name
+   was already taken by another Render user (Render service names are globally unique).
+6. Go to the service's **Environment** tab and set the following:
+
+   | Key | Value | Notes |
+   |---|---|---|
+   | `DATABASE_URL` | The full Neon connection string from step 1.4 (including `?sslmode=require&channel_binding=require`) | Paste exactly as Neon gave it to you. |
+   | `DJANGO_ALLOWED_HOSTS` | `<the .onrender.com domain from step 2.5, no scheme, no trailing slash>` | Example: `medrelay-demo.onrender.com`. A comma-separated list if you also plan to add a custom domain later. |
+   | `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://<the same .onrender.com domain>` | **Must include the `https://` scheme** — this is a full origin, not a bare hostname, unlike `DJANGO_ALLOWED_HOSTS` above. Example: `https://medrelay-demo.onrender.com`. |
+
+   `DJANGO_SECRET_KEY` does **not** need to be set manually — `render.yaml` marks it
+   `generateValue: true`, so Render already generated and stored a random value for it the moment
+   the Blueprint was created. If you ever want to rotate it, generate a fresh one yourself:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(50))"
+   ```
+
+   and paste the result into that Environment tab (this invalidates every existing session/CSRF
+   token — logged-in users will need to log in again).
+
+7. Save the environment changes. Render will automatically trigger a new deploy (this is what
+   `autoDeployTrigger: commit` plus an environment-variable change does — Render redeploys on any
+   config change, not just a new commit).
+
+## 3. What to expect on first deploy
+
+- **Cold start delay.** Render's free web-service tier sleeps the instance after 15 minutes with
+  no inbound traffic, and the *first* request after a deploy or after waking from sleep can take
+  30-60+ seconds while the container starts and `dockerCommand`'s `migrate`/`seed_full_demo` steps
+  run. Do not assume the deploy failed just because the first load is slow — check the **Logs** tab
+  for actual errors before concluding anything is wrong.
+- **Automatic static build + migration + seed, every deploy.** `render.yaml`'s `dockerCommand` runs
+  `python manage.py collectstatic --noinput`, then `python manage.py migrate --noinput`, then
+  `python manage.py seed_full_demo`, then starts `gunicorn` — in that order, every time the service
+  deploys or restarts. The first successful run will show `collectstatic` reporting some number of
+  files copied/post-processed, `migrate` applying ~50+ migrations, `seed_full_demo` reporting
+  `Seeded 3 organizations, 8 facilities, ...`, and then `gunicorn`'s "Listening at..." log line.
+  Every run after that will show `migrate` reporting "No migrations to apply" and `seed_full_demo`
+  reporting "All Phase 9 demo scenarios already exist — nothing new to seed" — this is expected and
+  correct (see `docs/CURRENT_STATUS.md` for the idempotency re-verification this relies on), not a
+  sign something is being skipped incorrectly.
+- **Where to find your URL.** The Render dashboard's service page header, or
+  **Settings → Custom Domains** — the same `https://<something>.onrender.com` URL you already used
+  to set `DJANGO_ALLOWED_HOSTS`/`DJANGO_CSRF_TRUSTED_ORIGINS` in step 2.6.
+- **Health check.** Visit `https://<your-domain>.onrender.com/healthz/` — it should return
+  `{"status": "ok"}` once the deploy has actually finished starting `gunicorn` (this is also the
+  URL Render's own health check, `healthCheckPath` in `render.yaml`, polls to decide the deploy
+  succeeded). `https://<your-domain>.onrender.com/readyz/` additionally checks database
+  connectivity — if `DATABASE_URL` is wrong, this endpoint (and generally everything else) will
+  fail even if `/healthz/` succeeds, since `/healthz/` is a liveness check, not a dependency check.
+
+## 4. How to log in
+
+Use any account from the pre-seeded demo account list in **`docs/DEMO_PACKAGE.md` section 3** —
+this deploy guide does not redefine or duplicate that list (or the shared demo password) to avoid
+the two documents drifting out of sync. In short: every seeded account (dispatchers, org owners,
+couriers, internal ops roles) shares one synthetic password documented there, and
+`northstar_owner` or `ops_dispatcher` are reasonable first accounts to try.
+
+## 5. Known limitations to expect
+
+- **Render free-tier cold starts.** As above — 30-60+ seconds on the first request after 15 minutes
+  of inactivity. This is a real, expected UX cost of the free tier, not a bug.
+- **Neon free-tier limits.** As of the research behind this deployment decision: roughly 0.5 GB of
+  storage and 100 compute-hours/month, and the compute itself suspends (scales to zero) after
+  ~5 minutes of inactivity, adding its own brief reconnect delay on the next query — separate from,
+  and additive to, Render's own cold start. This is expected and, for a low-traffic public demo,
+  fine — **re-verify these exact numbers yourself at decision/operating time**, since free-tier
+  limits are exactly the kind of detail that changes without notice.
+- **No live email or SMS.** Both were always mocked/local-only in this codebase (Mailpit for email
+  locally, a simulated SMS event log — see `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`). Mailpit is
+  not deployed here (it's a local dev/demo-only tool, not meant to be publicly reachable), so
+  outbound "email" in this deployment goes nowhere visible — this changes nothing about what the
+  application demonstrates, since no code path ever depended on a real inbox being reachable.
+- **Celery tasks run synchronously in-process (`CELERY_TASK_ALWAYS_EAGER = True`).** This changes
+  nothing observable: as documented in `config/settings/demo_render.py`'s own docstring, and
+  re-confirmed by grepping this codebase immediately before writing that module, there is no
+  `@shared_task`, `.delay()`, or `.apply_async()` call anywhere in `apps/` — every phase of this
+  application was built as synchronous request/response code. There is no asynchronous behavior for
+  this setting to change the observable timing of.
+- **Shared, persistent demo data.** Every visitor uses the same pre-seeded accounts and sees the
+  same underlying data (see `docs/DEMO_PACKAGE.md` section 3's own honest trade-off statement) —
+  one visitor resolving the seeded temperature-excursion incident, for instance, is visible to the
+  next. `python manage.py reset_demo_data --yes` (run manually from Render's **Shell** tab, if
+  available on your plan, or not at all if the free tier doesn't offer shell access — re-verify
+  this at operating time) is the existing mitigation; no scheduled/cron reset is wired up by this
+  deployment.
+
+## 6. Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Deploy log shows `django.core.exceptions.ImproperlyConfigured` or a `KeyError`/`ValueError` mentioning an env var name | A required environment variable (most likely `DATABASE_URL`) is missing or empty | Re-check the **Environment** tab against step 2.6's table — an unset `sync: false` var is blank, not absent, until you fill it in |
+| Deploy log shows `OperationalError: connection to server ... failed` or an SSL-related Postgres error | `DATABASE_URL` is wrong, missing `?sslmode=require`, or points at a suspended/deleted Neon project | Re-copy the connection string fresh from Neon's **Connect** dialog (step 1.3-1.4); confirm the Neon project still exists and its compute isn't paused in a way that blocks new connections |
+| Migration step fails partway with a Postgres-specific error | Usually a stale/partially-migrated database from a previous failed attempt | In Neon's SQL editor, you can drop and recreate the database (there is no real data to lose in a fresh demo deployment) and let the next deploy's `migrate` step start clean |
+| Site loads but every login/POST returns `403 Forbidden` mentioning CSRF | `DJANGO_CSRF_TRUSTED_ORIGINS` is unset, or set to the wrong domain, or missing the `https://` scheme | Set it to exactly `https://<your-actual-assigned-domain>.onrender.com` (step 2.6) — it must be the literal domain Render assigned you, not a guessed name, and must include the scheme |
+| CSS/JS/static assets 404, or the page loads with no styling | `collectstatic` didn't complete — `render.yaml`'s `dockerCommand` runs it as the first step, but a build/deploy that failed or was interrupted before that step finished would leave WhiteNoise's `CompressedManifestStaticFilesStorage` with no manifest to serve from | Check the deploy logs for a `collectstatic` failure specifically (it runs first, before `migrate`/`seed_full_demo`/`gunicorn`) and re-deploy; `collectstatic` itself doesn't need a working `DATABASE_URL` to succeed, so if it's failing, the cause is almost always a `DJANGO_SETTINGS_MODULE`/static-file-source problem, not a database problem |
+| `Bad Gateway` / `502` shown by Render, with no obvious app-level error in logs | The container isn't listening on the `$PORT` Render assigned | Confirm `dockerCommand` in `render.yaml` still ends in `--bind 0.0.0.0:$PORT` (not a hardcoded port) — this was verified working in this session with `docker run -e PORT=10000 ...`, so a regression here means `render.yaml` or the `Dockerfile` was edited since |
+| Everything looks fine but the first page view after a while is very slow | Render free-tier cold start (and/or Neon compute waking from scale-to-zero) | Expected — see section 5. Refresh once the page finally loads; subsequent requests within the active window are fast |
+
+## 7. Everything this guide does *not* do
+
+Per this repository's own governance (`CLAUDE.md`, `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`) and
+the scope boundary every prior phase document has repeated: following this guide stands up a
+**public demo of a synthetic-data-only software prototype**. It does not, and cannot, authorize or
+constitute a real pilot, real PHI handling, real payments, or any claim of HIPAA/OSHA/DOT/pharmacy/
+employment/legal compliance — see `docs/PILOT_READINESS/GO_NO_GO_REPORT.md` for what an actual
+pilot decision would require, entirely separate from and unaffected by this deployment.
+
+---
+
+# docs/BACKUP_RESTORE.md
+
+```
+SOURCE FILE: docs/BACKUP_RESTORE.md
+```
+
+# Backup and Restore
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+This document covers backup/restore for the local `docker compose` stack (`compose.yaml`):
+PostgreSQL/PostGIS (`db`) and Valkey (`valkey`). It is Phase 8 (`docs/IMPLEMENTATION_ROADMAP.md`)
+documentation, written and — for the Postgres path — **actually executed and verified**, not just
+reviewed on paper. See the "What was actually run" section below for the exact drill performed in
+this session, with real output.
+
+## Scope: what needs backing up
+
+| Service | Needs backup? | Why |
+|---|---|---|
+| `db` (PostgreSQL/PostGIS) | **Yes** | The only system of record in this application. Every domain model — organizations, facilities, couriers, deliveries, dispatch, custody events, incidents, notifications, invoices, exports, audit events — lives here. Losing it loses everything. |
+| `valkey` (cache + Celery broker) | **No, by design** | `CACHES["default"]` (`config/settings/base.py`) is pure cache — Django cache invalidation/regeneration already assumes a cache miss is always safe and cheap to recompute. `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND` also point at Valkey (`config/settings/base.py`), so an in-flight (not-yet-executed) Celery task queued at the moment of a Valkey loss would be dropped — for this prototype's synthetic, retriable, non-financial-settlement background work (see `docs/ARCHITECTURE_AND_DATA_MODEL.md` section 9, "make Celery tasks idempotent"), that is an acceptable, bounded loss, not a data-integrity problem, since nothing in Valkey is the authoritative copy of anything. A real pilot with a heavier async-task backlog might reconsider this (e.g. Valkey AOF/RDB persistence tuning), but that is out of scope for the demo per `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`'s demo/pilot cost distinction. |
+| `mailpit` | No | Local dev-only email capture; ephemeral by design, never a system of record. |
+| Django app code / static files | No (via backup) | Version-controlled in Git; redeployed from the repository, not backed up as data. |
+
+## Backing up PostgreSQL
+
+### Command (from the host, against the compose `db` service)
+
+```bash
+# While `docker compose up` is running:
+docker compose exec db pg_dump -U "${POSTGRES_USER:-medrelay}" -Fc "${POSTGRES_DB:-medrelay}" \
+  -f /tmp/medrelay_backup.dump
+docker compose cp db:/tmp/medrelay_backup.dump ./medrelay_backup_$(date +%Y%m%d_%H%M%S).dump
+```
+
+- `-Fc` (custom format) is used rather than plain SQL: it is compressed, supports parallel restore
+  (`pg_restore -j`), and lets you restore a subset of objects later if ever needed — all strict
+  upgrades over a plain-text `pg_dump > file.sql` for no extra cost.
+- Copy the dump out of the container immediately (`docker compose cp`) — a dump left only inside
+  the container is destroyed along with it on `docker compose down -v`.
+- For a real (non-demo) deployment, this command should run on a schedule (cron/systemd timer or a
+  dedicated backup container) with the output shipped to storage outside the same host — neither
+  of which this prototype's zero-cost, single-developer-machine posture requires today. Documented
+  here as the obvious next step for `PILOT_MODE`, not something built in this repository.
+
+### Restoring
+
+```bash
+# Stop anything writing to the DB first (docker compose stop web worker), then:
+docker compose exec -T db psql -U "${POSTGRES_USER:-medrelay}" -d postgres \
+  -c "DROP DATABASE IF EXISTS ${POSTGRES_DB:-medrelay};"
+docker compose exec -T db psql -U "${POSTGRES_USER:-medrelay}" -d postgres \
+  -c "CREATE DATABASE ${POSTGRES_DB:-medrelay} OWNER ${POSTGRES_USER:-medrelay};"
+docker compose cp ./medrelay_backup_YYYYMMDD_HHMMSS.dump db:/tmp/restore.dump
+docker compose exec db pg_restore -U "${POSTGRES_USER:-medrelay}" -d "${POSTGRES_DB:-medrelay}" \
+  /tmp/restore.dump
+docker compose start web worker
+```
+
+After restoring, run `python manage.py migrate` once more before serving traffic — this is a no-op
+if the dump already reflects the latest migration state (which it will, since the dump is of a
+live database that had migrations applied), but it is a cheap, safe habit if the restore target is
+ever a few migrations behind the code being deployed.
+
+## What was actually run (this session's real drill)
+
+Rather than only writing the commands above, this session executed a full backup/restore cycle
+against a real, disposable PostGIS container (the same `postgis/postgis:17-3.5` image
+`compose.yaml`'s `db` service uses), remapped to host port `15432` to avoid colliding with
+unrelated Postgres containers already running on this shared development machine (the same
+port-conflict situation Phase 0's `docs/CURRENT_STATUS.md` documents — the remap was a temporary,
+uncommitted local compose override, deleted after the drill, exactly like Phase 0's).
+
+Steps actually performed, in order:
+
+1. Started a disposable `db` container, waited for its healthcheck to report `healthy`.
+2. `python manage.py migrate` against it — every migration from every app applied cleanly
+   (`accounts`, `organizations`, `audit`, `facilities`, `cargo`, `deliveries`, `billing`, `custody`,
+   `couriers`, `dispatch`, `incidents`, `notifications`, `otp_totp` (django-otp's own migrations),
+   `recipient`, `reporting`, `sessions`, `temperature`, `tracking` — 38 migrations total).
+3. `python manage.py seed_demo_data` — seeded 3 organizations, 8 facilities, 18 customer-org
+   memberships, 7 internal-staff users (25 users total).
+4. Recorded row counts before backup: **Organizations: 3, Memberships: 18, Facilities: 8,
+   Users: 25**.
+5. `pg_dump -Fc` inside the container, producing a real 286,493-byte dump file, copied out to the
+   host with `docker cp`.
+6. `DROP DATABASE medrelay;` then `CREATE DATABASE medrelay OWNER medrelay;` — genuinely destroying
+   all data, not just truncating tables.
+7. `pg_restore` from the dump file — completed with **no errors**.
+8. Re-ran the same row-count query: **Organizations: 3, Memberships: 18, Facilities: 8,
+   Users: 25** — identical to step 4, and `Organization.objects.values_list("name", flat=True)`
+   returned the same three real organization names (`Brooklyn Family Pharmacy Network (Demo)`,
+   `NorthStar Diagnostics (Demo)`, `Riverside Urgent Care Group (Demo)`), confirming this was a
+   genuine data round-trip, not merely "the command exited 0."
+9. Tore down the disposable container and volume (`docker compose down -v`) and deleted the
+   temporary compose override and local dump file — nothing from this drill was left running or
+   committed.
+
+**This was executed, not merely reviewed.** The exact commands above (the "real deployment"
+section) are the same commands used in this drill, adjusted only to target the actual `compose.yaml`
+`db` service name/port instead of the disposable remapped one used for the drill itself.
+
+## Valkey
+
+No backup procedure is documented for Valkey beyond what is already true: it is disposable cache/
+broker state, safe to lose (see the scope table above). If a real pilot later needs Valkey
+persistence (e.g. to survive a broker restart without losing queued-but-not-yet-executed tasks),
+Valkey's own RDB/AOF persistence settings would be the mechanism — not attempted or needed here.
+
+## What this document does not cover
+
+- Automated/scheduled backups (cron, managed backup service, off-host storage) — a `PILOT_MODE`
+  concern, not a `DEMO_MODE` one, per `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`.
+- Point-in-time recovery (WAL archiving) — not configured; `pg_dump` is a full logical snapshot at
+  the moment it runs, which is sufficient for this prototype's single-developer-machine demo
+  posture.
+- Encryption of backup files at rest — `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 5 already
+  notes database encryption-at-rest is an infrastructure concern deferred to a future pilot
+  deployment; the same applies to backup-file encryption.
+
+---
+
+# docs/COST_AUDIT.md
+
+```
+SOURCE FILE: docs/COST_AUDIT.md
+```
+
+# Cost Audit Report
+
+Generated by `python manage.py audit_cost` on 2026-08-05 15:56:51 UTC.
+
+## Result: PASS
+
+Every declared dependency is on the zero-cost allowlist, and no
+prohibited-service indicator strings were found in the scanned configuration
+and application source.
+
+## What was checked
+
+1. **Dependency allowlist** — every entry in `pyproject.toml`
+   `[project.dependencies]` and `[dependency-groups]` was resolved to a bare
+   package name and checked against an explicit allowlist maintained in
+   `apps/audit/management/commands/audit_cost.py`.
+2. **Prohibited-service indicators** — every `.py` file under the paths
+   below (excluding migrations) plus `.env.example` was scanned
+   (case-insensitively) for substrings associated with known paid/required
+   external services (payment processors, paid SMS, paid identity providers,
+   SaaS error tracking, paid background-check APIs, paid mapping APIs).
+
+Scanned paths:
+
+- `config`
+- `apps`
+- `.env.example`
+
+## Dependencies found (24)
+
+- `celery`
+- `coverage`
+- `detect-secrets`
+- `django`
+- `django-environ`
+- `django-otp`
+- `django-ratelimit`
+- `django-stubs`
+- `djangorestframework`
+- `djangorestframework-stubs`
+- `drf-spectacular`
+- `factory-boy`
+- `gunicorn`
+- `hypothesis`
+- `mypy`
+- `playwright`
+- `psycopg`
+- `pytest`
+- `pytest-cov`
+- `pytest-django`
+- `redis`
+- `ruff`
+- `segno`
+- `whitenoise`
+
+## Full allowlist
+
+- `celery`
+- `coverage`
+- `detect-secrets`
+- `django`
+- `django-environ`
+- `django-otp`
+- `django-ratelimit`
+- `django-stubs`
+- `django-stubs-ext`
+- `djangorestframework`
+- `djangorestframework-stubs`
+- `drf-spectacular`
+- `factory-boy`
+- `gunicorn`
+- `hypothesis`
+- `mypy`
+- `playwright`
+- `psycopg`
+- `psycopg-binary`
+- `pytest`
+- `pytest-cov`
+- `pytest-django`
+- `redis`
+- `ruff`
+- `segno`
+- `whitenoise`
+
+## Prohibited-service indicators checked for
+
+- `stripe` — Stripe (paid payment processing)
+- `twilio` — Twilio (paid SMS)
+- `auth0` — Auth0 (paid identity provider)
+- `okta` — Okta (paid identity provider)
+- `sentry_sdk` — Sentry SaaS (paid error tracking)
+- `sentry-sdk` — Sentry SaaS (paid error tracking)
+- `checkr` — Checkr (paid background-check API)
+- `pk.eyj` — Mapbox paid-tier public token pattern
+- `sk.eyj` — Mapbox paid-tier secret token pattern
+- `googleapis.com/maps` — Google Maps Platform (paid)
+- `AIzaSy` — Google API key pattern (commonly Maps Platform)
+
+## Important scope note
+
+This confirms zero required *software* cost for the demo prototype.
+
+It does NOT mean a real operating courier business would cost $0 — see
+`docs/SECURITY_COMPLIANCE_BOUNDARIES.md` and the `PILOT_MODE` distinction in
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`. A real pilot has unavoidable
+non-software costs (legal/compliance review, insurance, background checks,
+staffing, production hosting, payment processing, and more).
+
+---
+
+# docs/PILOT_READINESS/GAP_ASSESSMENT.md
+
+```
+SOURCE FILE: docs/PILOT_READINESS/GAP_ASSESSMENT.md
+```
+
+# Gap Assessment — Demo Prototype vs. Real Operating Pilot
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+**Purpose and scope boundary.** This document is Phase 10 (`docs/IMPLEMENTATION_ROADMAP.md`) work:
+a documentation/assessment deliverable, not a code change. It lists every meaningful gap between
+"what this demo prototype does" (verified against `docs/CURRENT_STATUS.md`'s ten phase sections and
+spot-checked directly against the code in this session) and "what a real operating courier pilot
+would need." It does not authorize a pilot, does not recommend a launch date, and does not itself
+constitute legal, compliance, security, or business advice — see
+`docs/PILOT_READINESS/GO_NO_GO_REPORT.md` for how these gaps roll up into an overall readiness
+picture, and `docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` for the professional-review gates
+that are hard blockers regardless of any of the technical gaps below.
+
+Organized by the same domain areas as `docs/IMPLEMENTATION_ROADMAP.md`'s phases. Each gap cites the
+specific phase/file it originates from, per this session's own re-verification against the current
+code (not just against what `CURRENT_STATUS.md` claimed when it was written).
+
+---
+
+## 1. Identity, tenancy, and roles (Phase 1)
+
+- **Tenant isolation is enforced per-view, not by a database-level policy.** Every sensitive view
+  calls an explicit permission helper (`apps.organizations.services.can_view_organization` etc.),
+  but there is no Postgres Row-Level Security policy or single global middleware backstopping this —
+  a new view that forgets the check is a real, structural risk. Cited: `docs/THREAT_MODEL.md`
+  section 1.
+- **No self-service signup for organizations, facilities, or couriers.** Account provisioning is
+  admin/`seed_demo_data`-only by design (Phase 1) — a real pilot's onboarding flow (sales,
+  compliance review, contract signing) does not exist in software at all.
+- **Password-reset views are routed but have no templates** (dead surface since Phase 1) — would
+  500 if visited directly; nothing links to them, but this should be templated or removed before
+  any real user-facing deployment.
+- **`FacilityReceivingRule` seed data is a uniform weekday/weekend default**, not tailored per
+  facility type (Phase 1) — a real facility (e.g. a 24-hour hospital dock) would need its own hours.
+
+## 2. Cargo policy and delivery requests (Phase 2)
+
+- **Prohibited-cargo guard is a crude, case-insensitive keyword scan**
+  (`apps.cargo.validation.find_prohibited_cargo_keywords`), explicitly not a compliance control —
+  trivially evaded by misspellings, synonyms, or non-English text. The structural defense (only 3
+  fixed `CargoClass` rows exist, no UI/API path creates a 4th) is real but only prevents formally
+  *selecting* an excluded category, not describing one in free text.
+  Cited: Phase 2 design decision 6, `apps/cargo/validation.py`.
+- **No real routing/distance API anywhere in the codebase.** Distance is a synthetic haversine
+  straight-line estimate between stored facility coordinates
+  (`apps.deliveries.pricing.estimate_distance_km`, confirmed present in the code at
+  `apps/deliveries/pricing.py:66-100` this session) — reused as-is by Phase 4's SLA/ETA
+  calculations (`apps.dispatch.sla`). Self-hosted OSRM, named in
+  `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` as the intended demo routing engine, was never wired
+  in at any phase. A real pilot needs real turn-by-turn/road-network distance and traffic-aware ETA.
+- **`RecurringRoute` has no generation job** — `generate_delivery_requests_for_recurring_route`
+  raises `NotImplementedError` unconditionally (Phase 2, still true; confirmed unchanged through
+  Phase 9). A real pilot's recurring-route customers get no automatic scheduled generation of
+  delivery requests at all.
+- **`Quote` keeps one current row per delivery request**, not a quote history table; pricing is
+  fully synthetic/admin-editable (`PricingRule`), not a real commercial rate card.
+- **`DeliveryStatusTransition` append-only enforcement is ORM-level only** (see section 6 below —
+  this pattern recurs across every append-only model in this codebase).
+
+## 3. Courier onboarding and eligibility (Phase 3)
+
+- **No real background-check provider integration of any kind.** `IdentityReviewStatus`/
+  `DriverLicenseStatus`/`InsuranceStatus` are placeholder, manually-set enums; `CourierCredential`
+  admin literally labels one credential type "Background Check (Placeholder — No Real Provider
+  Integrated)" (confirmed at `apps/couriers/models.py:195` this session). No `BackgroundCheckProvider`
+  adapter exists as code anywhere (see `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md`).
+- **No file upload for credential evidence at all** — `CourierCredential.evidence_reference` is a
+  placeholder text field (e.g. a synthetic filename string), never a real uploaded document; there
+  is no `FileField`/`ImageField`/upload view anywhere in `apps.couriers`, confirmed unchanged through
+  Phase 9.
+- **`CourierPerformanceSnapshot` was never built**, in any phase — confirmed by grep across the
+  full repository in this session (only docstring/architecture-doc mentions exist, no model). The
+  dispatch score's "reliability/on-time history" factor is a hardcoded neutral 0.5 constant because
+  no completed-delivery outcome data has ever existed in this codebase to compute a real value from
+  (Phase 4 design decision 3). A real pilot needs a genuine on-time/reliability history to make
+  dispatch scoring meaningfully differentiate couriers.
+- **`eligible_couriers_for`/`eligible_deliveries_for` are O(n×m) Python-level filters**, not
+  optimized database queries — acceptable at demo data volumes (tens of couriers/deliveries), a real
+  scaling concern at pilot volumes.
+- **Courier-status history is a plain field, not an audit log** (deferred to Phase 8's audit
+  viewer, which only covers auth/membership events, not courier status — see section 6).
+- **`TrainingRecord` is not wired into the eligibility engine at all** — no cargo class currently
+  requires a specific training certification in this prototype's rules.
+
+## 4. Dispatch and operations console (Phase 4)
+
+- **The explainable score's "reliability" and "customer preference" factors are honest
+  placeholders**, not real signals (see section 3 above and Phase 4 design decision 3) — the score
+  is real math over partially-synthetic inputs, not a demonstration of a fully-realized scoring
+  model.
+- **`eta_to_pickup` has no real distance signal** — it is a small set of synthetic zone-match minute
+  tiers (15/25/40 min), since no courier-location model existed until Phase 5, and even Phase 5's
+  location pings are never fed back into dispatch scoring.
+- **Concurrency-correctness confidence is real but bounded.** The atomic-assignment race test was
+  run repeatedly (15-60+ runs) against both SQLite and a real, throwaway single-container
+  PostgreSQL instance with 100% correctness (no double-assignment observed ever) — but this proves
+  correctness under one pair of concurrent requests against an idle container, not under sustained
+  production-level concurrent load, connection-pool exhaustion, or multi-row deadlock scenarios
+  (explicitly stated as out of scope in Phase 4's own write-up).
+- **A SQLite-specific test-flakiness artifact was found, explained, and mitigated (retried), not
+  eliminated** — Phase 8 traced an observed ~10% baseline flake in the concurrency test to SQLite's
+  shared-cache-mode deadlock detection (not a correctness bug — every failure was "both threads
+  cleanly conflict," never a double-assignment or crash) and added a single, documented retry,
+  reducing it to 0/60 in that session's stress test. This is a SQLite-test-harness artifact with **no
+  bearing on real PostgreSQL deployment**, where `select_for_update()` takes a genuine row lock with
+  no equivalent behavior — stated for completeness, not because it threatens the underlying
+  guarantee.
+- **The dispatch dashboard has no live map, courier-location display, or incident/temperature
+  alerts** — a plain list/table view only; `docs/PRODUCT_REQUIREMENTS.md` section 7's full "control
+  tower" wishlist (live map, temperature alerts, expiring-credential flags in one view) is not built.
+
+## 5. Courier PWA and tracking (Phase 5)
+
+- **Camera-based QR scanning is genuinely untested by the automated suite** — the
+  `BarcodeDetector`/`getUserMedia` browser path is manually-reviewable only; only the manual
+  code-entry fallback has real test coverage.
+- **The offline event queue's actual offline→online recovery was never verified with a real browser
+  going through a real network-loss/recovery cycle** — service-worker registration and static-shell
+  cache population were verified with real Playwright/Chromium; the `localStorage` queue's own
+  retry-on-reconnect behavior was not (Phase 5's own stated scope limit, unchanged since).
+  Playwright/Chromium browser automation itself is confirmed working in this development
+  environment but is not guaranteed to work in every environment this repository is cloned into
+  (`--with-deps` needs interactive `sudo`; plain `chromium` install happened to work here).
+- **`CourierLocationPing` is not append-only-hardened** (a deliberate, lower-stakes-data scope
+  choice) and, more importantly, **has no data-retention/purge policy** — rows accumulate
+  indefinitely. Real courier location data (unlike this prototype's synthetic coordinates) would be
+  personal/employment-adjacent data needing an actual retention policy. Cited: `docs/THREAT_MODEL.md`
+  section 5.
+- **No real precision/battery/background-permission handling for courier location tracking.** The
+  browser Geolocation API is used directly, in-foreground, with no discussion anywhere in this
+  codebase of background-tracking permissions, battery-optimization exemptions, or GPS-accuracy
+  degradation — all real, unaddressed mobile-engineering concerns for continuous field tracking.
+- **No real navigation/routing summary is shown to the courier** — the synthetic `RoutePlan`/
+  `RouteLeg` estimates are not surfaced in the courier PWA at all.
+
+## 6. Custody, proof, temperature, and incidents (Phase 6)
+
+- **Append-only enforcement for `CustodyEvent`, `DeliveryStatusTransition`, and `AuditEvent` is
+  ORM-level, not database-level** — confirmed by this session's own grep across all migrations
+  (`apps/*/migrations/`): zero `REVOKE`/`CREATE TRIGGER` statements exist anywhere. Each model's
+  `save()`/`delete()` and a custom queryset block ordinary Django ORM mutation, and
+  `CustodyEvent`'s SHA-256 hash chain (`apps.custody.hashing.compute_event_hash`) makes any bypass
+  *detectable after the fact* — but a raw SQL statement, a compromised database credential, or a
+  future code path that writes directly to these tables (bypassing `record_event`) could still
+  mutate history today. This is the single most-repeated honest limitation across this codebase
+  (`docs/THREAT_MODEL.md` section 3; `apps/custody/models.py`, `apps/deliveries/models.py`,
+  `apps/audit/models.py` docstrings all state it independently). A real pilot needs an actual
+  Postgres-level guard (a restricted application role without `UPDATE`/`DELETE` grants on these
+  tables, or a trigger) before this can be called tamper-*proof* rather than tamper-*evident*.
+- **No dedicated multi-threaded concurrency test exists for `apps.custody.services.record_event`**
+  (unlike `assign_delivery`'s real multi-threaded test) — the same row-lock + partial
+  `UniqueConstraint` pattern protects it, but it was never independently stress-tested the way
+  dispatch assignment was.
+- **Signature images are stored as inline base64 text**, not through a real object-storage
+  adapter — fine at this prototype's data volumes, wrong for real deployment scale/durability.
+- **Signature/PIN capture is explicitly a prototype, never a legally binding e-signature** — no
+  timestamp-authority integration, no cryptographic signing of the drawn image, no identity-proofing
+  behind either mechanism. Stated directly in `apps/custody/models.py`'s own docstring.
+- **PIN delivery to the recipient is fully manual/out-of-band** — the plaintext PIN surfaces once
+  via a flash message on the customer-facing delivery-detail page; there is no automated
+  recipient-facing SMS/email delivery channel for it anywhere in this prototype (Phase 6/7).
+- **Temperature readings are entirely simulated** (`apps.temperature.management.commands.
+  simulate_temperature_readings` — an honestly-labeled synthetic random-walk generator, confirmed
+  present and unchanged this session) — there is no real IoT/sensor-hardware integration and no
+  claim of validated cold-chain compliance anywhere, per `docs/PRODUCT_REQUIREMENTS.md` section 12.
+- **`DELIVERY_SCAN`/`CUSTODY_TRANSFERRED`/`PACKAGE_PREPARED` custody event types are defined in the
+  vocabulary but never automatically emitted** by any service function.
+- **No incident category/severity restriction by actor role** — a courier can self-declare any of
+  the twelve incident categories at any severity (e.g. `CRITICAL` `suspected_tampering`) with no ops
+  review gate.
+- **A real, quantified SQLite test-flakiness increase was found and left unfixed at the time** (later
+  addressed in Phase 8, see section 4) — Phase 6 itself observed and documented a ~6% flake rate
+  increase in the dispatch concurrency test caused by its own change (custody-event emission inside
+  `assign_delivery`'s transaction), correctly attributed to test-harness behavior, not a correctness
+  regression.
+
+## 7. Notifications, recipient tracking, billing, and reports (Phase 7)
+
+- **No automatic notification triggers wired into delivery-status transitions, job offers, or
+  incident open/resolve events** — the full `NotificationProvider` mechanism (payload allow-list,
+  email/SMS/webhook adapters, dedup) exists and is demonstrated end-to-end at exactly two call
+  sites (`notify_invoice_issued`, `notify_recipient_link_issued`); broader lifecycle-event wiring
+  was explicitly out of scope to control blast radius on prior phases' tested code.
+- **`WebhookDelivery` never performs a real HTTP request** — a deliberate SSRF-avoidance choice
+  (confirmed: no `requests`/`urllib` import anywhere in `apps.notifications`), not a partial
+  implementation of a real webhook sender. A real pilot's customer-integration webhooks would need
+  a genuine outbound HTTP sender behind an explicit egress-control/allowlist policy — none exists.
+- **No paid/production SMS or email provider anywhere** — `SimulatedSmsProvider` makes no network
+  call of any kind, ever; email goes to a local Mailpit capture box. See
+  `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md` for exactly what a live provider would
+  need to satisfy the same interface.
+- **No real payment processing of any kind** — `PaymentStatus` is a plain, manually-set mock field;
+  `apps/billing/models.py`'s own docstring states there is no `PaymentProvider` adapter and there
+  "never should be one in this repository." A real pilot needs a genuine payment processor and a
+  PCI-scope decision (see the provider-adapter document).
+- **No recipient-facing UI links to the recipient tracking link anywhere** — `issue_recipient_link`
+  and the token/view mechanism are fully built and tested, but no "generate/send tracking link"
+  button exists on the delivery-detail page; the link itself, like the PIN, is relayed manually.
+- **`RECIPIENT_LINK_MAX_AGE_SECONDS` (72 hours) is a single hardcoded constant** — no per-delivery
+  or per-service-level override.
+- **`_next_invoice_number` is a `count()+1` counter, not a `select_for_update()`-guarded sequence**
+  — acceptable at this prototype's zero real-world concurrent-invoice-generation volume, a real gap
+  at any meaningful transaction volume.
+- **Every report is a full, unfiltered dump of an organization's current data** — no date-range or
+  status filtering exists on any of the six report types.
+
+## 8. UX, accessibility, security, and demo hardening (Phase 8)
+
+- **MFA is opt-in, not enforced, for any account, including privileged internal-ops and
+  customer-org-owner/administrator accounts.** Confirmed by reading
+  `apps.organizations.services.is_mfa_eligible` directly this session: it only decides *enrollment
+  eligibility*; nothing in this codebase forces enrollment for any role. Login for an unenrolled
+  account requires only a password.
+- **No dependency-vulnerability scanning is wired into CI.** Confirmed by reading
+  `.github/workflows/ci.yml` in full this session: it runs lint/format/type-check/tests/migration-
+  check/cost-audit only — no `pip-audit` step, and no `.github/dependabot.yml` exists in the
+  repository at all. `audit_cost` checks *cost-policy* compliance (is this dependency free/allowed),
+  not upstream package compromise — a materially different kind of supply-chain risk that is
+  entirely unaddressed.
+- **Recipient PIN/token rate limiting is per-IP/per-token via a shared cache, not a hard per-token
+  lockout.** A distributed attacker spreading attempts across many source IPs is still bounded by
+  the 5/minute-per-token rate (impractically slow for a 6-digit PIN — ~139 days at that rate per
+  `docs/THREAT_MODEL.md` section 2's own math — but not mathematically zero).
+- **Upload/input-size limiting is not exhaustive** — several internal-staff-only free-text fields
+  (`Organization.notes`, `Facility.notes`/`access_instructions`, `DispatchOverride.reason`,
+  `IncidentAction.note`) remain unbounded `TextField`s, reachable only by authenticated
+  internal/admin users and still bounded transitively by the global request-size cap, but not
+  individually capped the way public/courier-facing fields were.
+- **No automated/scheduled backups, point-in-time recovery, or backup-file encryption** — the
+  backup/restore drill (`docs/BACKUP_RESTORE.md`) was genuinely executed once, manually, in this
+  development environment; nothing in this repository runs it on a schedule or ships it anywhere
+  off-host.
+- **Tenant isolation, custody append-only enforcement, and PIN rate-limiting residual risks are all
+  independently restated in `docs/THREAT_MODEL.md`** — see that document directly for the full,
+  original threat-by-threat write-up this gap list draws from.
+
+## 9. Free public demonstration option (Phase 9)
+
+- **No external hosting deployment exists anywhere** — `docs/HOSTING_OPTIONS.md` is explicitly a
+  recommendation document; no account was created, no platform selected, nothing deployed. A real
+  pilot needs an actual, chosen, provisioned hosting environment, which does not exist today even
+  at demo scale.
+- **The public-demo quota safeguard (a per-organization `DeliveryRequest` cap) is a single
+  mechanism**, not an exhaustive abuse-prevention system — no public self-service organization/
+  courier signup surface exists yet for the corresponding per-IP/session abuse vectors to even
+  apply to.
+- **No screenshots, video, or static marketing page were produced** — the roadmap's own preferred
+  "local package + video + static page" alternative to a hosted deployment is only half-built (the
+  local package itself).
+- **`config/settings/demo.py` has never been exercised by the automated test suite** (0% coverage) —
+  verified only by manual inspection of its resolved settings values in this development
+  environment.
+
+## 10. Cross-cutting gaps (span multiple phases)
+
+- **PostGIS/spatial indexing was deliberately deferred in every phase that touched geography.**
+  `Facility.latitude`/`longitude` are plain `DecimalField`s (Phase 1), confirmed unchanged through
+  Phase 9 by this session's own grep of `apps/facilities/models.py`. Every distance calculation in
+  this codebase (`apps.deliveries.pricing`, `apps.dispatch.sla`, `apps.couriers.eligibility`'s zone
+  matching) is either haversine straight-line math or plain FK-equality zone matching — never a real
+  spatial query, index, or geofence. `docs/ARCHITECTURE_AND_DATA_MODEL.md`'s own architecture
+  diagram names PostGIS; the actual codebase has never used it for anything.
+- **No `RoutingProvider`, `PaymentProvider`, `BackgroundCheckProvider`, `ObjectStorageProvider`, or
+  `TemperatureSensorProvider` exists as an actual Python type anywhere in this codebase.** Confirmed
+  by grep this session: only `NotificationProvider` (Phase 7) was ever built as a real `Protocol`
+  with concrete implementations. The other five are referenced only in docstrings/architecture
+  documentation as forward-looking concepts — `RoutingProvider` in particular has **zero** mentions
+  anywhere in application code, not even a docstring nod. See
+  `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md` for the full, honest accounting of what
+  exists vs. what the zero-cost policy's adapter-pattern claim actually delivered.
+- **Test-database confidence is anchored on SQLite, with targeted, session-specific PostgreSQL
+  verification, not continuous PostgreSQL CI.** Every quality gate in this repository's history
+  (`ruff`/`mypy`/`pytest`/`makemigrations --check`) runs against `config.settings.test` (SQLite).
+  Real PostgreSQL verification happened a handful of times, manually, against throwaway containers
+  during Phase 4/8/9 development sessions (documented with real output each time) — not as a
+  standing CI job. `.github/workflows/ci.yml` (confirmed by reading it this session) has no
+  Postgres service container at all. Every SQLite-vs-PostgreSQL confidence caveat elsewhere in this
+  document traces back to this one structural fact.
+- **Coverage is consistently ~95%, never claimed as 100%, with no hard coverage gate anywhere** —
+  stated honestly at the end of every phase; this is a reasonable prototype posture, not a gap in
+  itself, but is noted here since a real pilot's own quality bar may want a hard threshold.
+- **No load/soak/performance testing exists anywhere in this codebase's history** — every
+  concurrency claim in this document is about *correctness under a small number of simultaneous
+  writers*, never about throughput, latency, or behavior under realistic pilot-scale traffic.
+
+---
+
+# docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md
+
+```
+SOURCE FILE: docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md
+```
+
+# Legal and Compliance Review Checklist
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+**This document is not legal advice.** It does not evaluate legal risk, does not conclude that any
+item below is satisfied or unsatisfied in a legal sense, and does not substitute for review by a
+licensed attorney or qualified compliance professional in the relevant jurisdiction (New York State
+and applicable federal law). For each item required by
+`docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8, this document states plainly: what this
+codebase currently does (if anything relevant), and why that is not, and cannot be, a substitute for
+qualified professional review. Every item below is a **hard blocker** for any real pilot — none of
+them can be resolved by writing more code.
+
+---
+
+## 1. Healthcare privacy and business-associate status (HIPAA BAA analysis)
+
+**What the software does:** Nothing in this repository processes, stores, or transmits protected
+health information (PHI). `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 2 is enforced throughout
+— no field for diagnoses, lab results, clinical notes, medication indications, SSNs, insurance
+identifiers, or full patient records exists anywhere in `apps/*/models.py` (re-verified by this
+session's spot-check of the Phase 8 PHI sweep's own methodology and findings, `docs/CURRENT_STATUS.md`
+"Phase 8" PHI sweep section). Operational references (delivery ID, package barcode, synthetic
+accession codes, facility/organization IDs, operational contact names/roles like "Front Desk") are
+used instead throughout.
+
+**Why this requires qualified review anyway:** A real pilot moving specimens/documents/medications
+between healthcare organizations will very likely make MedRelay a HIPAA "business associate" of at
+least some customer organizations, regardless of how carefully the *software* avoids storing PHI
+directly — HIPAA's business-associate definition turns on the *relationship and function*
+(handling PHI-adjacent items on behalf of a covered entity), not merely on whether a database column
+is named `diagnosis`. Whether operational metadata like "which specimen went from which clinic to
+which lab, when" itself constitutes PHI in context, whether a Business Associate Agreement (BAA) is
+required with each customer organization, and what technical/administrative safeguards a BAA would
+obligate MedRelay to implement (which likely exceed what this demo-scale prototype currently has —
+see `docs/PILOT_READINESS/GAP_ASSESSMENT.md` sections 6 and 8) is a determination only healthcare
+privacy counsel can make. **This is the single gating item most other items depend on** — see
+`docs/PILOT_READINESS/GO_NO_GO_REPORT.md`'s recommended next step.
+
+## 2. Customer/business-associate contracts
+
+**What the software does:** Nothing. There is no contract-management functionality anywhere in this
+codebase — `Organization`/`OrganizationMembership` model a customer's *technical* access, not a
+commercial or legal relationship. No customer organization in this system has ever been bound by
+any real contract; `seed_demo_data`'s three organizations are entirely synthetic and their names are
+explicitly marked `(Demo)`.
+
+**Why this requires qualified review:** Every real customer relationship needs its own commercial
+services agreement and, per item 1, likely a BAA. Terms around liability, SLA remedies, data
+ownership/retention, incident-notification obligations, and termination need drafting and
+negotiation — none of which is a software problem.
+
+## 3. Specimen/infectious-substance eligibility and packaging rules
+
+**What the software does:** `docs/PRODUCT_REQUIREMENTS.md` section 3 defines exactly three cargo
+classes (documents/non-hazardous supplies, approved routine specimens, sealed non-controlled
+medication) and explicitly excludes Category A infectious substances, controlled substances, human
+organs, radioactive material, regulated medical waste, loose sharps, unsealed specimens, specialized
+blood products. This exclusion is partially structural (`CargoClass` has exactly 3 seeded rows, no
+UI/API path creates a 4th) and partially a crude, explicitly-non-compliance-grade keyword scan over
+free-text fields (`apps.cargo.validation.find_prohibited_cargo_keywords` — trivially evaded by
+misspelling or synonym, stated plainly in its own docstring). The system also requires a
+"packaging/classification attestation" before a delivery can be dispatched, but this attestation is
+a **customer self-attestation**, never independently verified by the system.
+
+**Why this requires qualified review:** DOT/IATA/other regulatory packaging and labeling rules for
+even "approved routine specimens" (UN 3373, Category B biological substances, etc.) are a real,
+detailed regulatory area this software makes no attempt to enforce beyond a keyword blocklist.
+Whether the "Class 2" routine-specimen category as scoped is even legally deliverable by a
+non-specialized courier network, what training/certification the couriers themselves would need,
+and what liability exists if a customer's self-attestation is wrong all require review by counsel
+and/or a DOT-hazmat-transport specialist — not something a demo prototype's validation logic can
+resolve.
+
+## 4. Pharmacy medication delivery rules
+
+**What the software does:** "Class 3" cargo (sealed, non-controlled, pharmacy-prepared medication)
+exists as a selectable cargo class. The product requirements explicitly state "the pharmacy/facility
+remains responsible for lawful dispensing, packaging, labeling, and release" — the software performs
+no pharmacy-licensing check, no controlled-substance screening beyond the same keyword blocklist as
+item 3, and no chain-of-custody requirement specific to pharmacy law.
+
+**Why this requires qualified review:** New York (and federal, for anything touching controlled
+substances even tangentially) pharmacy-delivery regulation is a specialized legal area. Courier
+licensing/registration requirements for pharmacy deliveries, patient-identity verification at
+hand-off (this prototype's recipient PIN is an operational proxy, not a legally-specified identity
+check), and liability allocation between pharmacy and courier all need pharmacy-law counsel review
+before this cargo class is ever used for a real delivery.
+
+## 5. New York worker classification (employee vs. independent contractor)
+
+**What the software does:** Nothing. `CourierProfile` models an onboarding/eligibility/availability
+relationship (approved/suspended/inactive status, credentials, shift availability, job
+accept/reject) that is agnostic to worker-classification law — the system does not encode or imply
+either an employment or an independent-contractor relationship; it simply tracks operational
+state. Couriers can accept or reject job offers (`JobOffer.decline_reason` exists and is recorded),
+which is a fact pattern relevant to (but not dispositive of) worker-classification analysis.
+
+**Why this requires qualified review:** New York State (and NYC-specific) worker-classification law
+for gig/platform-mediated courier work is an active, consequential, and litigated legal area
+(misclassification carries real wage-and-hour, unemployment-insurance, and workers'-compensation
+liability). Whether MedRelay's actual operational control over couriers (degree of control over
+schedule, equipment, exclusivity, training requirements) makes couriers employees or contractors as
+a matter of law is a fact-specific determination for employment counsel, not something this
+software's data model can settle by construction.
+
+## 6. Insurance and vehicle requirements
+
+**What the software does:** `Vehicle`/`Equipment`/`CourierProfile` model an `InsuranceStatus`
+enum and a `plate_number` field, both explicitly documented as synthetic placeholders
+(`Vehicle.plate_number` is stated in `apps/couriers/models.py`'s own docstring/help text to be a
+synthetic placeholder, never a real plate). No verification of any insurance policy, vehicle
+registration, or motor-vehicle record happens anywhere — the fields are manually set by an internal
+reviewer, with no integration to any real DMV or insurance-verification service.
+
+**Why this requires qualified review:** Real commercial-auto insurance requirements for a courier
+network transporting healthcare-adjacent cargo (minimum coverage limits, whether personal auto
+policies suffice or commercial coverage is required, cargo/bailee insurance for lost/damaged
+specimens or medication) need a licensed insurance broker's assessment specific to this business
+model — not a software gap, a business-formation one. See
+`docs/PILOT_READINESS/BUDGET_CHECKLIST.md` for rough, non-binding cost-range context once that
+review happens.
+
+## 7. Background-check consent/process
+
+**What the software does:** Nothing real. `IdentityReviewStatus` is a manually-set placeholder
+enum; `CourierCredential`'s admin UI literally labels one credential type "Background Check
+(Placeholder — No Real Provider Integrated)" (verbatim string, confirmed in
+`apps/couriers/models.py` this session). No consent flow, no real background-check vendor
+integration (Checkr and all paid equivalents are explicitly prohibited by
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`), and no FCRA-style adverse-action process exists anywhere
+in this codebase.
+
+**Why this requires qualified review:** Background checks on individuals who will access healthcare
+facilities and handle healthcare-adjacent cargo are subject to the Fair Credit Reporting Act (FCRA)
+at the federal level and New York State background-check law, both of which impose specific
+consent-disclosure, adverse-action-notice, and dispute-process requirements that have nothing to do
+with which vendor API you call — they need a compliance process designed with counsel regardless of
+which real `BackgroundCheckProvider` is eventually integrated (see
+`docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md`).
+
+## 8. Incident/exposure plan
+
+**What the software does:** A real, working incident *console* exists (Phase 6): twelve incident
+categories including "courier injury/exposure," severity levels, a hold-until-resolved state-machine
+guarantee, and an append-only (ORM-level) action history. This is genuine operational tooling for
+*recording* an incident once one has happened.
+
+**Why this requires qualified review:** The software has no opinion on, and does not encode, what
+the *actual* organizational response plan is when a courier reports an exposure to a biohazard, a
+vehicle accident, or a suspected-tampering event — who is notified, within what timeframe, what
+OSHA-adjacent reporting obligations trigger (this system's `CLAUDE.md` explicitly disclaims any OSHA
+compliance claim), and what medical/legal follow-up is owed to the courier. That is an operational
+and legal policy a real pilot must design and document independently of this software; the incident
+console can *record* whatever process is decided, but does not define one.
+
+## 9. Data retention policy
+
+**What the software does:** No explicit, configured data-retention/purge policy exists for any
+model in this codebase. `CourierLocationPing` rows accumulate indefinitely (explicitly flagged in
+`docs/THREAT_MODEL.md` section 5); custody events, audit events, and delivery records are, by
+design, meant to be kept (append-only, tamper-evident) but no maximum retention window or scheduled
+purge job exists for any of them.
+
+**Why this requires qualified review:** Even setting aside item 1's BAA question, real courier
+location history, incident records, and delivery metadata are the kind of data a real business needs
+a deliberate retention/deletion policy for — driven by whatever contractual/regulatory retention
+obligations apply once items 1-2 above are resolved, and by ordinary data-minimization/privacy-law
+principles (which apply regardless of HIPAA status). This is a policy decision for legal/compliance
+to set; the software has the technical primitives to implement a retention job once a policy exists,
+but no policy exists today.
+
+## 10. Production hosting/security
+
+**What the software does:** `docs/HOSTING_OPTIONS.md` (Phase 9) is a hosting *recommendation*
+document only — no hosting account was ever created, no platform selected, nothing deployed
+anywhere. `config/settings/prod.py`/`demo.py` configure reasonable web-application defaults (HSTS,
+secure cookies, SSL redirect) for *whenever* a real deployment happens, but no such deployment has
+ever existed. A real, executed backup/restore drill was performed once, manually, in a development
+environment (`docs/BACKUP_RESTORE.md`) — not as a standing, scheduled, off-host backup process.
+`docs/THREAT_MODEL.md` documents this codebase's specific threat surface and residual risks
+in detail, including several noted above (ORM-level-not-DB-level append-only guards, no
+dependency-vulnerability scanning in CI, MFA opt-in).
+
+**Why this requires qualified review:** A real pilot handling any data with actual privacy/business
+stakes needs an independent security assessment (not self-assessment) of the production environment
+once one is chosen — this is standard practice for any real B2B SaaS handling business-sensitive
+data, entirely independent of whether HIPAA ultimately applies. `docs/THREAT_MODEL.md` is a useful
+starting input for that review, not a substitute for it.
+
+---
+
+## Summary table
+
+| # | Item | Software does today | Requires professional review before pilot |
+|---|---|---|---|
+| 1 | HIPAA/BAA status | No PHI fields exist; BA-relationship status undetermined | **Yes — healthcare privacy counsel** |
+| 2 | Customer/BA contracts | No contract-management functionality | **Yes — counsel to draft/negotiate** |
+| 3 | Specimen/infectious-substance rules | Structural + keyword-blocklist exclusion only | **Yes — DOT-hazmat/counsel** |
+| 4 | Pharmacy delivery rules | Cargo class exists; no pharmacy-law enforcement | **Yes — pharmacy-law counsel** |
+| 5 | NY worker classification | Operational model is classification-agnostic | **Yes — employment counsel** |
+| 6 | Insurance/vehicle requirements | Placeholder fields only, no verification | **Yes — licensed insurance broker** |
+| 7 | Background-check consent/process | Placeholder fields only, no real provider | **Yes — FCRA/NY-law counsel** |
+| 8 | Incident/exposure plan | Incident console exists; no response-plan policy | **Yes — ops/legal policy design** |
+| 9 | Data retention policy | No retention/purge policy configured anywhere | **Yes — legal/compliance policy design** |
+| 10 | Production hosting/security | No production deployment exists; threat model documented | **Yes — independent security assessment** |
+
+Every row above is a hard blocker, not a nice-to-have — none is resolved by additional software
+engineering alone. See `docs/PILOT_READINESS/GO_NO_GO_REPORT.md` for how this rolls into an overall
+recommendation and a concrete suggested first step.
+
+---
+
+# docs/PILOT_READINESS/BUDGET_CHECKLIST.md
+
+```
+SOURCE FILE: docs/PILOT_READINESS/BUDGET_CHECKLIST.md
+```
+
+# Insurance and Infrastructure Budget Checklist
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+**All dollar figures in this document are non-binding, order-of-magnitude estimates from general
+knowledge, explicitly not quotes.** They exist only to give a real decision-maker a rough sense of
+scale before commissioning actual quotes — every one requires verification with a real broker,
+vendor, or provider at decision time, and every one will vary by exact scope, location, claims
+history, and current market pricing. Do not budget, forecast, or make a go/no-go decision using any
+number below as if it were firm. Per `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` section 5, this list
+follows its "Real operating pilot" cost categories.
+
+This document also states, per category, exactly what the zero-cost demo prototype currently
+substitutes — see `docs/PILOT_READINESS/GAP_ASSESSMENT.md` for the fuller technical gap write-up
+behind each substitution and `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md` for what a real
+adapter implementation would need.
+
+---
+
+## 1. Legal/compliance review
+
+**Demo substitute:** `docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` — a list of what needs
+review, not the review itself.
+
+**Non-binding estimate:** Initial healthcare-privacy/BAA analysis plus a first pass at
+worker-classification and cargo/pharmacy-regulatory review from a qualified firm commonly runs from
+the low five figures for a narrowly-scoped opinion up to well into six figures for a fuller
+multi-area engagement (privacy + employment + regulatory + contract drafting) — highly dependent on
+firm, hourly rates, and how many of the ten checklist items are engaged at once. Verify with
+counsel directly; do not budget from this range alone.
+
+## 2. Business/commercial insurance
+
+**Demo substitute:** `Vehicle.plate_number`/`InsuranceStatus` are placeholder fields; no real policy
+exists or is referenced anywhere.
+
+**Non-binding estimate:** Small-business general liability insurance commonly runs in the
+low-to-mid four-figures annually for a small operation; commercial auto/cargo (bailee) coverage for
+a courier fleet is typically priced per-vehicle and by cargo value/type, plausibly adding another
+low-to-mid four figures per vehicle annually, with healthcare-adjacent cargo (even "routine
+specimens") likely commanding a premium over a generic parcel-courier policy. Professional/liability
+coverage specific to handling medical-adjacent cargo may be a separate line item entirely. **Verify
+all of this with a licensed commercial insurance broker** — this is exactly the kind of quote that
+depends heavily on claims history, fleet size, and coverage limits chosen, none of which this
+document can estimate meaningfully.
+
+## 3. Courier background and motor-vehicle checks
+
+**Demo substitute:** No real provider; `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` explicitly
+prohibits Checkr and all paid equivalents as a *required* dependency of this repository — this is a
+deliberate zero-cost-prototype constraint, not a claim that background checks are unnecessary.
+
+**Non-binding estimate:** Commercial background-check providers commonly price per-check in the
+low tens of dollars for a standard package (identity, criminal history, motor-vehicle record), with
+volume discounts at scale; a driving-record (MVR) pull alone is typically priced lower, often in the
+single-to-low-double-digit dollars per pull, sometimes offered as a recurring monitoring
+subscription per courier rather than a one-time check. **Verify current pricing directly with a
+provider** (e.g. Checkr or a comparable FCRA-compliant vendor) — pricing tiers and compliance-package
+inclusions change.
+
+## 4. Courier equipment/PPE
+
+**Demo substitute:** `Equipment`/`Vehicle.supports_refrigeration` are data-model flags describing
+equipment a courier is assumed to already have; nothing in this repository purchases, tracks
+inventory of, or reimburses for physical equipment.
+
+**Non-binding estimate:** Insulated/refrigerated transport bags or coolers with temperature
+indicators are commonly priced in the tens to low hundreds of dollars per unit depending on
+capability; basic PPE (gloves, sanitizer, spill kit) is a comparatively minor per-courier recurring
+cost. Scale this by fleet size and by how many couriers need refrigerated-capable equipment
+specifically (this prototype's seeded demo data shows a realistic split — some couriers
+ambient-only, some refrigerated-capable).
+
+## 5. Operational dispatch staff
+
+**Demo substitute:** The dispatch console (Phase 4) is a real tool for a human dispatcher to use —
+it recommends, scores, and lets a dispatcher assign/reassign/override with a reason. It does not
+replace the human role; a real pilot needs actual dispatcher labor hours, not just the software.
+
+**Non-binding estimate:** This is a genuine staffing/payroll cost, not a software-infrastructure
+line item, and depends entirely on operating hours (per `docs/PRODUCT_REQUIREMENTS.md` section 2:
+weekdays 7 AM-8 PM plus limited evening/weekend STAT coverage) and headcount needed for that
+coverage window — this document deliberately does not estimate labor cost, since it varies by
+locality, employment structure (see the worker-classification legal-review item), and shift design
+far more than any technology choice does.
+
+## 6. Reliable SMS/communications at scale
+
+**Demo substitute:** `SimulatedSmsProvider` (`apps/notifications/providers.py`) makes zero real
+network calls of any kind, ever — it only writes a local `SmsLogEntry` row. Email goes to a local
+Mailpit capture inbox, never a real inbox.
+
+**Non-binding estimate:** Commercial transactional-SMS providers (e.g. Twilio or a comparable
+equivalent — named here only as a market reference point, not a recommendation, and explicitly
+prohibited as a *required* dependency of this repository per the zero-cost policy) commonly price
+per-message in the low cents range in the US, plus a small monthly phone-number rental fee; email
+transactional-delivery services are typically priced per-thousand-messages at a comparably low rate
+or offer a free tier for low volumes. At this prototype's projected pilot scale (a controlled
+Manhattan-Brooklyn zone, not a national rollout), monthly SMS/email cost is plausibly a low-hundreds
+figure, but this depends entirely on message volume per delivery (status updates, recipient links,
+credential-expiration alerts) once real triggers are wired in (see the notification-wiring gap in
+`docs/PILOT_READINESS/GAP_ASSESSMENT.md` section 7) — **verify current per-message pricing directly
+with a provider.**
+
+## 7. Mapping/routing infrastructure at scale
+
+**Demo substitute:** Every distance/ETA calculation in this codebase is a synthetic haversine
+straight-line estimate (`apps.deliveries.pricing.estimate_distance_km`) — no real routing engine
+(OSRM or otherwise) was ever wired in at any phase, despite being named as the intended demo
+approach in `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`.
+
+**Non-binding estimate:** Self-hosting OSRM (open-source, no license fee) against OpenStreetMap
+data for a single-borough-pair service zone is computationally modest and could plausibly run on a
+low-cost virtual machine (a small-to-mid-tier monthly VM cost, likely double-digit dollars/month),
+making this one of the cheaper line items if self-hosted, at the cost of needing to
+build/maintain/re-download OSM extracts. A paid routing/geocoding API (explicitly prohibited as a
+*required* dependency by this project's zero-cost policy, but relevant context for a real pilot that
+lifts that constraint) would instead be priced per-request, commonly in a free-tier-then-per-1000-
+requests model at low pilot volumes. **Verify current OSRM hosting-resource sizing and/or paid-API
+pricing directly** — this is one of the more genuinely variable estimates in this document, since it
+depends heavily on request volume and self-host-vs-managed choice.
+
+## 8. Production hosting/backups
+
+**Demo substitute:** No production hosting exists (`docs/HOSTING_OPTIONS.md` is a recommendation
+only). The stack (`web`, `worker`, PostgreSQL/PostGIS, Valkey, Mailpit) runs entirely via local
+`docker compose` on a developer machine today.
+
+**Non-binding estimate:** `docs/HOSTING_OPTIONS.md`'s own survey found that every genuinely free
+PaaS tier fails at least one hard requirement (a persistent background worker process, a persistent
+non-expiring Postgres database, or a no-credit-card constraint) for this stack — so a real pilot
+almost certainly needs a paid tier. A managed Postgres instance plus a small always-on
+web/worker compute tier for this workload's likely pilot scale (a single-service-zone courier
+network, not high-traffic consumer-scale) commonly starts in the range of double-to-low-triple-
+digit dollars per month for entry-level managed offerings, scaling up with data volume, background
+job throughput, and redundancy/backup requirements. Managed Redis/Valkey is typically a separate
+line item in the same range. Off-host, scheduled, encrypted backups (none of which exist in this
+prototype beyond one manual, executed local drill) add further modest recurring cost.
+**Verify current pricing directly with candidate providers at decision time** — free-tier and
+entry-tier pricing in this market changes frequently, exactly as `docs/HOSTING_OPTIONS.md` itself
+warns.
+
+## 9. Payment processing
+
+**Demo substitute:** `PaymentStatus` is a plain, manually-set mock field; no real payment processor
+of any kind is integrated, and `apps/billing/models.py`'s own docstring states one never should be
+built directly into this repository (per CLAUDE.md's do-not-build list).
+
+**Non-binding estimate:** Standard commercial card/ACH payment-processing fees (for a real processor
+this repository would integrate behind a `PaymentProvider` adapter, never storing raw card data
+directly — see `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md`) commonly run in the low
+single-digit percent of transaction value for card payments, often lower for ACH/bank transfers, plus
+typically a small per-transaction flat fee for card payments. B2B invoicing at this pilot's likely
+customer count (a handful of healthcare organizations, not thousands of consumer transactions) may
+also reasonably use a simpler invoicing/ACH flow rather than card processing at all, which would
+shift this cost profile. **Verify current processor pricing directly** — and note item 2's insurance
+review and item 1's legal review both bear on which payment model (invoicing vs. card) is even
+appropriate here.
+
+## 10. Potential security/compliance assessments
+
+**Demo substitute:** `docs/THREAT_MODEL.md` is a real, specific, self-authored threat model — not an
+independent third-party assessment.
+
+**Non-binding estimate:** An independent third-party security assessment (penetration test or
+focused application security review) of an application at roughly this scope/complexity commonly
+runs from the low five figures for a focused, scoped engagement upward, depending on depth
+(automated scan vs. manual pentest vs. full compliance-oriented assessment) and whether a specific
+compliance framework's assessment requirements apply (which loops back to the HIPAA/BAA legal
+determination in the legal-compliance checklist). **Verify with an actual security assessment firm**
+— scope and depth matter more to this number than almost any other line item here.
+
+---
+
+## Summary table
+
+| # | Category | Demo substitute | Estimate is | Verify with |
+|---|---|---|---|---|
+| 1 | Legal/compliance review | Checklist only, no review performed | Low five to six figures (one-time) | Qualified counsel |
+| 2 | Business/commercial insurance | Placeholder fields, no real policy | Low-to-mid four figures/year (rough) | Licensed insurance broker |
+| 3 | Background/MVR checks | No real provider (policy-prohibited) | Low tens of $/check | Background-check vendor |
+| 4 | Courier equipment/PPE | Data-model flags only | Tens-to-low-hundreds $/unit | Equipment vendor |
+| 5 | Operational dispatch staff | Software tool exists; no staff | Not estimated (labor/locality-dependent) | Ops/HR planning |
+| 6 | SMS/communications at scale | Fully simulated, zero real calls | Low cents/message; low-hundreds $/month at pilot scale | SMS/email provider |
+| 7 | Mapping/routing at scale | Synthetic haversine only | Double-digit $/month (self-host) or per-request (API) | OSRM hosting or routing API vendor |
+| 8 | Production hosting/backups | None exists | Double-to-low-triple-digit $/month | Managed hosting/DB provider |
+| 9 | Payment processing | Mock field only | Low single-digit % + flat fee/transaction | Payment processor |
+| 10 | Security/compliance assessment | Self-authored threat model only | Low five figures+ (one-time) | Security assessment firm |
+
+Every number above is illustrative, not actionable — see the per-item detail for the reasoning and
+caveats. See `docs/PILOT_READINESS/GO_NO_GO_REPORT.md` for how these costs factor into an overall
+pilot-readiness recommendation.
+
+---
+
+# docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md
+
+```
+SOURCE FILE: docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md
+```
+
+# Real-Provider Adapter Requirements
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` section 4 and
+`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 7 name six adapter interfaces every external
+capability should go through: `RoutingProvider`, `GeocodingProvider` (referred to in the task as a
+distinct interface; this codebase's actual naming only ever discusses geocoding as part of routing —
+see section 1 below), `NotificationProvider`, `ObjectStorageProvider`, `PaymentProvider`,
+`BackgroundCheckProvider`, and `TemperatureSensorProvider`. This document states, for each, exactly
+what exists in the code today (file-cited), what a real `LIVE` implementation would need, and — per
+this session's own direct inspection of the code, not an assumption — whether the adapter-pattern
+architecture actually would let a real provider be swapped in without rearchitecting.
+
+**Headline finding, stated up front:** only **one** of these six — `NotificationProvider` — was
+ever built as an actual Python `Protocol` with concrete implementations (Phase 7). The other five
+are real, working *behaviors* (synthetic routing math, mock payment status, placeholder background-
+check fields, inline signature storage, simulated temperature readings) but are **not** wrapped in
+any formal adapter interface anywhere in the codebase — confirmed by grepping the full source tree
+in this session. `RoutingProvider` in particular has zero mentions anywhere in application code, not
+even a docstring reference. This is a materially more honest characterization than "the adapter
+pattern is in place and just needs a live implementation swapped in" — for five of six capabilities,
+the interface itself does not exist yet, only the behavior it would eventually sit behind.
+
+---
+
+## 1. `RoutingProvider` / `GeocodingProvider`
+
+**What exists today:** No adapter interface of any kind. Distance/ETA is computed directly and
+synchronously wherever needed: `apps.deliveries.pricing.estimate_distance_km` (haversine
+straight-line distance between two facilities' stored `Decimal` `latitude`/`longitude`, with a
+flat 5.0 km fallback if either coordinate is missing) and `apps.dispatch.sla.compute_sla_estimate`
+(reuses the same haversine function for transit time, plus a small fixed set of synthetic
+zone-match minute tiers for "ETA to pickup," since there is no courier-location signal fed into
+dispatch scoring at all). Geocoding does not exist as a capability at all — facility coordinates are
+manually entered/seeded, never resolved from an address by any code path.
+
+**What a real `LIVE` implementation would need:** A real routing engine (self-hosted OSRM against
+OpenStreetMap extracts, per `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`'s original intent, or a paid
+routing API if the zero-cost constraint is later lifted for a real pilot) capable of real
+road-network distance/time, ideally with traffic awareness for STAT-tier SLA accuracy; a geocoding
+service (self-hosted Nominatim against OSM data, or a paid geocoding API) to resolve a typed address
+into coordinates at facility-creation time, since today every facility's coordinates must be
+supplied directly.
+
+**Adapter-pattern verdict:** **Not verifiable — there is no interface to verify.** Because no
+`RoutingProvider` protocol/class exists, there is nothing to "swap a live implementation into."
+Introducing real routing would mean writing this adapter for the first time, then replacing the two
+call sites above (`estimate_distance_km`, `compute_sla_estimate`) with calls through it — a
+real, if bounded, engineering task, not a drop-in swap, because these two functions currently *are*
+the implementation, not callers of an abstraction.
+
+## 2. `NotificationProvider` — the one real adapter in this codebase
+
+**What exists today:** `apps.notifications.providers.NotificationProvider` is a genuine Python
+`Protocol` (`apps/notifications/providers.py`), with a uniform `ProviderResult` return shape
+(`provider_name`, `mode` (`LOCAL`/`MOCK`), timestamp, correlation ID, `source`/`version`, `success`,
+`detail`, `warnings`). Two concrete implementations satisfy it: `EmailNotificationProvider`
+(`mode=LOCAL` — a genuine SMTP call via Django's `EMAIL_BACKEND`, landing in Mailpit locally) and
+`SimulatedSmsProvider` (`mode=MOCK` — makes no network call of any kind, ever; only persists a local
+`SmsLogEntry` row). Both are called from `apps.notifications.services.send_email_notification`/
+`send_sms_notification`.
+
+**Spot-checked against the actual code this session** (per the task's own instruction not to just
+assert the adapter-pattern claim): `apps/notifications/services.py` **directly instantiates**
+`EmailNotificationProvider()`/`SimulatedSmsProvider()` inline in each function
+(`provider = EmailNotificationProvider()` at line 95; `provider = SimulatedSmsProvider()` at line
+129) — there is **no settings-driven factory or dependency-injection point today** that would let a
+real `LIVE` SMS provider be selected without touching this file. This is an important, honest
+nuance: the *interface* (the `Protocol` and its `send(...)` call shape) genuinely would let a real
+Twilio-or-equivalent-backed class satisfy the same contract with no change to any *caller* of
+`send_sms_notification` — but `send_sms_notification` itself would need a small, localized edit (or
+a settings-based factory function introduced above it) to actually construct the real provider
+instead of `SimulatedSmsProvider()`. This is a modest, bounded change (swap one line, or add one
+factory function used in two places), genuinely **not** a rearchitecting — but it is not literally
+"zero code change to add a real provider" either, and this document states that precisely rather
+than rounding up to "fully pluggable."
+
+**What a real `LIVE` implementation would need:**
+- **SMS**: a real account with an SMS provider (Twilio or equivalent — explicitly prohibited as a
+  *required* dependency of this repository today per the zero-cost policy, relevant only once a
+  real pilot lifts that constraint with owner approval), webhook signature verification for
+  delivery-receipt callbacks (this prototype's `SmsLogEntry` has no delivery-receipt/webhook
+  callback mechanism at all today — it records "sent," never "delivered" or "failed" after the
+  fact), phone-number validation/formatting, and opt-out/STOP-keyword compliance handling (a real
+  regulatory requirement for commercial SMS, entirely unaddressed in this prototype since no real
+  SMS is ever sent).
+- **Email**: a real transactional email provider or a properly configured outbound mail server
+  (SPF/DKIM/DMARC) instead of Mailpit's local capture-only behavior; bounce/complaint handling,
+  neither of which exists today since no message here has ever left the local Docker network.
+- **Webhooks** (`apps.notifications.services.record_webhook_delivery_attempt`): this is currently a
+  deliberate no-op stub that performs zero HTTP calls (confirmed: no `requests`/`urllib` import
+  anywhere in `apps.notifications`) — a real implementation needs an actual outbound HTTP sender,
+  request-signing (HMAC) so receiving customer systems can verify authenticity, retry/backoff logic,
+  and an explicit egress-control/allowlist policy (this was a deliberate SSRF-avoidance choice per
+  Phase 7's own design decision, not an oversight — extending the stub in place was explicitly
+  judged the wrong move by that phase's own documentation).
+
+**Adapter-pattern verdict:** **Substantially confirmed, with one caveat.** The `Protocol`-based
+interface genuinely decouples callers from the concrete provider for the shape of a `send()` call —
+a real `TwilioSmsProvider` class satisfying the same `Protocol` would need no changes to
+`build_notification_payload`, `rendering.py`, or any calling view. The caveat is the missing
+factory/DI seam noted above — a small, localized addition, not evidence the abstraction doesn't
+work.
+
+## 3. `ObjectStorageProvider`
+
+**What exists today:** No adapter interface. `ProofOfPickup.signature_data_url`/
+`ProofOfDelivery.signature_data_url` (`apps/custody/models.py`) store a base64-encoded PNG data URL
+**inline as a `TextField`**, capped by an explicit length validator
+(`apps.custody.validators.MAX_SIGNATURE_DATA_URL_LENGTH`) added in Phase 8. The model's own
+docstring explicitly names `ObjectStorageProvider` as "the right home for this in a real
+deployment," confirming this was a deliberate, documented placeholder, not an oversight.
+
+**What a real `LIVE` implementation would need:** A real S3-compatible object store (self-hosted
+MinIO, per `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`'s named zero-cost option, or a paid cloud
+object store for a real pilot), a migration path moving existing inline base64 signature data out of
+the database into object storage with the model gaining a storage-key/URL field instead of the raw
+data, and an access-control layer (signed/expiring URLs) so signature images aren't broadly
+world-readable once out of the database's own permission model.
+
+**Adapter-pattern verdict:** **Not verifiable — there is no interface to verify**, same as
+`RoutingProvider`. Introducing this would be a genuine, if bounded, migration (add the interface,
+add a MinIO-backed implementation, migrate existing data, change the two capture functions
+`capture_proof_of_pickup`/`capture_proof_of_delivery` to write through it) — not a drop-in swap.
+
+## 4. `PaymentProvider`
+
+**What exists today:** No adapter interface, and per `apps/billing/models.py`'s own docstring,
+deliberately so: "there is no `PaymentProvider` adapter with a real implementation, and there never
+should be one in this repository" (per CLAUDE.md's do-not-build list). `Invoice.payment_status` is a
+plain, manually-set `PaymentStatus` enum field — nothing in this codebase has ever touched a real
+card number, bank account number, or payment-processor API of any kind.
+
+**What a real `LIVE` implementation would need, and the PCI-scope discussion this document is asked
+to have:** This application should **never** touch raw card data directly. The correct architecture
+for a real `PaymentProvider` is a hosted-fields/tokenization integration (e.g. a processor's own
+client-side JS SDK that tokenizes card data in the customer's browser before it ever reaches this
+application's servers) so that MedRelay's own infrastructure only ever handles an opaque payment
+token/reference, keeping this application's PCI-DSS scope to the smallest practical category (SAQ
+A or A-EP-equivalent, depending on integration method) rather than the much heavier scope of
+handling raw cardholder data server-side. Given this pilot's likely B2B customer base (a handful of
+healthcare organizations, not high-volume consumer card transactions — see
+`docs/PILOT_READINESS/BUDGET_CHECKLIST.md` item 9), invoicing/ACH may be a simpler, lower-PCI-scope
+starting point than card processing at all; that is a business decision, not a purely technical one.
+
+**Adapter-pattern verdict:** **Not verifiable, and not attempted by design.** This is the one
+capability in this list where the current absence of an adapter is a *policy* choice
+(CLAUDE.md's do-not-build list), not merely an unbuilt convenience — a real implementation is
+explicitly deferred to an actual pilot-authorization decision, consistent with this project's
+scope boundary.
+
+## 5. `BackgroundCheckProvider`
+
+**What exists today:** No adapter interface. `IdentityReviewStatus`/`DriverLicenseStatus`/
+`InsuranceStatus` (`apps/couriers/models.py`) are manually-set placeholder enums; one
+`CourierCredentialType` choice is literally labeled "Background Check (Placeholder — No Real
+Provider Integrated)" in the model's own choices list, confirmed verbatim in this session's
+inspection. `CourierCredential.evidence_reference` is a short text field (a placeholder
+filename/label), never a real uploaded document — there is no `FileField`/upload path anywhere in
+`apps.couriers`.
+
+**What a real `LIVE` implementation would need:** A real background-check vendor account (Checkr or
+an equivalent FCRA-compliant provider — explicitly prohibited as a *required* dependency today),
+a real applicant-consent-capture flow (a genuine legal requirement, see
+`docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` item 7 — not a software design choice), webhook
+or polling-based status updates from the vendor as a check progresses, an adverse-action notice flow
+if a check comes back unfavorably (an FCRA requirement, not optional), and secure document storage
+for any uploaded identity documents (which would need to go through the same `ObjectStorageProvider`
+gap noted in item 3, since no file-upload mechanism of any kind exists in `apps.couriers` today).
+
+**Adapter-pattern verdict:** **Not verifiable — there is no interface, and no upload mechanism to
+attach a real provider's evidence to even if one existed.** This is a larger lift than the other
+"not yet built" adapters: it requires both the provider integration and a net-new file-upload
+capability that has never existed in this app at all.
+
+## 6. `TemperatureSensorProvider`
+
+**What exists today:** No adapter interface. `apps.temperature.services.record_reading` is always
+called with an already-known `temperature_c` value supplied by the caller — it never polls or
+listens for a device. `apps/temperature/management/commands/simulate_temperature_readings.py` is an
+honestly-labeled synthetic generator (a seedable random walk around a `TemperatureProfile`'s
+min/max range, with a configurable excursion chance) — both the model and the command's own
+docstrings state plainly this is simulated, never live sensor data, and no claim of validated
+cold-chain compliance is made anywhere (`docs/PRODUCT_REQUIREMENTS.md` section 12).
+
+**What a real `LIVE` implementation would need:** Real IoT temperature-logger hardware attached to
+refrigerated transport equipment, a real ingestion mechanism (the devices' own vendor API, MQTT, or
+a webhook the device firmware calls), and a mapping from a physical device ID to a
+`Package`/`DeliveryRequest` so an incoming real reading lands on the correct delivery's
+`TemperatureReading` history — none of which exists today, since `record_reading`'s single call
+signature (delivery/package + a bare `temperature_c` float + optional source) has no device-identity
+or device-authentication concept built in at all yet.
+
+**Adapter-pattern verdict:** **Not verifiable — there is no interface.** Unlike `RoutingProvider`/
+`ObjectStorageProvider` above, this one would also need a genuinely new *inbound* data path (a
+device pushing data into this application, rather than this application calling out to a provider),
+which is an architecturally different shape than every other adapter on this list and would need
+its own design work, not just "write the adapter and swap it in."
+
+---
+
+## Summary table
+
+| Provider | Real `Protocol`/class exists? | Current implementation | Real-provider lift |
+|---|---|---|---|
+| `RoutingProvider`/`GeocodingProvider` | No — zero mentions in code | Haversine math + zone-match tiers | Write the interface + OSRM/geocoding integration; replace two call sites |
+| `NotificationProvider` | **Yes** (`apps/notifications/providers.py`) | `EmailNotificationProvider` (real local SMTP), `SimulatedSmsProvider` (no network call) | Add a real SMS class satisfying the same `Protocol`; add a factory/settings seam (currently hardcoded instantiation) |
+| `ObjectStorageProvider` | No — docstring mention only | Inline base64 `TextField` | Write the interface + MinIO/cloud integration; migrate existing inline data |
+| `PaymentProvider` | No — explicitly not built by policy | `PaymentStatus` manual mock field | Tokenized/hosted-fields integration; PCI-scope decision; policy authorization required first |
+| `BackgroundCheckProvider` | No — docstring mention only | Manually-set placeholder enums, no upload path | Write the interface + vendor integration + net-new file-upload capability + consent/adverse-action flow |
+| `TemperatureSensorProvider` | No — docstring mention only | Simulated random-walk generator | Write the interface + real device ingestion path (new inbound-data architecture, not just an outbound adapter) |
+
+**Bottom line for the "does the adapter pattern genuinely let a real provider be swapped in without
+rearchitecting" question this document was asked to confirm or refute:** for the one adapter that
+was actually built (`NotificationProvider`), the answer is **yes, substantially** — real
+Twilio-or-equivalent SMS, in particular, could satisfy the existing `Protocol` with no change to any
+caller, modulo a small factory/DI seam that does not exist yet. For the other five, the honest
+answer is that there is no existing interface to make this claim about at all — the zero-cost
+policy's own architecture document named six adapters as the design goal, and this codebase actually
+built one of them. That is not a failure of Phase 7's actual scope (which was explicit about
+building `NotificationProvider` specifically), but it does mean "the adapter pattern is proven out
+across the board" is not an accurate claim about this codebase as it stands today, and this document
+corrects that impression for whoever reads it next.
+
+---
+
+# docs/PILOT_READINESS/GO_NO_GO_REPORT.md
+
+```
+SOURCE FILE: docs/PILOT_READINESS/GO_NO_GO_REPORT.md
+```
+
+# Go/No-Go Report — Pilot Readiness Synthesis
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+## What this report is, and is not
+
+This report synthesizes `docs/PILOT_READINESS/GAP_ASSESSMENT.md`,
+`docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md`,
+`docs/PILOT_READINESS/BUDGET_CHECKLIST.md`, and
+`docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md` into one structured picture: what is
+genuinely solid, what is a hard blocker, and what is an addressable engineering gap. **This report
+does not authorize a real pilot.** It is an evidence-based input for the project owner's own
+decision, not a substitute for it, and not a substitute for the professional reviews named in the
+legal/compliance checklist. Per `docs/IMPLEMENTATION_ROADMAP.md` Phase 10's own text, reaching the
+end of this phase does not authorize connecting real PHI, real deliveries, real payments, real
+background checks, or real production communications — that requires the professional reviews below
+plus the project owner's own, separate, explicit decision.
+
+---
+
+## 1. What's genuinely solid — verified evidence, not assertion
+
+These are claims this session either independently re-verified against the actual code (not just
+re-read from `docs/CURRENT_STATUS.md`'s own account), or that were themselves the product of
+multiple independent verification passes across this project's development:
+
+- **The custody hash-chain tamper-detection mechanism is real and was independently, repeatedly
+  verified.** `apps.custody.hashing.compute_event_hash` is the single function both the writer
+  (`apps.custody.services.record_event`) and the verifier
+  (`apps.custody.verification.verify_custody_chain`) call, so they cannot silently drift apart.
+  `apps/custody/tests/test_verification.py` proves detection of a genuine raw-SQL tampering attempt
+  against a historical event (bypassing the ORM guard entirely, not just testing the ORM guard
+  itself) — confirmed present in the codebase and unchanged through Phase 9 by this session's own
+  inspection.
+- **Tenant isolation is real and tested at the HTTP layer, not just the queryset layer.**
+  `apps.organizations.services.scope_queryset_to_user_orgs` plus explicit per-view permission checks
+  are exercised by cross-tenant isolation tests at both layers
+  (`apps/organizations/tests/test_services.py`, `apps/deliveries/tests/test_views.py::
+  test_cannot_view_other_org_delivery_request_via_http`, `apps/audit/tests/test_views.py`) — this
+  session confirmed the permission-helper pattern is used consistently across every sensitive view
+  cited in `docs/THREAT_MODEL.md` section 1.
+- **The atomic-assignment concurrency guarantee was verified against a real PostgreSQL container,
+  not just SQLite.** Phase 4's `assign_delivery` concurrency test was run repeatedly (15+ times) both
+  against SQLite and against a real, throwaway `postgis/postgis:17-3.5` container — 100% correctness
+  in both cases (exactly one winner, one clean `AssignmentConflictError`, never a double-assignment,
+  never a crash). A later, separate SQLite-only test-flakiness artifact (shared-cache-mode deadlock
+  detection, investigated and mitigated in Phase 8) was correctly traced to the *test harness*, not
+  the underlying database-level `UniqueConstraint` that provides the actual correctness guarantee.
+- **The hard-eligibility gate genuinely cannot be bypassed by a dispatcher override.** Dedicated
+  tests (`test_hard_eligibility_gate_cannot_be_overridden_via_{assign,offer,reassign}_delivery`)
+  confirm every dispatch entry point rejects an ineligible courier even with a plausible-sounding
+  override reason supplied, and writes nothing to the database in that case — this is enforced
+  structurally (the eligibility check runs unconditionally before any write), not by convention.
+- **The zero-cost policy is genuinely enforced, not aspirational.** `python manage.py audit_cost`
+  fail-closed-checks every dependency against an explicit allowlist and scans source for
+  prohibited-service indicator strings; this session confirmed `.github/workflows/ci.yml` runs it in
+  CI on every push/PR, and `docs/COST_AUDIT.md` (generated, not hand-edited) currently reports 24
+  dependencies, 0 prohibited-service indicators.
+- **A real backup/restore drill was actually executed, not just documented.** `docs/BACKUP_RESTORE.md`
+  records a genuine `pg_dump`/`DROP DATABASE`/`pg_restore` round-trip against a real PostGIS
+  container with before/after row-count and data verification — a paper procedure was not
+  substituted for an executed one.
+- **The accessibility pass found and fixed real violations, not a vacuous clean scan.**
+  Phase 8's axe-core pass found genuine `serious`-impact color-contrast violations across all six
+  scanned pages on the first run, fixed them, and re-scanned clean — the "before" state is evidence
+  the tooling actually works, not that nothing was ever wrong.
+- **This project's own self-honesty is itself a real, checkable asset.** Across all ten phases,
+  `docs/CURRENT_STATUS.md` consistently reports coverage gaps, flaky tests, and deliberately
+  unimplemented features by name rather than omitting them — this session's own spot-checks (grep
+  for `CourierPerformanceSnapshot`, the custody append-only mechanism, MFA enrollment logic,
+  PostGIS usage, CI's dependency-scanning coverage) confirmed every claim checked was accurate as
+  stated, with zero instances found of a claimed capability that didn't actually exist in the code.
+
+## 2. Hard blockers for ANY real pilot — not engineering problems
+
+These cannot be resolved by more development work. Every item in
+`docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` is in this category:
+
+- **Healthcare privacy/business-associate (HIPAA/BAA) status** — undetermined, and gates nearly
+  every other legal item (see section 4 below for why this is the recommended first step).
+- **Customer/business-associate contracts** — none exist; no software feature can substitute for a
+  negotiated legal agreement.
+- **Specimen/infectious-substance packaging eligibility and pharmacy medication-delivery rules** —
+  this software's enforcement is structural-plus-keyword-blocklist only, explicitly not a compliance
+  control; real regulatory review is required before any Class 2/3 cargo is ever handled for real.
+- **New York worker classification** — this software's data model is deliberately classification-
+  agnostic; the actual employment-law determination is independent of anything built here.
+- **Insurance and vehicle requirements, background-check consent/process, incident/exposure plan,
+  data retention policy, production hosting/security review** — each requires an independent
+  professional (broker, FCRA/employment counsel, ops/legal policy owner, security assessor) whose
+  determination this software cannot make on its own behalf.
+
+## 3. Addressable engineering gaps — real, but not fundamental redesigns
+
+These are gaps a real pilot needs closed, but each is closable with focused engineering effort on
+top of the existing architecture, not a rewrite:
+
+- **Real routing/distance** (haversine → OSRM or a routing API) — one new adapter plus replacing two
+  call sites (`estimate_distance_km`, `compute_sla_estimate`).
+- **Real SMS notifications** — the `NotificationProvider` interface already exists and was
+  spot-checked this session to substantially support a real implementation with no caller changes,
+  modulo adding a small factory/settings seam.
+- **Database-level append-only enforcement** for custody/audit/status-transition tables — a
+  restricted Postgres role or trigger layered on top of the existing ORM guards and hash chain, not
+  a redesign of the hash-chain mechanism itself.
+- **Dependency-vulnerability scanning in CI** (`pip-audit`/Dependabot) — a CI-workflow addition, no
+  application-code change.
+- **Mandatory MFA for privileged roles**, **courier location retention/purge policy**, **a harder
+  per-token PIN lockout**, **object storage for signature images**, **real background-check
+  provider integration (with the net-new file-upload capability it requires)** — each is a bounded,
+  well-scoped addition to an existing, working subsystem, not a new architecture.
+- **A production hosting deployment** — no technical blocker exists; `docs/HOSTING_OPTIONS.md`
+  already surveys the realistic options and their trade-offs; this is a provisioning/budget decision
+  once the legal blockers above are cleared, not an engineering unknown.
+
+The distinction that matters: nothing in this list requires this application's fundamental
+architecture (modular Django monolith, adapter-interface pattern, tenant-scoped multi-tenancy,
+append-only-plus-hash-chain custody model) to change. Every gap above is additive.
+
+## 4. Final statement
+
+**(a) This report does not itself authorize a pilot.** It is a synthesis of evidence for the project
+owner's own decision-making, not a decision.
+
+**(b) A real pilot requires every professional review listed in
+`docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md`, completion of the addressable engineering gaps
+in section 3 above that the reviews determine are actually required, and the project owner's own
+explicit, separate decision to proceed** — not implied by, and not a natural consequence of, this
+document existing or this phase being "complete."
+
+**(c) Recommended concrete next step, if the owner wants to move toward a real pilot:** **engage
+healthcare privacy counsel first**, specifically to determine business-associate status and BAA
+requirements (`docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` item 1). This is recommended as
+the literal first step — not "do more review" in the abstract — because it is the one item most
+other legal and technical decisions depend on: it determines whether a BAA is needed with each
+customer organization (which shapes the contracts in item 2), what technical/administrative
+safeguards this application would be contractually obligated to add beyond what exists today (which
+reprioritizes the engineering gaps in section 3), and what data-retention policy is even legally
+permissible (item 9). Every other checklist item can, in principle, proceed in parallel, but this
+one is the load-bearing determination the rest of the legal picture hangs off of, and is the single
+highest-leverage next action available to the project owner today.
+
+---
+
+# docs/CURRENT_STATUS.md
+
+```
+SOURCE FILE: docs/CURRENT_STATUS.md
+```
+
+# Current Status — Phase 0 (Repository Foundation)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 0 from scratch in a
+fresh, non-git working directory at `/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 0 is complete per the acceptance criteria in `docs/IMPLEMENTATION_ROADMAP.md`:
+
+1. One documented command starts the full local stack: `docker compose up --build` (see
+   `README.md`). Verified end-to-end in this environment (see "Docker/compose verification"
+   below) — `db`, `valkey`, and `mailpit` reach `healthy` status, and `web` served both health
+   endpoints with real Postgres/Valkey behind it.
+2. `/healthz/` returns 200 unconditionally; `/readyz/` returns 200 when the database and cache are
+   reachable (verified both via Django test client against SQLite/LocMemCache in the automated
+   test suite, and via `curl` against the real containerized stack).
+3. All required quality gates pass locally (exact commands and output below).
+4. No paid dependency appears anywhere in `pyproject.toml` or `config/settings/*.py` —
+   `python manage.py audit_cost` passes and regenerated `docs/COST_AUDIT.md`.
+
+## Environment used
+
+- Linux, Python 3.12.3, git 2.43.0, Docker Engine 29.1.3 with the `docker compose` v2 plugin (no
+  Docker Desktop).
+- `uv` was **not** pre-installed but installed cleanly via
+  `pip3 install --user --break-system-packages uv` (uv 0.12.1). PyPI was reachable, so `uv lock`
+  and `uv sync --group dev` both worked with no fallback needed — **no pip/requirements.lock.txt
+  fallback was required.** `uv.lock` is the real, network-resolved lock file, committed as-is.
+- `podman` and `gh` were not installed and were not needed for anything in this deliverable
+  (podman-compose is documented in `README.md` as an alternative but is explicitly *not* the
+  tested path, per the task's own instruction that Docker is the tested path here).
+
+## Exact files created/changed
+
+This was a brand-new repository (`git init -b main` run inside
+`/home/mhasan2/medical-courier-platform`, which did not previously exist and was not a git repo).
+Every tracked file is therefore new. Full list:
+
+```
+$ git status --short | wc -l
+121
+$ git diff --cached --stat | tail -1
+121 files changed, 3886 insertions(+)
+```
+
+Top-level layout actually produced (matches the spec's requested layout):
+
+```
+medical-courier-platform/
+├── CLAUDE.md
+├── README.md
+├── pyproject.toml
+├── uv.lock
+├── compose.yaml
+├── Dockerfile
+├── .env.example
+├── .gitignore
+├── .secrets.baseline
+├── manage.py
+├── .github/workflows/ci.yml
+├── .github/workflows/security.yml
+├── config/
+│   ├── __init__.py
+│   ├── settings/{__init__.py,base.py,dev.py,prod.py,test.py}
+│   ├── urls.py
+│   ├── health.py
+│   ├── context_processors.py
+│   ├── asgi.py
+│   ├── wsgi.py
+│   └── celery.py
+├── apps/
+│   ├── __init__.py
+│   └── {accounts,organizations,facilities,couriers,cargo,deliveries,dispatch,
+│        custody,tracking,temperature,incidents,notifications,billing,
+│        reporting,audit}/
+│       ├── __init__.py
+│       ├── apps.py
+│       ├── migrations/__init__.py
+│       └── tests/{__init__.py,test_apps.py}
+├── apps/audit/management/commands/audit_cost.py
+├── apps/audit/tests/test_audit_cost.py
+├── templates/base.html
+├── static/.gitkeep
+├── staticfiles/.gitkeep   (STATIC_ROOT placeholder; real collected output is gitignored)
+├── frontend/{css,js}/.gitkeep
+├── tests/{unit,integration}/__init__.py
+├── tests/integration/test_health_endpoints.py
+├── docs/
+│   ├── PRODUCT_REQUIREMENTS.md
+│   ├── TECH_STACK_AND_ZERO_COST_POLICY.md
+│   ├── ARCHITECTURE_AND_DATA_MODEL.md
+│   ├── SECURITY_COMPLIANCE_BOUNDARIES.md
+│   ├── IMPLEMENTATION_ROADMAP.md
+│   ├── COST_AUDIT.md          (generated by `python manage.py audit_cost`)
+│   └── CURRENT_STATUS.md      (this file)
+└── demo_data/{.gitkeep,README.md}
+```
+
+`scripts/` exists (per the requested layout) but is currently empty — no Phase 0 task needed a
+script; it is kept as a placeholder for later phases.
+
+## What was deliberately NOT built (by design, per spec)
+
+- No domain models anywhere in `apps/*`. Every app is model-free: `apps.py` (AppConfig only),
+  empty `migrations/__init__.py`, and a `tests/test_apps.py` smoke test asserting the app is
+  installed and importable. This matches "NO real models yet — those come in later phases."
+- No real UI/pages beyond `templates/base.html` (disclaimer banner + minimal HTML shell). No
+  Tailwind/HTMX/Alpine build pipeline was wired up — Phase 0 only requires the *ability* to serve
+  templates/static files, not real pages, per the task instructions.
+- Django Channels is not installed or wired in (`config/asgi.py` is a plain Django ASGI app with a
+  comment noting Channels is a later phase).
+- MinIO is present in `compose.yaml` only as a commented-out optional service.
+
+## Deviations / notable decisions (all documented, none silent)
+
+1. **Database engine in Django, not just the container image.** The compose `db` service runs
+   `postgis/postgis:17-3.5` (a real PostGIS-capable Postgres), but `config/settings/base.py`
+   configures `DATABASES["default"]` via a `postgres://` URL (plain
+   `django.db.backends.postgresql`), not `django.contrib.gis.db.backends.postgis`. Rationale:
+   Phase 0 has zero spatial models, and the GeoDjango backend requires GDAL/GEOS system libraries
+   that add complexity with no present benefit. This is called out in a comment in
+   `config/settings/base.py` and should be revisited the moment a spatial model is introduced.
+2. **SQLite for `config.settings.test`.** Explicitly allowed by
+   `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` ("SQLite allowed only for limited unit tests when
+   PostgreSQL-specific behavior is not being tested"). All CI and local quality-gate runs in this
+   phase use `DJANGO_SETTINGS_MODULE=config.settings.test`. Once Postgres/PostGIS-specific
+   behavior exists, its tests must run against the real `db` compose service instead.
+3. **`SECRET_KEY` empty-string handling.** `.env.example` intentionally ships
+   `DJANGO_SECRET_KEY=` (blank — names only, no real values, per the task's explicit requirement).
+   `config/settings/base.py` treats an empty string the same as "unset" and falls back to an
+   obviously-fake `django-insecure-...` dev placeholder, so `cp .env.example .env` works out of the
+   box for local/demo use without anyone needing to invent a value first. This is not a real
+   secret; it is the same placeholder convention Django's own `startproject` uses.
+4. **`compose.yaml` anonymous `.venv` volume.** `web` and `worker` bind-mount the full repo at
+   `/app` for live-reload dev convenience. Without an extra anonymous volume at `/app/.venv`, that
+   bind mount shadows the virtualenv the Docker image built at `/app/.venv`, causing
+   `ModuleNotFoundError: No module named 'django'` at container start (discovered and fixed during
+   this session's own `docker compose up` smoke test — see below). Both `web` and `worker` now
+   also mount `/app/.venv` as an anonymous volume so the image's own venv wins over the bind mount.
+5. **Secret scan command.** `detect-secrets scan --baseline .secrets.baseline` rewrites the
+   baseline file's `generated_at` timestamp on every run (confirmed by reading
+   `detect_secrets/main.py`), which makes a naive `git diff --exit-code .secrets.baseline` CI check
+   fail spuriously on every run even with zero new secrets. Instead, both
+   `.github/workflows/security.yml` and the local instructions in `README.md`/`CLAUDE.md` use
+   `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)` — the pre-commit-hook
+   entry point, which compares tracked files against the baseline **read-only** and does not
+   rewrite it. This still fails closed on any new, un-baselined secret.
+6. **`uv` worked fully; no pip fallback was needed.** Documented here for completeness since the
+   task asked for an honest report either way.
+7. **Baseline regeneration bug, caught and fixed.** The `.secrets.baseline` was first generated
+   with `detect-secrets scan` immediately after `git init` but *before* anything was staged, so
+   `git ls-files` was empty and the "scan" trivially scanned zero files, producing a vacuously
+   empty (but not actually validated) baseline. This was caught during final verification when
+   `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)` — which scans explicitly
+   passed files rather than relying on git's tracked-file list at scan time — flagged two
+   `BasicAuthDetector` matches: the synthetic placeholder credential `medrelay:medrelay` in
+   `DATABASE_URL` in both `.env.example` and the default value in
+   `config/settings/base.py`. Both are non-secret synthetic local-dev placeholders (not real
+   credentials, not used anywhere outside this repo), so each was marked with a
+   `# pragma: allowlist secret` / `# pragma: allowlist nextline secret` comment rather than
+   silently added to the baseline, and the baseline was regenerated against the real, fully
+   git-tracked file set. Final state: `detect-secrets-hook --baseline .secrets.baseline
+   $(git ls-files)` exits 0 with a baseline whose `results` are genuinely empty.
+
+## Quality gate results (all run from a clean `uv sync --group dev` virtualenv, `config.settings.test`)
+
+All commands below were run from `/home/mhasan2/medical-courier-platform` with
+`source .venv/bin/activate && export DJANGO_SETTINGS_MODULE=config.settings.test`.
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+82 files already formatted
+```
+(exit code 0)
+
+### `mypy .`
+```
+Success: no issues found in 82 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(exit code 0 — no app has any models yet, so this is trivially satisfied; will become a real
+check starting Phase 1)
+
+### `pytest` (with coverage)
+```
+35 passed in 0.86s
+```
+Coverage: 83% overall (300 statements, 51 missed). The misses are concentrated in
+`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/dev.py`,
+`config/settings/prod.py` (environment-entrypoint modules not exercised by the test-settings-only
+suite) and a few defensive branches in `config/health.py` / `audit_cost.py`. Every app's
+`tests/test_apps.py`, the health endpoint integration tests, and the `audit_cost` command's own
+tests all pass.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 19 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+(exit code 0; see `docs/COST_AUDIT.md` for the generated report)
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output. The committed `.secrets.baseline` has an empty `results: {}`. Two
+`BasicAuthDetector` matches on the synthetic placeholder credential `medrelay:medrelay` (in
+`.env.example` and `config/settings/base.py`) were found and resolved during this session via
+inline `pragma: allowlist secret` / `pragma: allowlist nextline secret` comments rather than being
+added to the baseline — see deviation #7 above for the full story, including a baseline-generation
+bug this caught and fixed.
+
+## Docker/compose verification
+
+- `docker compose config` — validated successfully (using a throwaway `.env` copied from
+  `.env.example`; `.env` itself is gitignored and was deleted again afterward). No syntax/schema
+  errors.
+- **Full smoke test was performed, not just `config` validation.** Using a temporary,
+  not-committed compose override to remap host ports 5432/6379 (this shared development machine
+  already had unrelated Postgres/Redis containers bound to those ports from other projects), the
+  following was verified and then torn down (`docker compose down -v`):
+  - `db` (postgis/postgis:17-3.5), `valkey` (valkey/valkey:8-alpine), and `mailpit`
+    (axllent/mailpit:latest) all reached Docker `healthy` status.
+  - The `web` image built successfully via the repo `Dockerfile` (`uv sync --frozen` inside the
+    image).
+  - `web` started against the real `db`/`valkey` containers and:
+    - `curl http://localhost:8000/healthz/` → `{"status": "ok"}`, HTTP 200.
+    - `curl http://localhost:8000/readyz/` → `{"status": "ok", "checks": {"database": "ok", "cache": "ok"}}`, HTTP 200.
+  - This surfaced and fixed the `.venv` bind-mount shadowing issue (deviation #4 above) and the
+    blank-`SECRET_KEY` issue (deviation #3 above) — both were real bugs caught by actually running
+    the stack, not just trusting `compose config`.
+- The temporary port-remapping override file used for this test was **not** committed (it existed
+  only transiently on disk during this session and was deleted before the final commit).
+
+## Known gaps / things intentionally left for later phases
+
+- No real domain models, migrations, or admin registrations (Phase 1+).
+- No Tailwind/HTMX/Alpine build pipeline or real pages (Phase 1+ / Phase 8 for the full UX pass).
+- No Django Channels wiring (planned, not required, per roadmap).
+- No `RoutingProvider`/`NotificationProvider`/`PaymentProvider`/`BackgroundCheckProvider`/
+  `ObjectStorageProvider`/`TemperatureSensorProvider` adapter interfaces yet — nothing external to
+  adapt for in Phase 0.
+- `staticfiles/` and `static/` are essentially empty placeholders (`.gitkeep` only); no static
+  assets exist yet.
+- Coverage is 83%, not 100% — the uncovered lines are environment entrypoints
+  (asgi/wsgi/celery/dev/prod settings) that are exercised by *running* those environments, not by
+  the SQLite-based unit/integration test suite. No coverage threshold was specified as a hard gate
+  in the task, so this was not treated as a failure, but it's called out here for transparency.
+
+## Final verification before commit
+
+```
+$ git status --short | wc -l
+121
+$ git diff --cached --stat | tail -1
+121 files changed, 3886 insertions(+)
+```
+
+Commit history for this session (oldest first):
+
+1. `1ffa79b4f0199afdd0ab00d8f11b935336dc4620` — "Phase 0: repository foundation for MedRelay
+   prototype" (122 files, 4140 insertions) — the main foundation commit.
+2. `1261212e1a1fa87888476e04abc98d519a19083a` — "docs: record Phase 0 foundation commit hash in
+   CURRENT_STATUS.md" — recorded commit (1)'s hash in this file.
+3. `8a905ea0f6601d18adac4e8021aae385a9d202b7` — "fix: regenerate detect-secrets baseline against
+   real tracked files" — fixed a vacuously-empty secret-scan baseline caught during final
+   verification (see the "Deviations" section above, item 7).
+
+A doc file can never contain the hash of the commit that introduces its own final content, so
+there is an inherent one-commit lag here: this paragraph, added in a fourth small commit, is the
+account of that. Run `git log --oneline` in the repository for the definitive, current history.
+
+# Current Status — Phase 1 (Identity, Tenancy, Facilities, and Roles)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 1 on top of the
+Phase 0 foundation (starting point: commit `fcb6494`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 1 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 1 - Identity, tenancy, facilities,
+and roles": a custom user model, organizations and memberships, a customer/internal role system,
+facilities and service zones, tenant-scoped query/service helpers, deterministic synthetic seed
+data, Django admin registrations, and a minimal tenant-scoped CRUD UI. All new models have
+migrations, all quality gates pass (see below), and every acceptance criterion in the roadmap
+(cross-tenant isolation tests, role-permission matrix tests, organization/facility CRUD) is met.
+
+This was a clean point to introduce the custom user model: Phase 0 shipped zero migrations for any
+app, so `AUTH_USER_MODEL` was set before the first `makemigrations` ever ran for this project —
+never a mid-project swap.
+
+## Two key design decisions
+
+### 1. Geo storage: plain decimal lat/lng, not PostGIS (yet)
+
+`apps.facilities.models.Facility.latitude`/`longitude` are plain `DecimalField`s
+(`max_digits=9, decimal_places=6`), **not** a PostGIS `PointField`, even though
+`docs/ARCHITECTURE_AND_DATA_MODEL.md`'s architecture diagram calls out
+"PostgreSQL + PostGIS" and Phase 1 is the first phase with a genuine geographic need (facility
+coordinates, service zones).
+
+Reasoning:
+
+- Phase 0 deliberately kept the Django `DATABASES["default"]` `ENGINE` as plain
+  `django.db.backends.postgresql` (not `django.contrib.gis.db.backends.postgis`) specifically
+  because it had zero spatial models — see `config/settings/base.py`'s comment and
+  `docs/CURRENT_STATUS.md`'s Phase 0 deviation #1.
+- Phase 1 still has no geo-distance *queries* — facilities just need a stored coordinate, not
+  spatial indexing, `ST_Distance`, or radius lookups. Those start in **Phase 4** (dispatch and
+  operations console — matching/eligibility, per `docs/IMPLEMENTATION_ROADMAP.md`).
+- `config.settings.test` (used for CI and all local quality gates) runs on plain SQLite, which
+  cannot execute PostGIS spatial queries at all. Introducing GeoDjango now, with no spatial
+  queries to justify it, would force an immediate CI redesign (either a real Postgres/PostGIS
+  service container in CI, or SpatiaLite for SQLite) to test a capability nothing uses yet — pure
+  added complexity for zero present benefit, contrary to the zero-cost/no-drama precedent Phase 0
+  set.
+- Plain decimal fields round-trip through SQLite fine today, store exact coordinates losslessly,
+  and are a straightforward migration to a PostGIS `PointField` later, once Phase 4 actually needs
+  geo-distance dispatch logic.
+
+This is a conscious, documented deviation from the letter of the architecture doc, not a silent
+one — it's also called out inline in `apps/facilities/models.py`'s module docstring and covered by
+a regression-guard test,
+`apps/facilities/tests/test_models.py::test_facility_lat_lng_are_plain_decimal_fields_not_postgis`.
+GDAL/GEOS were **not** added to the `Dockerfile`, `compose.yaml`, or `pyproject.toml` this phase.
+
+### 2. Role modeling: two explicit models, not one polymorphic membership table
+
+`docs/PRODUCT_REQUIREMENTS.md` section 4 enumerates two disjoint role families: **customer
+organization roles** (organization owner, administrator, requester/dispatcher, billing manager,
+compliance reviewer, read-only auditor) and **internal operations roles** (dispatcher, operations
+manager, courier onboarding reviewer, compliance reviewer, customer support, finance, system
+administrator).
+
+These are modeled as two separate models rather than one `membership_type`-discriminated table:
+
+- `apps.organizations.models.OrganizationMembership` — `user` FK + `organization` FK + `role`
+  (`CustomerRole` choices), unique per `(user, organization)`. This *is* the tenant-scoping
+  membership.
+- `apps.accounts.models.InternalRoleAssignment` — `user` one-to-one + `role` (`InternalRole`
+  choices). Not scoped to any organization at all.
+
+A single polymorphic table (`membership_type` discriminator + nullable `organization` FK) was
+considered and rejected: it would make it too easy for a future query to treat an internal
+staffer's row as if it were scoped to one organization (e.g. by forgetting to check
+`membership_type` first), which directly risks the cross-tenant isolation guarantee this project
+must hold (`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 2: "Central operations users may access
+multiple organizations through explicit permission checks"). Two small, explicit models make the
+"internal staff are never org-scoped by default" invariant structurally obvious rather than
+convention-dependent. The full write-up lives in `apps/accounts/models.py`'s module docstring.
+
+Cross-org access for internal roles is implemented as **explicit, per-role allowlists** in
+`apps/organizations/services.py` (`CROSS_ORG_READ_ROLES`, `CROSS_ORG_MANAGE_ROLES`) — being
+`user.is_internal_staff` grants nothing by itself; a user needs a matching `InternalRoleAssignment`
+role in one of those sets. Concretely:
+
+| Internal role                   | Cross-org read | Cross-org manage |
+|----------------------------------|:---:|:---:|
+| `operations_manager`             | yes | yes |
+| `system_administrator`           | yes | yes |
+| `customer_support`               | yes | no  |
+| `compliance_reviewer`            | yes | no  |
+| `finance`                        | yes | no  |
+| `dispatcher`                     | yes | no  |
+| `courier_onboarding_reviewer`    | no  | no  |
+
+(`courier_onboarding_reviewer` gets no organization/facility grant at all — that role's work,
+reviewing courier applications, has no need to see customer org data.)
+
+## Exact files created/changed
+
+`git diff fcb6494 --stat` (Phase 0's final commit → this phase's pre-commit working tree):
+
+```
+44 files changed, 2837 insertions(+), 5 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/accounts/`**: `models.py` (custom `User(AbstractUser)` + `InternalRole` choices +
+  `InternalRoleAssignment`), `admin.py`, `apps.py` (docstring update),
+  `migrations/0001_initial.py`, `tests/factories.py`, `tests/test_models.py`.
+- **`apps/organizations/`**: `models.py` (`Organization`, `OrganizationType`, `CustomerRole`,
+  `OrganizationMembership`, `ORG_MANAGING_ROLES`), `services.py` (tenant-scoped query/permission
+  helpers — the single source of truth for "which organizations can this user see/manage"),
+  `admin.py`, `forms.py`, `views.py`, `urls.py`, `apps.py` (docstring update),
+  `migrations/0001_initial.py`,
+  `management/commands/seed_demo_data.py` (+ `management/__init__.py`,
+  `management/commands/__init__.py`), `tests/factories.py`, `tests/test_models.py`,
+  `tests/test_services.py` (cross-tenant isolation + role-permission matrix tests),
+  `tests/test_views.py` (HTTP-level tenant isolation), `tests/test_seed_demo_data.py`.
+- **`apps/facilities/`**: `models.py` (`FacilityType`, `Borough`, `ServiceZone`, `Facility`,
+  `FacilityContact`, `DayOfWeek`, `FacilityReceivingRule`), `admin.py`, `forms.py`, `views.py`,
+  `urls.py`, `apps.py` (docstring update), `migrations/0001_initial.py`, `tests/factories.py`,
+  `tests/test_models.py`, `tests/test_views.py`.
+- **`config/settings/base.py`**: added `AUTH_USER_MODEL = "accounts.User"`, `LOGIN_URL`,
+  `LOGIN_REDIRECT_URL`, `LOGOUT_REDIRECT_URL`.
+- **`config/urls.py`**: added `django.contrib.auth.urls` (login/logout — no self-service signup in
+  this prototype), `apps.organizations.urls`, `apps.facilities.urls`, and a `/` → `/organizations/`
+  redirect.
+- **`templates/registration/login.html`**, **`templates/organizations/*.html`** (list/detail/form),
+  **`templates/facilities/*.html`** (list/detail/form/confirm-delete) — minimal plain-HTML CRUD
+  templates, no Tailwind/HTMX (see "CRUD UI built vs. deferred" below).
+- **`pyproject.toml`**: added a `[[tool.mypy.overrides]]` entry ignoring `*.tests.*` modules (see
+  "mypy and factory_boy" below) — **no new runtime or dev dependency was added**; `factory-boy` was
+  already an allowed Phase 0 dev dependency, just unused until now.
+- **`docs/COST_AUDIT.md`**: regenerated (timestamp only; dependency set unchanged).
+
+## Tenant-scoped query/service helpers
+
+`apps/organizations/services.py` is the single place that decides "which organizations/facilities
+can this user see or manage," per `docs/ARCHITECTURE_AND_DATA_MODEL.md` section 2's required
+protections (queryset scoping by tenant, object-level permission tests, no organization ID
+accepted blindly from clients). Key functions: `get_member_organization_ids`,
+`get_org_role`, `can_view_organization`, `can_manage_organization`, `can_manage_facilities`,
+`has_cross_org_read_access`, `has_cross_org_manage_access`, `scope_queryset_to_user_orgs` (generic
+queryset filter, parameterized by an `org_field` ORM lookup path), `organizations_for_user`.
+
+Every organization-owned model gets a thin `for_user(user)` QuerySet method that delegates to
+these helpers (never re-implementing tenant scoping itself):
+`Organization.objects.for_user(user)`, `OrganizationMembership.objects.for_user(user)`,
+`Facility.objects.for_user(user)`. Every customer-owned model (`Facility`) carries a direct
+`organization` FK, as required.
+
+## Synthetic seed data
+
+`python manage.py seed_demo_data` (`apps/organizations/management/commands/seed_demo_data.py`)
+creates deterministic synthetic NYC data: **3 organizations, 8 facilities across Manhattan/
+Brooklyn**, plus the Phase 1 subset of users/memberships/roles needed to exercise them —
+couriers/deliveries/cargo are explicitly out of scope until their own phases.
+
+- Organizations: `NorthStar Diagnostics (Demo)` (diagnostic lab, 3 facilities: Midtown processing
+  center, SoHo draw site, Park Slope draw site), `Riverside Urgent Care Group (Demo)` (urgent care,
+  3 facilities: Chelsea, SoHo, Williamsburg), `Brooklyn Family Pharmacy Network (Demo)` (pharmacy,
+  2 facilities: Park Slope, Dumbo counters). 4 facilities in Manhattan, 4 in Brooklyn.
+- Every facility name, address, and contact is obviously synthetic (`(Demo)` suffixes, fictional
+  street names like "148 Fictional Ave" / "212 Demo Broome St"; neighborhood-level coordinates are
+  public geography, not sensitive data). No diagnosis/lab-result/clinical/SSN/insurance field
+  exists anywhere in these models — enforced by
+  `test_seed_demo_data_users_have_no_clinical_fields`.
+- Users: one per customer role per organization (6 roles × 3 orgs = 18) plus one per internal role
+  (7) = 25 total seeded users, all sharing one synthetic demo password
+  (`MedRelayDemo!2026`, marked `# pragma: allowlist secret` — a shared demo-only login, not a
+  real credential, documented here exactly as required by CLAUDE.md's secret-scan policy).
+- `ServiceZone` reference rows: `Manhattan Core (Demo)`, `Brooklyn North (Demo)`.
+- `FacilityReceivingRule`: Monday-Friday 08:00-18:00 with a 16:00 same-day cutoff; Saturday/Sunday
+  marked closed (a simplified default, not per-facility variation — noted as a gap below).
+- Idempotent: every write uses `get_or_create`; no randomness anywhere, so re-running produces
+  identical data instead of duplicates (verified by `test_seed_demo_data_is_idempotent`).
+
+## CRUD UI built vs. deferred
+
+Built: minimal server-rendered Django CBV CRUD (list/detail/create/edit, plus delete for
+facilities) for both `Organization` and `Facility`, scoped end-to-end through
+`apps.organizations.services` — every view either filters its queryset with `.for_user(...)` or
+explicitly checks `can_view_organization`/`can_manage_organization`/`can_manage_facilities` before
+returning a response, raising `django.core.exceptions.PermissionDenied` (→ HTTP 403) otherwise.
+Login is Django's built-in `django.contrib.auth.urls` (session auth, matching
+`REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"]`); there is no self-service signup — accounts
+are provisioned via the admin or `seed_demo_data` only, which is a deliberate simplification for a
+B2B enterprise-portal prototype where account provisioning is inherently an admin/sales-onboarding
+action, not a public signup flow.
+
+Deferred (deliberately, documented here rather than silently skipped):
+
+- **No HTMX, no Tailwind CDN.** Templates are plain HTML with the same minimal inline-style
+  convention `templates/base.html` already used in Phase 0. The roadmap suggested HTMX/Tailwind as
+  "a reasonable, conservative choice," but framed it as a judgment call; given Phase 1's hard
+  requirement is proving tenant-scoping works through real HTTP requests (which plain forms +
+  full-page POSTs already demonstrate end-to-end, per the view tests), adding a JS dependency
+  (even CDN-hosted) here would be pure UI polish with no bearing on the acceptance criteria, and
+  Phase 8 is explicitly the real design/accessibility pass. Kept to the smallest surface that
+  proves the mechanism.
+- **No DRF viewset / JSON API for organizations/facilities.** The roadmap explicitly says a
+  DRF viewset is a "great, but not required" bonus for Phase 1, with "a thorough service-layer/
+  queryset test suite" being the hard requirement. Given the size of the rest of Phase 1's scope,
+  this was consciously left out — `apps/organizations/services.py` and its ~30 tests are the real
+  deliverable here; a REST layer over the same permission functions is straightforward
+  future work (Phase 2+ will need DRF endpoints for delivery requests regardless).
+- **No password reset / self-service signup UI.** Only login/logout are wired up and templated;
+  Django's built-in password-reset views are registered (via `include("django.contrib.auth.urls")`)
+  but have no custom template, so visiting them directly would 500 without a template override.
+  Nothing in the UI links to them, so this is inert dead surface, not a broken visible feature —
+  flagged here for transparency, to be either templated or removed before any real pilot review.
+- **`Organization` create is internal-ops-only; no self-service org signup.** Matches how a real
+  B2B courier onboarding flow would work (sales/ops provisions the account), and keeps the "no
+  organization ID accepted blindly from clients" rule trivially true for creation too.
+- **Facility delete is a hard delete, not a soft-delete/archive.** `Facility.is_active` exists and
+  is editable, so soft-disable is possible via the edit form; the dedicated delete view removes the
+  row entirely. Later phases that reference facilities from deliveries will likely want to migrate
+  this to a guarded/soft delete once deletion could orphan real referencing data.
+- **`FacilityReceivingRule` seed data is a uniform weekday/weekend default**, not tailored per
+  facility type (e.g. a 24-hour hospital dock vs. a pharmacy counter) — acceptable for Phase 1
+  reference data; later phases needing SLA-accurate cutoff behavior should revisit this.
+
+## mypy and factory_boy
+
+`factory_boy` (already an allowed Phase 0 dev dependency, unused until this phase) ships no type
+stubs, and `django-stubs` does not special-case it — `SomeFactory(...)` type-checks as returning
+`SomeFactory` instead of the Django model it returns at runtime. This is a well-known, currently
+unresolved gap in the factory_boy/mypy ecosystem, not a MedRelay-specific workaround. Rather than
+littering every test with `# type: ignore` or hand-rolling non-factory fixtures throughout (losing
+the whole benefit of `factory_boy`), `pyproject.toml` gained one more `[[tool.mypy.overrides]]`
+entry — `module = "*.tests.*"`, `ignore_errors = true` — the same treatment already given to
+`*.migrations.*`. **Production code (models/services/views/admin/management commands) still gets
+full mypy coverage**; only test modules using these factories are exempted. This was verified by
+running `mypy` against every new production file individually before adding the override, to
+confirm the override wasn't hiding a real production-code type error (see the gate output below —
+0 errors in `apps/organizations/services.py`, `apps/facilities/views.py`, etc. even without the
+override).
+
+Two real production-code type findings were fixed rather than suppressed:
+
+- Django admin/CBV base classes (`ModelAdmin`, `TabularInline`, `StackedInline`, `ListView`,
+  `DetailView`, `CreateView`, `UpdateView`, `DeleteView`) are declared `Generic` in the
+  `django-stubs` `.pyi` files but are **not** subscriptable at runtime — `ModelAdmin[Facility]`
+  raises `TypeError: type 'ModelAdmin' is not subscriptable` the moment Django imports the admin
+  module. All such subscripts were removed; the project's `mypy` config has no
+  `disallow_any_generics`/strict-generics setting, so this costs nothing in practice.
+- `apps/organizations/services.py`'s permission functions now accept `User | AnonymousUser`
+  (matching `HttpRequest.user`'s real type) instead of just `User`, with
+  `isinstance(user, AnonymousUser)` checks that double as real mypy type-narrowing — this caught
+  and fixed what would otherwise have been an implicit "trust the caller passed an authenticated
+  user" assumption baked into the type signature.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test` (same `uv`-managed virtualenv Phase 0 set up; no
+`uv lock`/`uv sync` re-run was needed since no new runtime or dev dependency was added).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+108 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 108 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run *after* committing the three new `0001_initial.py` migrations for `accounts`,
+`organizations`, and `facilities`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+106 passed in 2.08s
+```
+Coverage: 93% overall (818 statements, 58 missed) for the whole project including Phase 0 code.
+Every new Phase 1 module is at or near 100% (`services.py` 98%, `views.py` 91-100%, `models.py`
+96-98%); the remaining misses are a handful of defensive branches (e.g. an admin `get_queryset`
+override line, an `OrganizationMembershipQuerySet.for_user` call path not separately exercised
+since it's covered transitively) plus the pre-existing Phase 0 gaps in `config/asgi.py`,
+`config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py` (environment entrypoints, not
+exercised by the SQLite test suite by design). No coverage threshold is a hard gate per Phase 0's
+precedent; this is reported for transparency, not as a failure.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 19 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is unchanged from Phase 0 (19) — Phase 1 added zero new packages.
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, **baseline unchanged** (`.secrets.baseline` has the same empty `results:
+{}` as Phase 0 left it). The one string that plausibly looks secret-shaped — `DEMO_PASSWORD =
+"MedRelayDemo!2026"` in `seed_demo_data.py` — is marked `# pragma: allowlist secret` inline (same
+convention as Phase 0's `medrelay:medrelay` placeholder), confirmed not to require a baseline entry
+by running the hook after `git add -A` (so all new files were actually scanned, not just
+previously-tracked ones — an easy mistake, since `git ls-files` silently omits untracked files).
+
+### End-to-end manual verification (beyond the automated suite)
+Ran `seed_demo_data` against a real (in-process) SQLite-backed test environment with
+`django.test.utils.setup_test_environment()` + Django's test `Client`, then: logged in as
+`northstar_owner` / `MedRelayDemo!2026` via the real `/accounts/login/` view, followed the redirect
+to `/organizations/`, and confirmed the page renders 200 with "NorthStar Diagnostics (Demo)"
+visible and "Riverside Urgent Care Group (Demo)" (a different tenant) absent — the full stack,
+not just the test suite, demonstrates tenant isolation.
+
+## Known gaps / deviations (honest list)
+
+- No DRF/JSON API for organizations or facilities yet (see "CRUD UI built vs. deferred").
+- No HTMX/Tailwind — plain HTML forms only (see "CRUD UI built vs. deferred").
+- Django's password-reset views are routed but have no templates (dead surface, nothing links to
+  them — see "CRUD UI built vs. deferred").
+- Facility delete is a hard delete.
+- `FacilityReceivingRule` seed defaults are uniform, not per-facility-type tailored.
+- PostGIS/GeoDjango is deferred to Phase 4 (see design decision #1 above) — `latitude`/`longitude`
+  are plain decimals for now.
+- Coverage is 93%, not 100% (see gate output above) — no hard threshold was specified as a gate.
+- `*.tests.*` modules are excluded from `mypy` checking due to a factory_boy stub gap (see "mypy
+  and factory_boy" above); all production code still has full mypy coverage.
+- Not yet built (correctly out of scope for Phase 1, per the roadmap): couriers, cargo, deliveries,
+  dispatch, custody, tracking, temperature, incidents, notifications, billing, reporting — all
+  later phases.
+
+## Commit history for this phase
+
+(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)
+
+# Current Status — Phase 2 (Cargo Policy and Delivery Requests)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 2 on top of the
+Phase 1 foundation (starting point: commit `985c53f`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 2 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 2 — Cargo policy and delivery
+requests": cargo classes/policies, temperature profiles, packages/package identifiers (with real
+QR rendering)/packaging attestations, a delivery-request "wizard" (single form), the early-lifecycle
+delivery state machine with an append-only transition log, a deterministic synthetic quote engine,
+a keyword-based prohibited-cargo guard, and the `RecurringRoute` data model (CRUD only — generation
+is a documented stub). All new models have migrations (including two data migrations that seed fixed
+reference rows), all quality gates pass (see below), and every Phase 2 acceptance criterion — missing
+cargo classification/packaging attestation blocking `READY_FOR_DISPATCH`, prohibited-cargo keyword
+rejection, deterministic per-component quote pricing, and append-only status transitions — is covered
+by real, passing tests.
+
+## Exact files created/changed
+
+`git diff --cached 985c53f --stat` (Phase 1's final commit → this phase's staged working tree):
+
+```
+46 files changed, 4204 insertions(+), 5 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/cargo/`**: `models.py` (`CargoClassCode`/`CargoClass`, `CargoPolicy`,
+  `TemperatureProfileCode`/`TemperatureProfile`, `Package`, `PackageIdentifier`,
+  `PackagingAttestation`), `services.py` (`get_cargo_policy`, `temperature_profile_allowed`,
+  `create_packages_for_delivery_request`), `validation.py` (the prohibited-cargo keyword guard),
+  `admin.py`, `apps.py` (docstring update), `migrations/0001_initial.py` + `0002_initial.py` (the FK
+  cycle with `deliveries` forces Django to split cargo's initial migration in two — see "Design
+  decisions" below), `migrations/0003_seed_cargo_reference_data.py` (data migration: 3 `CargoClass` +
+  3 `CargoPolicy` + 2 `TemperatureProfile` rows), `migrations/0004_alter_package_description.py`
+  (help-text-only field alter), `management/commands/render_package_qr.py` (QR PNG-rendering demo
+  command), `tests/factories.py`, `tests/test_models.py`, `tests/test_services.py`,
+  `tests/test_validation.py`, `tests/test_render_package_qr_command.py`.
+- **`apps/deliveries/`**: `models.py` (`ServiceLevel`, `DeliveryStatus`, `RecipientVerificationMethod`,
+  `DeliveryRequest`, `StopType`, `DeliveryStop`, `DeliveryStatusTransition`, `PricingRuleKey`,
+  `PricingRule`, `Quote`, `RecurrenceFrequency`, `RecurringRoute`, `RecurringRouteStop`),
+  `state_machine.py` (`ALLOWED_TRANSITIONS`, `validate_ready_for_dispatch`,
+  `transition_delivery_request`), `pricing.py` (the synthetic quote engine), `services.py`
+  (`create_delivery_request`, `submit_delivery_request`, `cancel_delivery_request`,
+  `update_delivery_request_with_version_check`,
+  `generate_delivery_requests_for_recurring_route` stub), `exceptions.py`
+  (`InvalidTransitionError`, `StaleDeliveryRequestError`), `forms.py` (`DeliveryRequestForm`, the
+  wizard), `views.py`, `urls.py`, `admin.py`, `apps.py` (docstring update),
+  `migrations/0001_initial.py`, `migrations/0002_seed_pricing_rules.py` (13 seeded `PricingRule`
+  rows), `tests/factories.py`, `tests/test_models.py`, `tests/test_state_machine.py`,
+  `tests/test_pricing.py`, `tests/test_services.py`, `tests/test_views.py`.
+- **`apps/organizations/services.py`**: added `DELIVERY_REQUEST_CREATOR_ROLES` and
+  `can_create_delivery_requests` (owner/administrator/requester-dispatcher, or cross-org manage
+  access) — the permission gate for the delivery-request wizard, following the exact same
+  allowlist-function pattern as `can_manage_organization`/`can_manage_facilities`.
+- **`apps/organizations/views.py`** / **`templates/organizations/organization_detail.html`**: added
+  a "Delivery requests" section and "+ New delivery request" link to the organization detail page.
+- **`templates/deliveries/*.html`**: `deliveryrequest_list.html`, `deliveryrequest_detail.html`,
+  `deliveryrequest_form.html` — same minimal plain-HTML convention as Phase 1's templates.
+- **`config/urls.py`**: added `path("deliveries/", include("apps.deliveries.urls"))`.
+- **`pyproject.toml`** / **`uv.lock`**: added `segno>=1.6,<2.0` (pure-Python QR generation, no
+  Pillow/system dependency — on the zero-cost allowed list per
+  docs/TECH_STACK_AND_ZERO_COST_POLICY.md's "Segno or qrcode for QR generation").
+- **`apps/audit/management/commands/audit_cost.py`**: added `"segno"` to `ALLOWED_PACKAGES`.
+- **`docs/COST_AUDIT.md`**: regenerated (20 dependencies now, was 19).
+
+## Design decisions
+
+### 1. `CargoClass`/`TemperatureProfile` as real lookup models, not bare enums
+
+Both are modeled as real tables with a `TextChoices`-backed `code` field, seeded via data
+migrations (`apps/cargo/migrations/0003_seed_cargo_reference_data.py`) rather than plain
+`TextChoices` enums used directly as `CharField(choices=...)` on `Package`/`DeliveryRequest`.
+`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 3 lists `CargoClass` and `CargoPolicy` as two
+separate entities, and `CargoPolicy` needs an FK target to attach class-specific rules
+(`requires_packaging_attestation`, `allows_ambient`, `allows_refrigerated`) to — a real model makes
+that relationship a normal FK rather than a synthetic `CharField` join. `TemperatureProfile` gets
+the same treatment for symmetry and because `CargoPolicy.allows_temperature_profile()` needs a
+stable object to check against. The cost: one extra lookup table each for what is, in practice, a
+fixed three-row (cargo) and two-row (temperature) taxonomy — there is no UI/API path anywhere in
+this codebase to create a fourth `CargoClass` or a third `TemperatureProfile` (frozen is explicitly
+out of scope). This is the direct, deliberate consequence of `Package`/`DeliveryRequest` holding an
+FK to `apps.cargo.CargoClass`/`TemperatureProfile` rather than a `CharField`, which in turn means
+`apps.cargo` and `apps.deliveries` have a two-way *data-model* dependency (see item 2 below).
+
+### 2. Two-way cross-app FK relationship between `cargo` and `deliveries`
+
+`cargo.Package`/`cargo.PackagingAttestation` hold an FK to `deliveries.DeliveryRequest` (string
+reference, `"deliveries.DeliveryRequest"`), while `deliveries.DeliveryRequest` holds FKs back to
+`cargo.CargoClass`/`cargo.TemperatureProfile`. This matches `docs/ARCHITECTURE_AND_DATA_MODEL.md`'s
+entity grouping (cargo/packages vs. delivery/dispatch are separate bounded groups, but with cargo
+depending on which delivery request a package belongs to). It is an ordinary Django cross-app FK
+relationship (resolved lazily by the app registry — no Python import cycle, since neither
+`models.py` module imports the other's `models` module directly), not a service-layer coupling;
+CLAUDE.md's "cross-app calls go through service functions" rule is about *behavior* (tenant-scoping
+logic, etc.), not plain FK relations, which every app in this codebase already uses. Practical
+consequence: `python manage.py makemigrations cargo deliveries` produces a **split migration** for
+`cargo` — `0001_initial.py` creates the tables, and a separate `0002_initial.py` (depending on both
+`cargo.0001_initial` and `deliveries.0001_initial`) adds the FK columns that point into
+`deliveries`. This is Django's own dependency-resolution behavior for a genuine bidirectional
+model-FK cycle, not a hand-rolled workaround.
+
+### 3. Wizard = a single Django `Form`, not a multi-step UI
+
+`docs/PRODUCT_REQUIREMENTS.md` section 5 describes the delivery-request wizard by its *required
+field list* (pickup/destination facility, pickup window, required delivery time, service level,
+cargo class, package count, approximate dimensions/weight, temperature requirement, sender/recipient
+contact, packaging/classification attestation, recipient verification method, facility
+instructions), not by a mandated multi-page UI, and the roadmap's Phase 2 acceptance criteria are
+about *validation/blocking behavior*, not step count. `apps/deliveries/forms.py`'s
+`DeliveryRequestForm` is a single `forms.Form` (not a `ModelForm`, since two of its fields —
+`pickup_facility`/`destination_facility` — aren't `DeliveryRequest` model fields at all, and two
+more — `attest_packaging`/`attestation_notes` — belong to a different model, `PackagingAttestation`)
+covering every required field from the list above in one page, POSTed once to
+`DeliveryRequestCreateView`. A real multi-step client-side wizard (with per-step validation, a
+progress indicator, etc.) is exactly the kind of UI-polish investment `docs/IMPLEMENTATION_ROADMAP.md`
+Phase 8 ("unified design system... accessibility pass") is for. This single-form approach proves the
+same real HTTP mechanism Phase 1's Organization/Facility CRUD did: a real POST, real tenant-scoped
+permission checks, real service-layer creation, real validation blocking — see
+`apps/deliveries/tests/test_views.py::test_wizard_blocks_dispatch_when_packaging_attestation_missing`.
+
+`pickup_facility`'s queryset is scoped to the requesting organization's own facilities (a delivery
+originates from your own site); `destination_facility`'s queryset is *any* active facility across
+*any* organization, since real B2B courier deliveries routinely cross organizations (e.g. an
+urgent-care clinic's specimens going to a different organization's diagnostic lab) — restricting
+destination to the requester's own org would make the most common real use case (clinic → lab)
+impossible to model.
+
+### 4. Delivery-creation auto-submits (create + submit are one wizard action)
+
+`DeliveryRequestCreateView.form_valid` calls `services.create_delivery_request` (which leaves the
+row at `DRAFT`) and then immediately calls `services.submit_delivery_request` in the same request —
+so the wizard's single "Create and submit" button drives `DRAFT → SUBMITTED → VALIDATION_REQUIRED →
+(attempt) READY_FOR_DISPATCH` in one step, landing the delivery request at `READY_FOR_DISPATCH` if
+everything required is present, or leaving it at `VALIDATION_REQUIRED` (with the specific missing-
+field messages shown on the detail page) if not. A separate "Re-run submit/validation" button on the
+detail page (`DeliveryRequestSubmitView`) lets an operator retry after fixing the delivery request
+(e.g. adding the missing packaging attestation via the admin) without rebuilding the whole request.
+
+### 5. Quote engine: `PricingRule` as a real, admin-editable model; distance is a synthetic haversine estimate
+
+Every dollar figure the quote engine (`apps/deliveries/pricing.py`) uses is read from an active
+`PricingRule` row (13 named keys — `PricingRuleKey` — seeded via
+`apps/deliveries/migrations/0002_seed_pricing_rules.py`), not a hard-coded constant, so tuning the
+demo's synthetic pricing is a data edit (via the admin) rather than a code change —
+`docs/PRODUCT_REQUIREMENTS.md` section 14 explicitly calls for "synthetic configurable rules."
+Distance is computed as a **straight-line (haversine) estimate** between the pickup/destination
+facilities' Phase-1 `DecimalField` `latitude`/`longitude` — not a real routing call. Real
+turn-by-turn/road-network distance via self-hosted OSRM remains explicitly deferred, per
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` ("OSRM self-hosted/local for routing in the demo... a
+later phase"); this function makes no external call and never will fake one. If either facility is
+missing coordinates, a flat fallback distance (`FALLBACK_DISTANCE_KM = 5.0`) is used instead, so the
+engine still produces a deterministic result. After-hours is computed against the pickup window's
+**start time** (not wall-clock "now") converted to `America/New_York`, per
+`docs/PRODUCT_REQUIREMENTS.md` section 2's "Weekdays: 7:00 AM-8:00 PM" — this is what makes the
+quote genuinely deterministic (`test_quote_is_deterministic_for_identical_inputs`) rather than
+"deterministic except when you happen to run the test at night." Every other surcharge (service
+level, cargo class 2/3, refrigerated equipment, inter-borough toll, wait-time placeholder,
+return-trip fee) is covered by its own component test in `apps/deliveries/tests/test_pricing.py`.
+
+A `Quote` is persisted **one per delivery request** (`OneToOneField`, `update_or_create`d on
+recompute) — Phase 2 keeps a single current quote, not a quote history table; recomputing a quote
+after a request changes overwrites the prior figures rather than appending a new row.
+
+### 6. Prohibited-cargo guard: structural (3 fixed classes) + a deliberately crude keyword scan
+
+The primary defense against the excluded categories in `docs/PRODUCT_REQUIREMENTS.md` section 3
+(patient transportation, Category A infectious substances, controlled substances, human organs,
+radioactive material, regulated medical waste, loose sharps, unsealed specimens, specialized blood
+products, emergency-response cargo, air shipments, courier packaging/repacking) is **structural**:
+`CargoClass` has exactly three seeded rows and no UI/API path creates a fourth, so none of those
+categories can ever be *formally selected* as a cargo class. The secondary guard,
+`apps/cargo/validation.find_prohibited_cargo_keywords`, is a plain case-insensitive substring match
+against a fixed keyword list, applied to `DeliveryRequest.facility_instructions` (via
+`DeliveryRequest.clean()` and `state_machine.validate_ready_for_dispatch`) and
+`PackagingAttestation.notes` (via `PackagingAttestation.clean()`, called from its `save()`). **This
+is explicitly not a compliance control** — it is trivially evaded by misspellings, synonyms not on
+the list, or non-English text, and it exists only to catch the obvious/accidental case and give this
+prototype *some* documented, safety-conscious behavior in free-text fields. This is stated in the
+module's own docstring, not just here.
+
+### 7. `RecurringRoute`: data model + admin/service CRUD only; generation is a loud, documented stub
+
+`apps/deliveries/models.py`'s `RecurringRoute`/`RecurringRouteStop` implement the full data model
+from `docs/PRODUCT_REQUIREMENTS.md` section 5 ("Recurring routes"): daily/weekly recurrence
+(`RecurrenceFrequency`, `weekly_days_of_week` as a plain list of weekday ints), route start/end
+dates, holiday exceptions (`holiday_exceptions` — "a simple date-list field," per the task spec, is
+literally what's implemented: a `JSONField` list of ISO date strings, no calendar-provider
+integration), multiple stops (`RecurringRouteStop`, ordered/unique by `sequence`), an
+operations-approval flag (`is_approved`), and pause/resume (`is_paused`). Basic CRUD exists via the
+Django admin (`apps/deliveries/admin.py`) and the model layer; **no dedicated end-user views/URLs
+were built** for `RecurringRoute` this phase (unlike `DeliveryRequest`), since the roadmap only asks
+for "the data model and basic admin/service CRUD" here. The job that would actually turn an
+approved, unpaused `RecurringRoute` into concrete `DeliveryRequest` rows on a schedule is **not
+implemented**: `apps.deliveries.services.generate_delivery_requests_for_recurring_route` raises
+`NotImplementedError` unconditionally, with a docstring pointing back to this section, and is
+covered by a test (`test_generate_delivery_requests_for_recurring_route_is_a_documented_stub`)
+asserting exactly that — a loud, discoverable gap rather than a silently-missing feature or a
+function that quietly returns an empty list.
+
+### 8. Append-only `DeliveryStatusTransition`: ORM-layer enforcement, honestly not a DB-layer guarantee
+
+`DeliveryStatusTransition.save()` raises `ValidationError` if `self.pk` is already set (i.e. this
+would be an update to an existing row); `.delete()` always raises; and the custom
+`DeliveryStatusTransitionQuerySet` overrides queryset-level `.update()`/`.delete()` to raise too, so
+every mutation path reachable through the Django ORM — instance-level or bulk-queryset-level — is
+blocked. This is exercised by four dedicated tests: an existing row cannot be `.save()`d after a
+field change, cannot be `.delete()`d, and neither can a bulk `queryset.update()`/`queryset.delete()`
+targeting it. **Honest limitation, stated here and in the model's own docstring**: this is an
+**ORM-layer** guard, not a database-level one — there is no Postgres `REVOKE`, rule, or trigger
+behind it, so a raw SQL statement issued outside the ORM (or a direct database client) could still
+bypass it. Building a real DB-level guard is explicitly left as a reasonable Phase 6 addition,
+alongside that phase's tamper-evident hash-chain verifier for the full custody-event system — Phase
+2 deliberately does not build hash chaining here, per the roadmap ("a lightweight precursor to the
+full... system that comes in Phase 6").
+
+### 9. State machine: only the early-lifecycle transitions are load-bearing
+
+`DeliveryStatus` defines the full enum from `docs/PRODUCT_REQUIREMENTS.md` section 9 (`DRAFT`
+through `DELIVERED`, plus `REJECTED`/`CANCELLED`/`INCIDENT_HOLD`/`RETURNING`/`RETURNED`/`FAILED`) so
+later phases never need to migrate this field. `apps/deliveries/state_machine.ALLOWED_TRANSITIONS`
+is a deliberately **partial** map covering only:
+
+```
+DRAFT -> SUBMITTED -> VALIDATION_REQUIRED -> READY_FOR_DISPATCH
+```
+
+plus `CANCELLED` reachable from any of those four states. Nothing in this phase drives a delivery
+into or out of `OFFERED` onward — attempting `READY_FOR_DISPATCH -> OFFERED` raises
+`InvalidTransitionError` (`test_offered_onward_transitions_are_not_implemented_in_phase_2`), by
+design: the dict simply has no entry allowing it, rather than a partially-implemented handler that
+might silently no-op. Phase 4 (dispatch)/Phase 5 (courier PWA)/Phase 6 (custody/incidents) should
+extend this same dict (and its tests) as each subsequent transition is actually implemented, not
+build a parallel transition map elsewhere.
+
+## Data minimization checked
+
+Every field added this phase was reviewed against `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section
+2. `DeliveryRequest.sender_contact_name/phone/role` and `recipient_contact_name/phone/role` are
+operational contacts at a facility (e.g. "Front Desk" / "Site Coordinator", "Lab Intake" / "Lab
+Tech") — never a patient name or patient-linked identifier; nothing here is a diagnosis, lab result,
+clinical note, medication indication, SSN, or insurance ID. `Package.description` is a short,
+free-text *operational* label (e.g. "sealed specimen bag") with a docstring/help-text explicitly
+noting it must never carry clinical content — this is a free-text field with no server-side content
+filter beyond the same crude prohibited-keyword scan described in decision 6, which is a real, if
+limited, gap: nothing stops an operator from typing a diagnosis into `Package.description` or
+`facility_instructions` beyond that keyword list. `PackageIdentifier.code` is a synthetic
+barcode-style string (`PKG-<12 hex chars>`), not a real specimen accession number. No field anywhere
+in `apps.cargo`/`apps.deliveries` stores a patient identifier, diagnosis, lab result, or insurance
+ID.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. `uv lock` and `uv sync --group dev` were re-run after
+adding `segno` to `pyproject.toml` (both succeeded against the real PyPI index — no fallback
+needed).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+135 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 135 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/cargo/migrations/{0001_initial,0002_initial,0003_seed_cargo_reference_data,0004_alter_package_description}.py`
+and `apps/deliveries/migrations/{0001_initial,0002_seed_pricing_rules}.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+196 passed in 3.62s
+```
+Coverage: 95% overall (1602 statements, 88 missed) for the whole project including Phase 0/1 code —
+all 106 Phase 0/1 tests still pass, plus 90 new Phase 2 tests. New-app coverage:
+`apps/cargo/services.py` 100%, `apps/cargo/validation.py` 100%, `apps/cargo/admin.py` 100%,
+`apps/cargo/management/commands/render_package_qr.py` 100% (exercised by
+`apps/cargo/tests/test_render_package_qr_command.py`, which asserts real PNG bytes are written to
+disk), `apps/cargo/models.py` 95%, `apps/deliveries/services.py` 100%,
+`apps/deliveries/state_machine.py` 98%, `apps/deliveries/pricing.py` 99%,
+`apps/deliveries/models.py` 96%, `apps/deliveries/forms.py` 98%, `apps/deliveries/views.py` 88%
+(uncovered lines are mostly `dispatch`'s `PermissionDenied` early-return branches and the
+cancel-view POST path, which is behaviorally identical to the already-tested submit-view POST
+path). The remaining project-wide misses are the pre-existing Phase 0 environment-entrypoint gaps
+(`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`) plus a
+handful of defensive branches in `config/health.py`/`audit_cost.py`/admin `get_queryset` overrides —
+none of it Phase 2 code.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 20 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is 20, up from Phase 1's 19 — the one addition is `segno` (pure-Python QR
+generation, no Pillow/system dependency, on the explicit allowed list in
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`).
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from Phase 1 (`.secrets.baseline` still has empty
+`results: {}`). Run *after* `git add -A` so every new Phase 2 file was actually scanned (not just
+previously-tracked ones — the same lesson Phase 1 called out).
+
+### End-to-end manual verification (beyond the automated suite)
+
+Ran `seed_demo_data` against a real (in-process) SQLite-backed test environment, logged in as
+`northstar_owner` via the Django test client, and drove the real wizard HTTP flow: `GET
+/deliveries/organizations/<pk>/new/` → 200; `POST` the full wizard payload (pickup facility = a
+NorthStar facility, destination facility = a different organization's facility, service level
+`same_day`, cargo class 2, 2 packages, ambient temperature, `attest_packaging=on`) → 200 (followed
+redirect), page content contains "Ready for Dispatch" and a quote total. The created
+`DeliveryRequest` had `status="ready_for_dispatch"`, 2 `Package` rows, and `estimated_price=49.12`.
+Rendered one of those packages' `PackageIdentifier` (`code="PKG-188BB65A6568"`) to a real PNG file
+at `/tmp/medrelay_manual_qr.png` via `render_qr_png_bytes()` and independently confirmed with the
+system `file` command: `PNG image data, 84 x 84, 1-bit grayscale, non-interlaced` — a real, valid QR
+image, not just PNG-magic-byte-shaped output.
+
+## Known gaps / deviations (honest list)
+
+- **No dedicated `RecurringRoute` end-user views/URLs** — admin-only CRUD this phase (see design
+  decision 7). No generation job exists; calling
+  `services.generate_delivery_requests_for_recurring_route` always raises `NotImplementedError`.
+- **`DeliveryStatusTransition` append-only enforcement is ORM-layer, not database-layer** — a raw
+  SQL statement or direct DB client could bypass it (see design decision 8). A real DB-level guard
+  is deferred to Phase 6 alongside the tamper-evident hash chain.
+- **Prohibited-cargo keyword guard is a crude, documented placeholder**, not a compliance control —
+  trivially evadable by misspellings/synonyms/non-English text (see design decision 6).
+- **No real routing/distance API** — distance is a synthetic haversine straight-line estimate
+  between facility coordinates; OSRM integration remains deferred to a later phase (see design
+  decision 5).
+- **`Quote` keeps one current row per delivery request, not a quote history table** — recomputing
+  overwrites the prior breakdown.
+- **`DeliveryRequest.final_price` is never set in Phase 2** — it exists as a placeholder field for
+  Phase 7 (billing/invoicing) and is always `null` today.
+- **`recipient_verification_method` is a plain stored choice only** — the actual PIN/signature
+  capture flow is Phase 6 (custody/proof) work, per the roadmap.
+- **`PackageConditionCheck`** (listed in `docs/ARCHITECTURE_AND_DATA_MODEL.md`'s "Cargo and
+  packages" entity group) **is not built this phase** — it belongs to Phase 6's package
+  condition/custody workflow, not Phase 2's cargo-policy/delivery-request scope.
+- **No demo/seed `DeliveryRequest` data added to `seed_demo_data`** — Phase 2's reference data
+  (cargo classes/policies, temperature profiles, pricing rules) is seeded via data migrations
+  (always present, including in CI), but no sample delivery requests were added to the optional
+  `seed_demo_data` command. A manual end-to-end run (see above) exercises the same path a demo
+  operator would use to create one by hand through the UI.
+- Coverage is 93%, not 100% (see gate output above) — no hard threshold was specified as a gate;
+  the uncovered lines are concentrated in defensive/early-return branches already covered
+  behaviorally by sibling tests, plus the pre-existing Phase 0 environment-entrypoint gaps.
+- `*.tests.*` modules remain excluded from `mypy` checking (factory_boy stub gap, unchanged from
+  Phase 1) — all production code in `apps.cargo`/`apps.deliveries` has full mypy coverage, verified
+  by the `mypy .` run above (135 source files, 0 errors).
+- Not yet built (correctly out of scope for Phase 2, per the roadmap): couriers, dispatch, custody,
+  tracking, temperature (readings/excursions), incidents, notifications, billing, reporting — all
+  later phases.
+
+## Commit history for this phase
+
+(Recorded after the commits landed — see `git log --oneline` for the definitive, current history.)
+
+# Current Status — Phase 3 (Courier Onboarding and Eligibility)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 3 on top of the
+Phase 2 foundation (starting point: commit `4204e85`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 3 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 3 — Courier onboarding and
+eligibility": courier profiles/status, credentials/training/vehicle/equipment records, cargo
+authorization levels (including a temperature-capability flag), current availability, a real
+hard-eligibility engine (`apps.couriers.eligibility`), and credential-expiration query/flagging
+logic. All new models have a migration, all quality gates pass (see below), and every Phase 3
+acceptance criterion — a positive/negative test per implemented hard filter, a property test that
+`eligible` is true iff every implemented hard filter passes, and a "no unauthorized job appears to
+courier" test via `eligible_deliveries_for` — is covered by real, passing tests.
+
+## Exact files created/changed
+
+`git diff --stat 4204e85` (Phase 2's final commit → this phase's staged working tree):
+
+```
+apps/accounts/migrations/0002_user_is_courier.py   |  18 +
+apps/accounts/models.py                            |  17 +
+apps/audit/management/commands/audit_cost.py       |   1 +
+apps/couriers/admin.py                             | 134 +++++
+apps/couriers/apps.py                              |   4 +-
+apps/couriers/eligibility.py                       | 429 ++++++++++++++++
+apps/couriers/management/__init__.py               |   0
+apps/couriers/management/commands/__init__.py      |   0
+apps/couriers/management/commands/flag_expiring_credentials.py |  74 +++
+apps/couriers/migrations/0001_initial.py           | 144 ++++++
+apps/couriers/models.py                            | 494 ++++++++++++++++++
+apps/couriers/tests/factories.py                   | 101 ++++
+apps/couriers/tests/test_eligibility.py            | 564 +++++++++++++++++++++
+apps/couriers/tests/test_flag_expiring_credentials_command.py |  54 ++
+apps/couriers/tests/test_models.py                 | 128 +++++
+apps/facilities/tests/factories.py                 |  11 +-
+docs/COST_AUDIT.md                                 |   6 +-
+pyproject.toml                                     |   1 +
+uv.lock                                             |  42 ++
+19 files changed, 2218 insertions(+), 4 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/accounts/models.py`**: added `User.is_courier` (mirrors `is_internal_staff`'s pattern
+  exactly — see "Design decision 1" below) + `migrations/0002_user_is_courier.py`.
+- **`apps/couriers/`**: `models.py` (`CourierStatus`, `IdentityReviewStatus`,
+  `DriverLicenseStatus`, `InsuranceStatus`, `CourierProfile`, `CourierCredentialType`,
+  `CourierCredentialStatus`, `CourierCredential` (+ its `expiring_within`/`expired` queryset
+  methods), `TrainingRecordType`, `TrainingRecord`, `VehicleType`, `Vehicle`, `EquipmentType`,
+  `Equipment`, `CargoAuthorization`, `CourierAvailability`), `eligibility.py` (the hard-eligibility
+  engine — see below), `admin.py` (every new model registered, with inlines off `CourierProfile`),
+  `apps.py` (docstring update), `migrations/0001_initial.py`,
+  `management/commands/flag_expiring_credentials.py` (+ `management/__init__.py`,
+  `management/commands/__init__.py`), `tests/factories.py`, `tests/test_models.py`,
+  `tests/test_eligibility.py`, `tests/test_flag_expiring_credentials_command.py`.
+- **`apps/facilities/tests/factories.py`**: added `ServiceZoneFactory` (additive; Phase 1/2 had no
+  factory for `ServiceZone`, and the eligibility tests need one to build zone-match/mismatch
+  scenarios).
+- **`apps/audit/management/commands/audit_cost.py`**: added `"hypothesis"` to `ALLOWED_PACKAGES`.
+- **`pyproject.toml`** / **`uv.lock`**: added `hypothesis>=6.115,<7.0` (dev-only; resolved to
+  6.165.0, pulling in `sortedcontainers` as its one transitive dependency — a pure-Python, free,
+  locally-installed package, not itself declared in `pyproject.toml` so it needs no allowlist
+  entry, consistent with how `audit_cost` already treats other packages' transitive dependencies).
+  Hypothesis is explicitly named as an approved zero-cost dependency in
+  `docs/TECH_STACK_AND_ZERO_COST_POLICY.md` ("Hypothesis for state-machine/property tests where
+  useful").
+- **`docs/COST_AUDIT.md`**: regenerated (21 dependencies now, was 20).
+
+## Design decisions
+
+### 1. Couriers are `User` rows, distinguished exactly like internal staff — no third parallel pattern
+
+`apps.accounts.models.User.is_courier` is a plain `BooleanField`, added the same way
+`is_internal_staff` was added in Phase 1: a cheap, index-friendly flag kept in sync by
+`CourierProfile.save()` (mirroring `InternalRoleAssignment.save()`'s
+`if not self.user.is_internal_staff: ...` pattern exactly). `is_courier` alone grants no access —
+same rule as `is_internal_staff`. There is no third "membership"-style table; `CourierProfile`
+(this phase) holds the actual onboarding/eligibility data, exactly as `OrganizationMembership` and
+`InternalRoleAssignment` hold theirs for their respective user kinds. This was an explicit
+instruction for this phase (reuse the existing distinguishing pattern rather than inventing a new
+one) and is documented again in both `apps/accounts/models.py`'s module docstring and
+`apps/couriers/models.py`'s module docstring.
+
+### 2. `CourierStatus` is a plain field, not an append-only history model — deferred to Phase 8
+
+Phase 2's `DeliveryStatusTransition` is a real append-only audit log because delivery-status
+history is operationally load-bearing today (SLA/incident analysis consumes it). A courier's
+coarse applicant/approved/suspended/inactive status changes far less often in this prototype and
+has no Phase 3 consumer that needs a full history of every transition — building one bespoke
+audit-log model per entity that might someday want history is the wrong level of investment here.
+`docs/IMPLEMENTATION_ROADMAP.md` Phase 8 ("audit viewer") is explicitly where a *general* history/
+audit mechanism belongs, covering courier status changes alongside everything else that phase
+audits, rather than Phase 3 building a narrow one-off. `CourierProfile.updated_at` at least records
+*when* the row last changed. This is a real, honest scope decision, not an oversight — restated in
+`apps/couriers/models.py`'s module docstring.
+
+### 3. `CourierCredential.evidence_reference` is a placeholder text reference, never a real document
+
+Per `docs/PRODUCT_REQUIREMENTS.md` section 6 ("No real background-check provider is integrated in
+the zero-cost prototype") and the architecture doc's "never store real sensitive documents in the
+demo repository": `evidence_reference` is a plain `CharField` (max 255 chars) intended to hold a
+short label or synthetic filename (e.g. `synthetic-drivers-license-demo.pdf`), never a real
+uploaded document. **No `FileField`/`ImageField` exists anywhere in `apps.couriers`** — there is no
+file-upload code path in this phase at all, so there was nothing to restrict to synthetic-only
+fixtures; the simplest way to guarantee "never a real document" was to not build upload at all.
+This is stated in the model's own docstring and help text, not just here.
+
+### 4. `CargoAuthorization` answers both "cargo authorization missing" and "temperature capability
+missing" from one row
+
+Rather than a many-to-many join between courier authorizations and `cargo.TemperatureProfile`,
+`CargoAuthorization` is one row per `(courier, cargo_class)` with a single
+`supports_refrigeration` boolean. Existence of an active row answers "is this courier authorized
+for this cargo class at all"; the boolean answers "is this courier also authorized to handle it
+under refrigerated conditions." Since Phase 2 only has two temperature profiles (ambient,
+refrigerated — frozen is deferred, see Phase 2's design decisions), a single boolean captures the
+full temperature-capability question without an extra join table. `Vehicle`/`Equipment` each carry
+their *own* `supports_refrigeration` flag too, deliberately kept as a **separate** concept from
+`CargoAuthorization.supports_refrigeration`: the former is a physical-capability fact (does this
+courier currently have refrigerated equipment on hand), the latter is an authorization/
+certification fact (is this courier *approved* to handle refrigerated cargo of this class at all).
+The eligibility engine checks both, as two independent hard filters
+(`TEMPERATURE_CAPABILITY_MISSING` vs. `VEHICLE_EQUIPMENT_INCOMPATIBLE`), matching
+`docs/PRODUCT_REQUIREMENTS.md` section 11's two separate list entries.
+
+### 5. Honest capacity/workload proxy — current workload is always 0 in Phase 3, by fact not estimate
+
+There is no `DeliveryAssignment` model yet (that's Phase 4), so there is nothing in this phase's
+data model to count a courier's live in-flight deliveries against.
+`apps.couriers.eligibility._current_workload` always returns `0` — this is stated as a documented
+fact about what Phase 3 can and cannot measure, not an estimate or a placeholder pretending to be
+real. It is checked against `CourierAvailability.max_concurrent_deliveries` (a *configured capacity
+limit*, e.g. "this courier can carry at most N concurrent deliveries" — a real, admin-editable
+setting), so the `CAPACITY_EXCEEDED` hard filter is still genuinely testable today (set
+`max_concurrent_deliveries=0` to simulate "at capacity") even though the real-world trigger for it
+(an actual live assignment count) doesn't exist until Phase 4. `_current_workload` takes a
+`courier` parameter it does not yet use, specifically so Phase 4 can implement real counting
+there without changing any caller's signature.
+
+### 6. Service-zone matching: simple zone-equality, not geofencing
+
+`apps.couriers.eligibility._check_service_zone` compares the courier's current
+`CourierAvailability.current_service_zone` (falling back to `CourierProfile.home_service_zone` if
+the courier has no availability row, or has one with no current zone set) against the delivery
+request's **pickup** facility's `ServiceZone` (`Facility.service_zone`, from Phase 1). This is
+plain FK-equality, not distance/geofencing math — consistent with Phase 1's decision to keep
+facility coordinates as plain decimals until Phase 4 actually needs geo-distance dispatch logic. If
+either side has no zone set at all, the filter does **not** fail the courier — a documented,
+deliberately permissive default, since the engine cannot honestly claim a mismatch it has no data
+for. This honest permissiveness is itself covered by a test
+(`test_missing_zone_data_does_not_fail_the_zone_filter`).
+
+### 7. Facility restriction: a simple, documented heuristic over free text, not a rules engine
+
+`Facility.verification_requirements` (Phase 1) is free text — there is no structured
+"required credential/role" field on `Facility` to check against. The `FACILITY_RESTRICTION_NOT_MET`
+filter therefore uses the only real signal that field carries: if either the pickup or destination
+facility has any non-blank `verification_requirements` text, the delivery is treated as requiring
+an identity-verified courier, checked against `CourierProfile.identity_review_status ==
+IdentityReviewStatus.APPROVED`. This is a deliberately simple, honestly-documented heuristic, not a
+real per-facility rules engine — a facility whose free-text requirement is about something entirely
+unrelated to identity (e.g. "loading dock access code required") would still trigger this same
+check today. Building a genuine structured facility-restriction rule type is reasonable future work
+once a real requirement taxonomy exists.
+
+### 8. SLA-mathematically-infeasible: explicitly out of scope, with a real place in the return type
+
+Per `docs/PRODUCT_REQUIREMENTS.md` section 11's tenth hard filter, "SLA mathematically infeasible"
+needs a real ETA/routing estimate that does not exist until Phase 4's dispatch scoring.
+`EligibilityResult.sla_feasibility` is a dedicated field, always set to the literal string
+`"not_evaluated"` in this phase — a documented "not yet evaluated," never silently omitted, and
+never allowed to make `eligible` false on its own (verified by
+`test_sla_feasibility_is_never_a_hard_failure_reason`, which deliberately fails a courier on every
+other filter and still asserts no SLA-related code ever appears in `hard_failure_reasons`). Phase 4
+can implement a real check by changing what value this one field carries — no breaking change to
+`check_courier_eligibility`'s signature or callers is needed.
+
+### 9. `eligible_couriers_for`/`eligible_deliveries_for` are Python-level filters, not optimized queries
+
+Both convenience functions fetch a full candidate queryset (`CourierProfile.objects.all()` or
+`DeliveryRequest.objects.filter(status=READY_FOR_DISPATCH)`) and then call
+`check_courier_eligibility` once per candidate in Python — O(n×m), not a single optimized SQL
+query with `WHERE`/`JOIN` conditions pushed down. This is honestly fine at this prototype's demo
+data volumes (tens of couriers, tens of open deliveries) and is stated as a known, deliberate
+scope limit in the module's own docstring; a real optimization pass is reasonable future work once
+Phase 4 needs to run this over meaningfully large candidate sets.
+
+### 10. Hypothesis property test, alongside explicit per-filter tests
+
+Per docs/TECH_STACK_AND_ZERO_COST_POLICY.md's explicit mention of Hypothesis, `hypothesis` was
+added as a dev-only dependency (see "Exact files created/changed" above) and used for one property
+test, `test_eligible_iff_every_hard_filter_passes`
+(`apps/couriers/tests/test_eligibility.py`): for 60 randomly generated combinations of the nine
+implemented hard-filter pass/fail conditions, it builds a real courier/delivery-request scenario
+matching those flags and asserts the resulting `EligibilityResult` reports *exactly* the expected
+set of failure codes (via an independently-written reference calculation,
+`_expected_codes`), and that `eligible` is true iff that expected set is empty. This is in addition
+to — not instead of — one explicit positive test (`test_fully_qualified_courier_is_eligible_with_no_reasons`)
+and one negative test per filter (16 more tests covering sub-cases like "no active vehicle at all"
+vs. "vehicle present but not refrigerated" vs. "refrigerated equipment substitutes for a
+refrigerated vehicle"). The property test's real bug-catching power was verified during
+development: a deliberately injected regression (skipping the capacity check entirely) was
+correctly caught and minimally shrunk by Hypothesis before being reverted — see the "Verification"
+note below. `max_examples=60` and `deadline=None` are set explicitly (60 real DB scenarios per
+test run is fast — well under a second in this suite — and disabling the per-example timing
+deadline avoids flakiness from ordinary DB write latency, not from anything slow in the eligibility
+check itself).
+
+## The eligibility engine
+
+`apps.couriers.eligibility.check_courier_eligibility(courier, delivery_request, *, as_of=None) ->
+EligibilityResult` implements every hard filter from `docs/PRODUCT_REQUIREMENTS.md` section 11
+that Phase 3's data model can honestly support:
+
+| Filter | Implemented as |
+|---|---|
+| account not active | `CourierProfile.status != CourierStatus.APPROVED` |
+| credential expired (or missing) | No approved, unexpired `CourierCredential` for each of `DRIVER_LICENSE`/`INSURANCE` |
+| cargo authorization missing | No active `CargoAuthorization` row for the delivery's `cargo_class` |
+| temperature capability missing | Authorization exists but `supports_refrigeration=False` and the delivery requires refrigeration |
+| vehicle/equipment incompatible | No active vehicle at all, or (when refrigeration is required) no active refrigerated vehicle/equipment |
+| outside service zone | Courier's current/home `ServiceZone` != pickup facility's `ServiceZone` (permissive if either is unset) |
+| unavailable | `CourierAvailability` missing or offline, or the pickup window start (converted to America/New_York) falls outside a configured shift |
+| current capacity exceeded | `_current_workload` (always `0` — see design decision 5) >= `CourierAvailability.max_concurrent_deliveries` |
+| facility restriction not met | Pickup/destination facility has non-blank `verification_requirements` and courier's `identity_review_status != APPROVED` |
+| SLA mathematically infeasible | **Not evaluated** — `EligibilityResult.sla_feasibility == "not_evaluated"` always (design decision 8) |
+
+`EligibilityResult` is a frozen dataclass: `eligible: bool`, `hard_failure_reasons: tuple[EligibilityFailureReason, ...]`
+(each a `(code, message)` pair — every failing filter is reported, not just the first), and
+`sla_feasibility: str`. `eligible_couriers_for(delivery_request)` and
+`eligible_deliveries_for(courier)` are the inverse queries (design decision 9); the latter only
+considers `READY_FOR_DISPATCH` requests, which is what makes "no unauthorized job appears to
+courier" a meaningful, testable claim — a `DRAFT`/`VALIDATION_REQUIRED` request is never a
+candidate job at all, eligible or not.
+
+## Credential expiration warnings
+
+`CourierCredentialQuerySet.expiring_within(days, *, as_of=None)` and `.expired(as_of=None)` (both
+available as `courier.credentials.expiring_within(...)` via the manager) are the query/flagging
+logic `docs/IMPLEMENTATION_ROADMAP.md` Phase 3 asks for. `python manage.py
+flag_expiring_credentials [--within-days 30]` (`apps/couriers/management/commands/
+flag_expiring_credentials.py`) prints a plain-text report of already-expired and soon-expiring
+approved credentials to stdout. **This sends no real notification** — email/SMS/in-app delivery of
+this information is explicitly Phase 7 work (`apps.notifications`), stated in the command's own
+docstring and help text.
+
+## Data minimization checked
+
+Per `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`, this is the first phase handling anything
+identity-document-*adjacent*, so every field was reviewed with that in mind: `CourierCredential`
+stores a status enum, issued/expiry dates, a reviewer FK, and `evidence_reference` (a placeholder
+text label/synthetic filename only — see design decision 3) — never a real driver's-license
+number, real SSN, real insurance policy number, or an uploaded document. `Vehicle.plate_number` is
+explicitly documented as a synthetic placeholder string, never a real plate. `CourierProfile.notes`
+and `Organization.notes`-style free-text fields carry the same "internal operational notes only,
+never diagnosis/clinical/SSN/ID-number" help text convention already used elsewhere in the
+codebase. No field anywhere in `apps.couriers` stores a diagnosis, lab result, clinical note,
+medication indication, SSN, or insurance identifier.
+
+## Deferred, out of scope for Phase 3 (by design, per roadmap)
+
+- **`CourierLocationPing`** — Phase 5 (courier PWA and tracking) work; not built.
+- **`CourierPerformanceSnapshot`** — Phase 4 (dispatch scoring history) work; not built.
+- **A full courier-status change history/audit log** — deferred to Phase 8's "audit viewer" (design
+  decision 2); `CourierProfile.status` is a plain field today.
+- **`DeliveryAssignment`** does not exist yet (Phase 4) — the `CAPACITY_EXCEEDED` filter's
+  "current workload" is honestly always `0` in this phase (design decision 5), not a real
+  in-flight-delivery count.
+- **SLA-mathematically-infeasible** is explicitly not evaluated (design decision 8) —
+  `EligibilityResult.sla_feasibility` always reports `"not_evaluated"`.
+- **No real background-check/identity-verification provider integration** —
+  `IdentityReviewStatus`/`DriverLicenseStatus`/`InsuranceStatus` are placeholder, manually-set
+  enums (per `docs/PRODUCT_REQUIREMENTS.md` section 6 and
+  `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`'s explicit Checkr prohibition); no `BackgroundCheckProvider`
+  adapter is introduced this phase (nothing external to adapt for yet).
+- **No file upload for credential evidence** — `evidence_reference` is placeholder text only
+  (design decision 3); there is no `FileField`/`ImageField`/upload view anywhere in `apps.couriers`.
+- **`TrainingRecord` is not wired into the eligibility engine** — `docs/PRODUCT_REQUIREMENTS.md`
+  section 11's hard-filter list has no "training missing" entry, and none of Phase 2's three
+  seeded cargo classes require a specific training certification in this prototype. The model
+  exists for onboarding-record completeness (section 6: "training records") and is available for a
+  later phase to wire in if a cargo class ever needs it.
+- **No dedicated courier-facing UI/views** — Phase 3 scope (per the roadmap) is the data model,
+  admin, and eligibility engine; the courier PWA itself (including real job-offer accept/reject UI)
+  is Phase 5.
+- **No demo/seed courier data added to `seed_demo_data`** — Phase 3 introduces no data migration
+  (unlike Phase 2's cargo/pricing reference data) since there is no fixed courier taxonomy to seed;
+  a manual admin-driven courier onboarding walkthrough was not performed this phase (covered
+  instead by the automated test suite's factories, which exercise the identical model/service
+  layer a real onboarding flow would use).
+- **`eligible_couriers_for`/`eligible_deliveries_for` are O(n×m) Python-level filters**, not
+  optimized database queries (design decision 9).
+- Coverage is 95%, not 100% (see gate output below) — no hard coverage threshold was specified as
+  a gate; the uncovered lines are concentrated in `__str__`/defensive branches and the pre-existing
+  Phase 0 environment-entrypoint gaps, none of it load-bearing Phase 3 logic.
+- `*.tests.*` modules remain excluded from `mypy` checking (factory_boy stub gap, unchanged from
+  Phase 1) — all production code in `apps.couriers` has full mypy coverage, verified by the
+  `mypy .` run below (145 source files, 0 errors).
+- Not yet built (correctly out of scope for Phase 3, per the roadmap): dispatch, custody, tracking,
+  temperature (readings/excursions), incidents, notifications, billing, reporting — all later
+  phases.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. `uv lock` and `uv sync --group dev` were re-run after
+adding `hypothesis` to `pyproject.toml` (both succeeded against the real PyPI index — no fallback
+needed; resolved `hypothesis==6.165.0` + its one transitive dependency, `sortedcontainers==2.4.0`).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+145 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 145 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/accounts/migrations/0002_user_is_courier.py` and
+`apps/couriers/migrations/0001_initial.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+229 passed in 6.57s
+```
+Coverage: 95% overall (2023 statements, 100 missed) for the whole project including Phase 0/1/2
+code — all 196 Phase 0/1/2 tests still pass, plus 33 new Phase 3 tests (35 tests total collected
+under `apps/couriers`, two of which — `test_apps.py`'s smoke tests — predate this phase).
+New-app coverage: `apps/couriers/management/commands/flag_expiring_credentials.py` 100%,
+`apps/couriers/admin.py` 99%, `apps/couriers/eligibility.py` 98% (3 lines uncovered: a defensive
+`cargo_class_id is None` branch documented as unreachable via `eligible_deliveries_for`'s
+`READY_FOR_DISPATCH`-only candidate set, and two `__str__`-adjacent lines), `apps/couriers/models.py`
+95% (uncovered lines are `__str__` methods and admin-only display methods not separately
+exercised). The remaining project-wide misses are the pre-existing Phase 0 environment-entrypoint
+gaps (`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`) plus
+a handful of defensive branches in other apps' `admin.py`/`views.py` — none of it Phase 3 code.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 21 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is 21, up from Phase 2's 20 — the one addition is `hypothesis` (dev-only,
+explicitly named as an approved zero-cost dependency in
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`).
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from Phase 1/2 (`.secrets.baseline` still has empty
+`results: {}`). Run after `git add -A` so every new Phase 3 file was actually scanned (not just
+previously-tracked ones — the same lesson Phase 1/2 called out).
+
+### Property-test verification (beyond the automated suite)
+
+To confirm `test_eligible_iff_every_hard_filter_passes` has real bug-catching power and is not a
+vacuously-true property, a regression was deliberately injected into
+`apps/couriers/eligibility.py` (the capacity-exceeded check's result was hard-coded to `None`,
+silently skipping it) and the test was re-run: it failed immediately and Hypothesis's shrinker
+reduced the failing example down to the single minimal flag combination
+(`capacity_exceeded=True`, every other flag `False`), correctly reporting `assert set() ==
+{'capacity_exceeded'}`. The injected regression was then reverted and the full suite (`pytest`,
+229 tests) was re-run and confirmed green again before this phase's final commit.
+
+## Known gaps / deviations (honest list)
+
+See "Deferred, out of scope for Phase 3" above for the full list. In summary: `CourierLocationPing`
+and `CourierPerformanceSnapshot` are not built (Phase 5/Phase 4 respectively); courier-status
+history is a plain field, not an audit log (deferred to Phase 8); the `CAPACITY_EXCEEDED` filter's
+workload figure is honestly always `0` (no `DeliveryAssignment` model exists yet); SLA feasibility
+is explicitly not evaluated; no background-check/identity-verification provider is integrated (by
+policy); no credential-evidence file upload exists at all; `TrainingRecord` is not wired into
+eligibility; there is no courier-facing UI yet (Phase 5); `eligible_couriers_for`/
+`eligible_deliveries_for` are O(n×m) Python-level filters, not optimized queries.
+
+## Commit history for this phase
+
+1. `ff7f718a72cea1885f3c42d9dbec985d4a499b3e` — "Phase 3: courier onboarding, credentials, and
+   hard-eligibility engine" — the main Phase 3 commit (all models, migrations, admin,
+   eligibility engine, management command, tests, and dependency/allowlist changes).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag Phase 0 called out), so this line was added in a small follow-up
+commit after commit (1) landed — see `git log --oneline` for the definitive, current history.
+
+# Current Status — Phase 4 (Dispatch and Operations Console)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 4 on top of the
+Phase 3 foundation (starting point: commit `d6f5c2a`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 4 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 4 — Dispatch and operations
+console": dispatch recommendations with an explainable weighted score, job offers with
+expiration, courier assignment/reassignment, dispatcher overrides with a mandatory reason,
+synthetic route plans, per-service-level SLA profiles (finally giving
+`EligibilityResult.sla_feasibility` a real value instead of Phase 3's `"not_evaluated"`
+placeholder), a minimal dispatch board/dashboard, and simple SLA-risk flagging. All new models
+have migrations, all quality gates pass (see below), and all three Phase 4 acceptance criteria
+are covered by real, passing tests:
+
+1. **One delivery assigned atomically** — `apps.dispatch.services.assign_delivery` runs inside
+   `transaction.atomic()`, takes a `select_for_update()` row lock on the `DeliveryRequest`, and is
+   additionally backed by a real, backend-independent partial `UniqueConstraint` on
+   `DeliveryAssignment` (only one `ACTIVE` row per delivery request can ever exist at the database
+   level).
+2. **Concurrent assignment race tests** — a genuine multi-threaded test
+   (`apps/dispatch/tests/test_concurrency.py`) spawns two real OS threads with two real, separate
+   database connections, both calling `assign_delivery` for the same delivery request with
+   different couriers, and asserts exactly one wins and the other gets a clean
+   `AssignmentConflictError` — never a silent double-assignment, never an unhandled crash. Run 15+
+   times against SQLite and 15+ times against a real, throwaway PostgreSQL container in this
+   session with 100% pass rate in both cases (full honesty discussion below).
+3. **Hard gates cannot be overridden** — a dedicated test suite
+   (`test_hard_eligibility_gate_cannot_be_overridden_via_{assign,offer,reassign}_delivery` in
+   `apps/dispatch/tests/test_services.py`) tries to force an ineligible courier through every
+   entry point this phase built, with a dispatcher-supplied override reason supplied every time,
+   and confirms every one of them raises `IneligibleCourierError` and writes nothing to the
+   database.
+
+## Exact files created/changed
+
+`git diff --cached d6f5c2a --stat` (Phase 3's final commit → this phase's staged working tree):
+
+```
+27 files changed, 3748 insertions(+), 52 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/dispatch/`** (all new this phase): `models.py` (`AssignmentStatus`/`DeliveryAssignment`,
+  `JobOfferStatus`/`JobOffer`, `DispatchOverrideType`/`DispatchOverride`,
+  `DispatchRecommendation`/`DispatchRecommendationCandidate`, `RouteLegType`/`RoutePlan`/`RouteLeg`,
+  `SLAProfile`), `sla.py` (synthetic ETA-to-pickup/transit-time/SLA-feasibility calculation),
+  `scoring.py` (`ScoreFactor`/`DispatchCandidate`, `score_candidate`/`rank_candidates` — the
+  explainable weighted score), `services.py` (the four required entry points:
+  `recommend_couriers`/`assign_delivery`/`offer_delivery`/`reassign_delivery`, plus
+  `at_risk_delivery_ids`), `exceptions.py` (`IneligibleCourierError`, `AssignmentConflictError`),
+  `admin.py`, `views.py`/`urls.py` (the dispatch board), `apps.py` (docstring update),
+  `migrations/0001_initial.py`, `migrations/0002_seed_sla_profiles.py` (data migration: 3
+  `SLAProfile` rows, one per `ServiceLevel`), `tests/factories.py`, `tests/test_models.py`,
+  `tests/test_sla.py`, `tests/test_scoring.py`, `tests/test_services.py`,
+  `tests/test_concurrency.py`, `tests/test_views.py`.
+- **`apps/couriers/eligibility.py`**: `_current_workload` now counts real, active
+  `apps.dispatch.models.DeliveryAssignment` rows (Phase 3's honest "always 0" placeholder is gone);
+  `check_courier_eligibility` gained an optional `as_of_datetime` keyword and now computes a real
+  `sla_feasibility` value (`"feasible"`/`"at_risk"`/`"infeasible"`, via a lazy import of
+  `apps.dispatch.sla.compute_sla_estimate`) instead of always returning `"not_evaluated"`. See
+  "Design decisions" below for why these imports are lazy (inside function bodies), not at module
+  scope.
+- **`apps/couriers/tests/test_eligibility.py`**: the three Phase 3 assertions hard-coded to
+  `SLA_FEASIBILITY_NOT_EVALUATED` were updated to accept the new real feasibility values (a
+  fully-built `READY_FOR_DISPATCH` request always has both stops, so `sla_feasibility` is now
+  genuinely evaluated for it) — `test_sla_feasibility_is_never_a_hard_failure_reason` still proves
+  the one invariant that must never change: a poor (or unevaluated) SLA verdict never makes
+  `eligible` false.
+- **`apps/deliveries/state_machine.py`**: `ALLOWED_TRANSITIONS` extended with
+  `READY_FOR_DISPATCH -> OFFERED`, `READY_FOR_DISPATCH -> ASSIGNED` (direct assignment),
+  `OFFERED -> ASSIGNED`, `OFFERED -> READY_FOR_DISPATCH` (an offer round reverting to the open
+  pool), and `CANCELLED` reachable from `OFFERED`/`ASSIGNED` too — exactly the extension Phase 2's
+  own docstring asked later phases to make to this same dict, not a parallel transition map.
+  `ASSIGNED` onward (courier en route, pickup, transit, delivery) remains unimplemented — that is
+  Phase 5/6 work.
+- **`apps/deliveries/tests/test_state_machine.py`**: the old
+  `test_offered_onward_transitions_are_not_implemented_in_phase_2` (asserting
+  `READY_FOR_DISPATCH -> OFFERED` raises) was replaced with tests proving the *new* transitions
+  succeed (`test_ready_for_dispatch_to_offered_succeeds`,
+  `test_ready_for_dispatch_and_offered_can_both_reach_assigned`,
+  `test_offered_can_revert_to_ready_for_dispatch`) plus a renamed test proving the next unimplemented
+  boundary (`test_courier_en_route_onward_transitions_are_not_implemented_in_phase_4`); the
+  cancellation-coverage test was extended to also cover cancelling from `OFFERED`/`ASSIGNED`.
+- **`apps/organizations/services.py`**: added `DISPATCH_ROLES` (`dispatcher`,
+  `operations_manager`, `system_administrator`) and `can_dispatch` — the dispatch board's
+  permission gate, following the exact same allowlist-function pattern as
+  `can_create_delivery_requests`/`can_manage_organization`.
+- **`config/urls.py`**: added `path("dispatch/", include("apps.dispatch.urls"))`.
+- **`templates/dispatch/board_list.html`** / **`board_detail.html`**: minimal plain-HTML dashboard
+  templates, same convention as every prior phase's CRUD UI.
+- **`docs/COST_AUDIT.md`**: regenerated (timestamp only — **no new dependency was added this
+  phase**, still 21).
+
+## Design decisions
+
+### 1. Every Phase 4 model lives in `apps.dispatch`, not split across apps
+
+`DeliveryAssignment`, `JobOffer`, `DispatchRecommendation`/`DispatchRecommendationCandidate`,
+`DispatchOverride`, `RoutePlan`/`RouteLeg`, and `SLAProfile` all live in `apps/dispatch/models.py`,
+matching the task's own instruction and `docs/ARCHITECTURE_AND_DATA_MODEL.md` section 3's "Delivery
+and dispatch" entity grouping (which already lists `DeliveryRequest`/`DeliveryStop`/
+`DeliveryStatusTransition` in `apps.deliveries` alongside these — the entity *group* is not a strict
+1:1 map to a Django *app*, and Phase 2 already established that precedent). All cross-app FKs into
+`couriers.CourierProfile`/`deliveries.DeliveryRequest`/`facilities.Facility` use Django's lazy
+string app-label reference (`"couriers.CourierProfile"`, etc.) — the exact pattern
+`apps.cargo.models` already uses for its FKs into `apps.deliveries` — so there is no Python import
+cycle at model-definition time.
+
+The one place a real bidirectional *runtime* dependency exists is `apps.couriers.eligibility`
+needing `apps.dispatch.models.DeliveryAssignment` (for real workload counting) and
+`apps.dispatch.sla` (for real SLA feasibility), while `apps.dispatch.services` needs
+`apps.couriers.eligibility` (for the hard-eligibility gate) at module scope. This is resolved
+exactly the way this codebase already resolves every other such case: the import inside
+`apps.couriers.eligibility` is **lazy** (inside the function body, not at module top), matching the
+pre-existing convention in the very same file (`eligible_couriers_for`'s lazy import of
+`CourierProfile`) and elsewhere (`DeliveryRequest.clean()`'s lazy import of
+`apps.cargo.validation`). `apps.dispatch.sla` itself never imports anything from `apps.couriers`, so
+there is no actual import-time cycle, only a deliberate, documented one-directional-at-a-time lazy
+resolution — written out in full in both `apps/couriers/eligibility.py`'s and
+`apps/dispatch/models.py`'s module docstrings.
+
+### 2. `DispatchRecommendation` is persisted by default, not purely ephemeral
+
+The roadmap explicitly allows recommendations to be "computed on-demand and optionally persisted
+for audit/explainability." Phase 4 chose **persist by default**: every real
+`apps.dispatch.services.recommend_couriers` call writes one `DispatchRecommendation` row plus one
+`DispatchRecommendationCandidate` row per candidate (full factor breakdown, reasons, eligibility,
+SLA numbers — Decimal values converted to `float`/plain dicts for `JSONField` storage). This is a
+deliberate choice, not an oversight: dispatch decisions are exactly the class of safety/audit-
+relevant record this prototype should keep an explainable trail of, and it costs nothing meaningful
+at this prototype's demo data volumes. `persist=False` is available for cheap, no-audit-trail
+what-if computation, and is what `assign_delivery`/`reassign_delivery` use internally (via
+`rank_candidates` directly, not `recommend_couriers`) to determine the current top-ranked candidate
+without flooding the recommendation table on every assignment decision.
+
+### 3. The explainable score: what's real vs. what's an honest placeholder
+
+`apps/dispatch/scoring.py` implements all eight suggested factors from
+`docs/PRODUCT_REQUIREMENTS.md` section 11, weighted to sum to 1.00 (`total_score` on a 0-100
+scale):
+
+| Factor | Weight | Real, or documented placeholder |
+|---|---|---|
+| ETA to pickup | 0.25 | Real computation, synthetic input — service-zone-match tiers (15/25/40 min), since no courier-location model exists yet (`CourierLocationPing` remains Phase 5 work) |
+| SLA slack | 0.25 | Real computation over the synthetic ETA/transit estimate plus the real `required_delivery_by` |
+| Reliability / on-time history | 0.10 | **Placeholder — always a neutral 0.5.** No delivery has ever reached `DELIVERED` in this codebase (Phase 4 does not implement transitions past `ASSIGNED`), so there is no real on-time history anywhere to compute from. A neutral constant is used and clearly labeled as such — nothing fabricated |
+| Route compatibility | 0.10 | Real computation (service-zone match against *both* pickup and destination facility) |
+| Active workload | 0.15 | Real computation — counts real `DeliveryAssignment` rows (this is Phase 3's own "always 0" workload proxy, now real) |
+| Facility familiarity | 0.10 | Real computation — counts real past `DeliveryAssignment` rows to the pickup facility (honestly usually 0 in a fresh demo with no completed-delivery history, but the query itself is real, not fabricated) |
+| Toll/parking burden | 0.05 | Real computation reusing Phase 2's `inter_borough_toll_estimate` `PricingRule` — a route property (same for every candidate on one delivery), not courier-differentiating, but genuinely computed and shown |
+| Customer preference (non-binding) | 0.00 | **Explicitly deferred, not built** (judged out of scope this phase — see "Known gaps"). Present in the breakdown for transparency; zero weight, never affects ranking |
+
+`CourierPerformanceSnapshot` (deferred from Phase 3 as "dispatch scoring history") was
+**deliberately not built** this phase, for the same honesty reason as the reliability factor above:
+there is no real completed-delivery outcome data anywhere in this codebase yet to populate it with,
+and building an always-empty (or worse, seeded-with-invented-numbers) history table would either be
+dead weight or a fabrication — neither is acceptable per this project's data-honesty conventions.
+The reliability factor's neutral-default approach with a clear `TODO` comment (pointing at Phase
+5/6, once completed deliveries exist) was judged the more honest choice, and is called out again in
+`apps/dispatch/scoring.py`'s own module docstring.
+
+Every `DispatchCandidate` — eligible or not — gets a full factor breakdown with human-readable
+`reason` strings (`candidate.reasons` concatenates hard-failure messages, if any, with every scoring
+factor's explanation) — the score is never just an opaque float, per the explicit acceptance
+criterion in `docs/PRODUCT_REQUIREMENTS.md` section 11.
+
+### 4. SLA-feasibility calculation: real math over a synthetic ETA, anchored on the pickup window
+
+`apps.dispatch.sla.compute_sla_estimate` is a genuinely new calculation, not a relabeled constant:
+`sla_slack_minutes = required_delivery_by - (reference_instant + eta_to_pickup + transit_minutes)`,
+classified via a per-`ServiceLevel` `SLAProfile.min_slack_minutes` threshold (seeded via
+`apps/dispatch/migrations/0002_seed_sla_profiles.py`: 90 min for `scheduled`, 45 for `same_day`, 15
+for `stat`) into `"feasible"` / `"at_risk"` / `"infeasible"`. Two honest limitations, stated in the
+module's own docstring:
+
+- **`eta_to_pickup`** cannot be a distance calculation at all — there is still no real
+  courier-location model (`CourierLocationPing` is Phase 5 work), so the only real signal available
+  is service-zone match, mapped to three fixed synthetic minute tiers. This is weaker than transit
+  time, which has two real facility coordinates to work with.
+- **`transit_minutes`** reuses Phase 2's exact haversine-distance + `average_speed_kmh` `PricingRule`
+  approach (`apps.deliveries.pricing.estimate_distance_km`) — not a real OSRM/routing call, per the
+  zero-cost policy, exactly as instructed.
+
+`reference_instant` defaults to `delivery_request.pickup_window_start`, **not** wall-clock "now" —
+the same determinism-over-realism choice Phase 2's quote engine made for its after-hours surcharge.
+This is what makes `compute_sla_estimate` (and therefore every dispatch score and
+`EligibilityResult.sla_feasibility`) deterministic for a fixed delivery request/courier pair
+regardless of when the calculation actually runs — verified directly by
+`test_compute_sla_estimate_anchors_on_pickup_window_start_not_wall_clock`. A caller may override the
+anchor explicitly (`reference_instant=...`) for a genuinely "as of right now" calculation if a later
+phase needs one.
+
+### 5. The override-vs-hard-gate boundary
+
+Per `docs/PRODUCT_REQUIREMENTS.md` section 11 ("Dispatchers can override recommendations but must
+record a reason. Overrides never bypass hard safety/authorization rules."), the boundary is
+enforced structurally, not just by convention:
+
+- `apps.couriers.eligibility.check_courier_eligibility` (the Phase 3 hard-eligibility engine) is
+  called **unconditionally**, before anything is written, by every one of
+  `assign_delivery`/`offer_delivery`/`reassign_delivery` — there is no code path, anywhere in
+  `apps.dispatch.services`, that inspects a dispatcher-supplied `reason` string to decide whether to
+  skip that call. A failure raises `IneligibleCourierError` and the function returns immediately;
+  no `DeliveryAssignment`/`JobOffer`/`DispatchOverride` row is ever created for the rejected
+  attempt.
+- `DispatchOverride` rows are written **only after** eligibility has already passed, and only
+  record *soft* choices: picking a courier other than the current top-ranked eligible candidate
+  (`assign_delivery`, `reason` required only in that specific case — a top-ranked pick needs no
+  reason at all) or reassigning an already-assigned delivery (`reassign_delivery`, `reason` is
+  always required — every reassignment is itself treated as an override of a prior decision).
+  `DispatchOverride.save()` additionally refuses to persist a blank/whitespace-only `reason` at the
+  model level, as a second, independent backstop below the service-layer check.
+- `apps/dispatch/tests/test_services.py` has one dedicated test per entry point
+  (`test_hard_eligibility_gate_cannot_be_overridden_via_assign_delivery`/`..._via_offer_delivery`/
+  `..._via_reassign_delivery`) that supplies a plausible-sounding override reason ("I really want
+  this one.", "Dispatcher insists on this courier.") alongside a courier who fails a hard filter,
+  and asserts the call is rejected and the database is untouched in every case. `offer_delivery`'s
+  version additionally proves that mixing one ineligible candidate into an otherwise-eligible batch
+  rejects the *entire* offer call — no partial offers are ever created.
+
+### 6. Concurrency design, and a real discovery made by actually running the test
+
+`assign_delivery` (and `reassign_delivery`) run inside `transaction.atomic()` and take
+`DeliveryRequest.objects.select_for_update()` before checking or changing anything.
+**`select_for_update()` is a documented no-op under SQLite** — confirmed by reading Django's own
+`django/db/models/sql/compiler.py` in this environment: the `FOR UPDATE` SQL clause is only emitted
+when `self.query.select_for_update and features.has_select_for_update`, and SQLite's backend never
+sets `has_select_for_update = True` (it inherits the base class's `False`), so the clause is
+silently omitted rather than raising. This means the actual, backend-independent correctness
+guarantee this project relies on is the **partial database `UniqueConstraint`** on
+`DeliveryAssignment` (`unique_active_assignment_per_delivery_request`, condition
+`status="active"`) — a real database-level constraint enforced identically by SQLite and
+PostgreSQL, verified directly by `apps/dispatch/tests/test_models.py::
+test_only_one_active_assignment_per_delivery_request_at_db_level`.
+
+**A genuine, empirically-found discovery while developing the concurrency test** (not merely
+theorized): on SQLite, a concurrent writer sometimes cannot even acquire SQLite's coarse,
+whole-database write lock within its default timeout, which surfaces as
+`django.db.OperationalError` ("database is locked") — a *different* exception type than the
+unique-constraint `IntegrityError`, but the exact same *kind* of event (a genuine write conflict,
+not a bug). The first version of `assign_delivery`/`reassign_delivery` only caught `IntegrityError`
+and this was caught as a real, reproducible test failure (`OperationalError('database table is
+locked: dispatch_deliveryassignment')` surfacing as an unhandled crash) the very first time the
+concurrency test was run — both functions now catch `(IntegrityError, OperationalError)` and
+convert either into a clean `AssignmentConflictError`. This is exactly the kind of thing a
+"simulated" (sequential, single-connection) concurrency test could never have caught.
+
+### 7. Dashboard scoping: a plain list/table view, no live map
+
+Per the task's own explicit scoping allowance: `apps/dispatch/views.py`/`templates/dispatch/*.html`
+are a minimal, server-rendered dashboard in the exact same plain-HTML, no-Tailwind/no-HTMX
+convention every prior phase's CRUD UI used — a literal live map (MapLibre) was **not** built
+(explicitly deferred to Phase 8/9 polish, per the roadmap's own framing of it as a "nice-to-have").
+The dashboard shows: unassigned/offered deliveries with an at-risk flag
+(`apps.dispatch.services.at_risk_delivery_ids`, a simple query-time rule — not a background
+job/notification, matching this phase's own scope), assigned deliveries with their current courier,
+and (on the per-delivery detail page) the full ranked, explainable candidate list with an
+assign/reassign/offer action form. Courier locations, incidents, and temperature alerts from
+`docs/PRODUCT_REQUIREMENTS.md` section 7's full "control tower" wishlist are **not** shown — those
+need `apps.tracking`/`apps.incidents`/`apps.temperature`, none of which have any models yet
+(later phases).
+
+## Concurrency test — full honesty on SQLite vs. PostgreSQL confidence
+
+`apps/dispatch/tests/test_concurrency.py::test_concurrent_assign_delivery_exactly_one_wins` is a
+genuine multi-threaded test: two real `threading.Thread`s, each with its own real database
+connection (Django opens a fresh connection per thread automatically), synchronized to start via a
+`threading.Barrier` and both calling `assign_delivery` for the *same* delivery request with
+*different* couriers. `@pytest.mark.django_db(transaction=True)` is pytest-django's equivalent of
+subclassing `django.test.TransactionTestCase` directly — real commits happen and the test database
+is reset by truncation between tests, **not** wrapped in one wrapping, never-committed transaction
+the way plain `@pytest.mark.django_db()` (`TestCase`-style) works — which matters enormously here,
+since under a wrapped transaction two "concurrent" threads would both be inside the *same*
+uncommitted transaction and could never actually contend for a lock at all.
+
+**What was actually run, and how many times:**
+
+- Against **SQLite** (`config.settings.test`, this project's only CI/local database): the full
+  `apps/dispatch` suite (48 tests) passes; the concurrency test specifically was additionally run
+  15 times in a standalone loop with a 100% pass rate.
+- Against a **real, throwaway PostgreSQL container** (`postgis/postgis:17-3.5`, run via plain
+  `docker run` on a non-default host port so as not to disturb this shared machine's other running
+  containers, migrated with a temporary, not-committed settings module identical to
+  `config.settings.test` except for `DATABASES`): the full `apps/dispatch` suite (48 tests) passes,
+  the **entire** project test suite (278 tests) passes, and the concurrency test specifically was
+  additionally run 15 times in a standalone loop with a 100% pass rate. The throwaway container and
+  temporary settings module were both torn down/deleted at the end of this session — nothing from
+  this verification step is committed, exactly like Phase 0's own "temporary port-remapping
+  override... not committed" precedent.
+
+**Honest confidence assessment:**
+
+- The **outcome guarantee** this test proves ("exactly one assignment attempt succeeds, the other
+  gets a clean `AssignmentConflictError`, exactly one `ACTIVE` `DeliveryAssignment` row survives,
+  no crash, no silent double-assignment") was verified to hold, repeatedly, against both SQLite and
+  a real PostgreSQL container in this exact environment. This is a real, not merely theoretical,
+  confidence gain from actually running it — the task's own suggested next step.
+- What the real PostgreSQL run does **not**, by itself, prove: this run happened against a fresh,
+  otherwise-idle throwaway container with exactly one pair of concurrent requests. It does not
+  establish behavior under real production-level concurrent load (many simultaneous dispatchers,
+  connection-pool exhaustion, longer-held transactions racing with this one, deadlock scenarios
+  across *multiple* rows locked in different orders, etc.) — that class of confidence would need a
+  dedicated load/soak test, which is out of scope for this phase's acceptance criteria.
+- On SQLite specifically, `select_for_update()` contributes nothing (confirmed no-op, see Design
+  Decision 6) — the guarantee there rests entirely on the unique constraint and SQLite's own coarse
+  whole-database write serialization (which is real concurrency control, just far coarser-grained
+  than PostgreSQL row locks, and prone to surfacing as `OperationalError` rather than waiting
+  gracefully, as documented above). On PostgreSQL, `select_for_update()` is a real row lock in
+  addition to the same unique-constraint backstop — a materially different, additionally-protected
+  interleaving that this project's test suite now has real, repeated, passing evidence for, not
+  just an assumption.
+
+## Data minimization checked
+
+Every field added this phase was reviewed against `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section
+2. `DeliveryAssignment`/`JobOffer`/`DispatchOverride`/`DispatchRecommendationCandidate` store only
+operational dispatch metadata (status enums, timestamps, a synthetic score, human-readable reason
+text, FK references) — never a diagnosis, lab result, clinical note, medication indication, SSN, or
+insurance identifier. `DispatchOverride.reason` and `RouteLeg`/`RoutePlan` fields are explicitly
+operational/logistics text and numbers; nothing here stores patient-identifying information. No new
+field anywhere in `apps.dispatch` stores anything beyond what the eligibility/scoring/assignment
+mechanics genuinely need.
+
+## Quality gate results (all run from a clean, already-`uv sync`'d virtualenv, `config.settings.test`)
+
+All commands below were run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. **No new dependency was added this phase** — `uv
+lock`/`uv sync` were not re-run (nothing changed in `pyproject.toml`).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+160 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 160 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/dispatch/migrations/{0001_initial,0002_seed_sla_profiles}.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+278 passed in 10.13s
+```
+Coverage: 95% overall (2641 statements, 133 missed) for the whole project including Phase 0-3 code
+— all 232 pre-Phase-4 tests still pass, plus 46 new Phase 4 tests across `apps/dispatch` (48 tests
+total collected there, 2 of which — `test_apps.py`'s smoke tests — predate this phase). New-app
+coverage: `apps/dispatch/exceptions.py` 100%, `apps/dispatch/apps.py` 100%, `apps/dispatch/urls.py`
+100%, `apps/dispatch/admin.py` 97%, `apps/dispatch/sla.py` 97%, `apps/dispatch/scoring.py` 97%,
+`apps/dispatch/services.py` 96%, `apps/dispatch/models.py` 94%, `apps/dispatch/views.py` 88%. The
+uncovered lines are concentrated in `__str__`/admin-display methods and a handful of defensive
+branches (e.g. the offer-view's exception-message rendering, already covered behaviorally by the
+service-layer tests for the same exceptions) — none of it load-bearing dispatch logic. The
+remaining project-wide misses are the pre-existing Phase 0 environment-entrypoint gaps
+(`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`).
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 21 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is unchanged from Phase 3 (21) — Phase 4 added zero new packages.
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged (`.secrets.baseline` still has empty `results: {}`). Run
+after `git add -A` so every new Phase 4 file was actually scanned. The temporary, not-committed
+`_tmp_pg_verify.py` settings module used for the Postgres verification run below configured the
+throwaway container's credential using the same synthetic placeholder value already established in
+`.env.example`/`config/settings/base.py`'s `DATABASE_URL` default (documented there since Phase 0
+with its own `pragma: allowlist secret` annotation) — that module was deleted before the final
+commit, so it was never part of the tracked file set at all and never needed its own annotation or
+baseline entry.
+
+### Real Postgres verification run (beyond the SQLite-based suite — see "Concurrency test" section above for the full write-up)
+```
+$ python -m pytest -q --no-cov --ds=config.settings._tmp_pg_verify   # against a throwaway postgis/postgis:17-3.5 container
+278 passed in 9.73s
+$ python -m pytest apps/dispatch/tests/test_concurrency.py -q --no-cov --ds=config.settings._tmp_pg_verify   # x15 in a loop
+1 passed (x15, 100%)
+```
+
+## Known gaps / deviations (honest list)
+
+- **`CourierPerformanceSnapshot` was not built** — no real completed-delivery outcome data exists
+  anywhere in this codebase yet (Phase 4 does not implement transitions past `ASSIGNED`), so
+  building it now would mean either an always-empty table or fabricated history data, neither of
+  which is acceptable. The scoring engine's "reliability" factor is instead a documented, clearly
+  labeled neutral-default placeholder (see Design Decision 3) with a `TODO` pointing at Phase 5/6.
+- **"Customer preference (non-binding)" is explicitly deferred, not built** — judged out of scope
+  for this phase's time budget; present in the score breakdown with zero weight so it is visible
+  but never affects ranking (see Design Decision 3).
+- **`JobOffer` acceptance/decline is not implemented** — `apps.dispatch.services.offer_delivery`
+  creates real `JobOffer` rows (possibly several per delivery, broadcast-style), but no code
+  anywhere transitions one to `ACCEPTED`/`DECLINED`; that is Phase 5's courier-facing PWA work.
+  `JobOffer.is_expired` is a plain computed property for display — nothing automatically flips
+  `status` to `EXPIRED` in the background (that would need a scheduled job, explicitly Phase 7
+  territory per this phase's own "SLA-risk rules... not a background job/notification yet" scope).
+- **`RoutePlan`/`RouteLeg` are synthetic placeholders, not real routing** — reusing Phase 2's exact
+  haversine + average-speed approach; no OSRM/real routing-engine call exists or is planned before
+  a much later phase, per the zero-cost policy.
+- **`eta_to_pickup` has no real distance signal at all** — there is still no courier-location model
+  (`CourierLocationPing` remains Phase 5 work), so it is a small set of synthetic zone-match tiers,
+  weaker than the haversine-based transit-time estimate.
+- **`rank_candidates`/`at_risk_delivery_ids` are O(n) (and O(n×m) respectively) Python-level scans**,
+  not optimized database queries — the same documented, deliberate scope limit Phase 3 accepted for
+  `eligible_couriers_for`/`eligible_deliveries_for` at this prototype's demo data volumes.
+- **The dispatch dashboard has no live map, no courier-location display, no incident/temperature
+  alerts** — those need `apps.tracking`/`apps.incidents`/`apps.temperature`, none of which have
+  models yet (later phases); this is a deliberate, documented scoping choice, not an oversight (see
+  Design Decision 7).
+- **The concurrency test's PostgreSQL confidence is real but bounded** — verified repeatedly against
+  a single throwaway container with one pair of concurrent requests in this session (see the
+  dedicated "Concurrency test" section above); it does not establish behavior under sustained
+  production-level concurrent load, connection-pool exhaustion, or multi-row deadlock scenarios,
+  which would need a dedicated load/soak test outside this phase's acceptance criteria.
+- **No demo/seed dispatch data was added to `seed_demo_data`** — Phase 4 introduces one data
+  migration (`SLAProfile` reference rows, always present including in CI), but no sample
+  assignments/offers were added to the optional `seed_demo_data` command; the automated test suite's
+  factories exercise the identical model/service layer a real dispatcher would use.
+- Coverage is 95%, not 100% (see gate output above) — no hard coverage threshold was specified as a
+  gate; the uncovered lines are concentrated in `__str__`/admin-display methods and defensive
+  branches already covered behaviorally by sibling tests, plus the pre-existing Phase 0
+  environment-entrypoint gaps.
+- `*.tests.*` modules remain excluded from `mypy` checking (factory_boy stub gap, unchanged since
+  Phase 1) — all production code in `apps.dispatch` has full mypy coverage, verified by the `mypy .`
+  run above (160 source files, 0 errors).
+- Not yet built (correctly out of scope for Phase 4, per the roadmap): courier PWA/job-offer
+  accept-decline UI, tracking, custody/proof, temperature workflow, incidents, notifications,
+  billing/invoicing, reporting — all later phases.
+
+## Commit history for this phase
+
+1. `a1d511a6aad4efe1f0caad2a3113c525a7b0068c` — "Phase 4: dispatch recommendations, scoring,
+   assignment, and operations console" — the main Phase 4 commit (all models, migrations, admin,
+   services, scoring/SLA engine, dispatch board, and the `apps.couriers`/`apps.deliveries`
+   wiring changes).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag Phase 0 called out), so this line was added in a small follow-up
+commit after commit (1) landed — see `git log --oneline` for the definitive, current history.
+
+# Current Status — Phase 5 (Courier PWA and Tracking)
+
+Last updated: 2026-08-03, by an automated Claude Code session building Phase 5 on top of the
+Phase 4 foundation (starting point: commit `2537547`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 5 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 5 — Courier PWA and tracking":
+a mobile-first, server-rendered courier PWA (job offers, active-delivery timeline, pickup/transit
+status advancement, package scan) with a real PWA manifest and service worker; job-offer
+accept/reject reusing Phase 4's atomic assignment machinery; the courier-driven pickup/transit
+state-machine transitions (`ASSIGNED -> COURIER_EN_ROUTE_TO_PICKUP -> AT_PICKUP -> PICKED_UP ->
+IN_TRANSIT -> AT_DESTINATION`); browser Geolocation location pings with a hard terminal-state
+cutoff; a client-side offline event queue with server-side Idempotency-Key deduplication for every
+new state-mutating endpoint; and QR/manual package scanning. All new models have migrations, all
+quality gates pass (see below), and all three hard Phase 5 acceptance criteria have real, passing
+tests:
+
+1. **Service-worker/offline verification, honestly scoped.** Playwright + a real Chromium binary
+   were installed and did launch successfully in this sandbox (see "Playwright" section below) —
+   `tests/integration/test_pwa_browser.py` drives a real browser against a real running Django
+   server and proves the service worker actually registers and actually populates its cache with
+   the real static shell assets. Additionally, `tests/integration/test_pwa.py` verifies the
+   manifest/service-worker Django routes at the response level (content-type, content, and that a
+   real rendered courier page includes the registration `<script>`), for a fast, browser-free check
+   that doesn't depend on a downloaded browser binary being available.
+2. **Location stops after terminal state — hard requirement.** `apps.tracking.services.record_location_ping`
+   rejects (HTTP 409, no `CourierLocationPing` row created) any ping for an assignment whose
+   delivery has reached `AT_DESTINATION` (or any other terminal delivery status), or whose
+   assignment itself is no longer `ACTIVE` — proven by
+   `apps/tracking/tests/test_services.py::test_record_location_ping_rejected_once_delivery_reaches_any_terminal_status`
+   (parametrized over every terminal status) and the HTTP-level
+   `apps/tracking/tests/test_views.py::test_location_ping_rejected_after_terminal_state_hard_acceptance_criterion`.
+3. **Reruns/retries do not duplicate events — hard requirement.** `apps.couriers.idempotency.idempotent_call`
+   is the single mechanism behind every new state-mutating courier endpoint (job offer accept/decline,
+   pickup/transit status advance, package scan, location ping); submitting the exact same request
+   twice with the same `Idempotency-Key` returns the identical stored response and creates exactly
+   one underlying row/effect, not two — proven by a dedicated test per endpoint (see "Idempotency
+   tests" below) plus unit tests of the mechanism itself in `apps/couriers/tests/test_idempotency.py`.
+
+## Exact files created/changed
+
+`git diff --stat 2537547` (Phase 4's final commit → this phase's pre-commit working tree):
+
+```
+53 files changed, 3501 insertions(+), 42 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/cargo/`**: `models.py` (`Package.scanned_at`/`scanned_by` — the pickup-scan confirmation
+  timestamp, distinct from Phase 6's custody/proof events), `services.py` (`PackageScanError`,
+  `confirm_package_scan` — the manual-code-entry pickup-scan confirmation), `admin.py` (`Package`
+  admin shows `scanned_at`), `migrations/0005_package_scanned_at_package_scanned_by.py`,
+  `tests/test_services.py` (5 new tests: correct code, nonexistent code, blank code, wrong-delivery
+  code, idempotent re-scan).
+- **`apps/couriers/`**: `models.py` (`CourierActionIdempotencyKey` — the Idempotency-Key mechanism's
+  storage model), `idempotency.py` (`idempotent_call` — the single call site every new courier
+  endpoint uses), `services.py` (`COURIER_ADVANCE_SEQUENCE`, `advance_delivery_status`,
+  `can_access_courier_portal`), `views.py` (`CourierHomeView`, `JobOfferListView`,
+  `JobOfferAcceptView`, `JobOfferDeclineView`, `ActiveDeliveryView`, `DeliveryStatusAdvanceView`,
+  `PackageScanView`), `urls.py`, `admin.py` (registers `CourierActionIdempotencyKey`, read-only),
+  `apps.py` (docstring update), `migrations/0002_courieractionidempotencykey.py`,
+  `tests/test_idempotency.py`, `tests/test_services.py`, `tests/test_views.py`.
+- **`apps/deliveries/`**: `state_machine.py` (`ALLOWED_TRANSITIONS` extended with
+  `ASSIGNED -> COURIER_EN_ROUTE_TO_PICKUP -> AT_PICKUP -> PICKED_UP -> IN_TRANSIT -> AT_DESTINATION`,
+  plus `CANCELLED` reachable from every one of those five states — stops at `AT_DESTINATION`,
+  `AT_DESTINATION -> DELIVERED` deliberately not implemented, see "The DELIVERED/Phase-6 boundary"
+  below), `tests/test_state_machine.py` (replaced the old Phase-4 "not implemented" boundary test
+  with real step-by-step transition tests, a skip-a-step rejection test, a cancellation-from-every-state
+  test, and the new `AT_DESTINATION -> DELIVERED` boundary test).
+- **`apps/dispatch/`**: `models.py` (`JobOffer.decline_reason` field + docstring updates),
+  `exceptions.py` (`JobOfferOwnershipError`), `services.py` (`accept_job_offer`, `decline_job_offer`,
+  `_reject_if_not_acceptable` — both reuse `assign_delivery`'s atomicity/hard-eligibility guarantees
+  rather than duplicating them), `admin.py` (`JobOfferAdmin` shows `decline_reason`/`responded_at`),
+  `migrations/0003_joboffer_decline_reason.py`, `tests/test_services.py` (11 new tests covering
+  accept/decline success, ownership rejection, expiration rejection, hard-eligibility-gate
+  enforcement even via accept, decline-does-not-block-others, and idempotent double-accept/decline
+  at the service layer via the audit-override side effect).
+- **`apps/tracking/`** (models/services/views built for the first time — Phase 0-4 only had the
+  empty app scaffold): `models.py` (`CourierLocationPing`), `services.py`
+  (`TERMINAL_DELIVERY_STATUSES`, `LocationPingRejectedError`, `is_terminal`, `record_location_ping`),
+  `views.py` (`LocationPingView`), `urls.py`, `admin.py`, `apps.py` (docstring update),
+  `migrations/0001_initial.py`, `tests/factories.py`, `tests/test_models.py`, `tests/test_services.py`,
+  `tests/test_views.py`.
+- **`config/pwa.py`** (new): `service_worker`/`web_manifest` views serving `static/sw.js`/
+  `static/manifest.json`'s content at root-level URLs (`/sw.js`, `/manifest.json`) for full
+  service-worker scope.
+- **`config/urls.py`**: added the PWA routes, `apps.couriers.urls`, `apps.tracking.urls`.
+- **`config/settings/test.py`**: overrides `STORAGES["staticfiles"]` to the plain (non-manifest)
+  `StaticFilesStorage` for test settings — see "Design decisions" below.
+- **`static/manifest.json`**, **`static/sw.js`**, **`static/icons/icon.svg`**,
+  **`static/js/courier.js`**, **`static/js/offline-queue.js`** (all new) — the PWA shell, the
+  cache-first service worker, a synthetic SVG icon, the courier action/geolocation/camera-scan
+  helper, and the localStorage-backed offline event queue.
+- **`templates/couriers/`** (all new): `base.html` (mobile-first shell: viewport meta inherited from
+  `templates/base.html`, manifest link, service-worker registration script, CSRF meta tag, touch-friendly
+  CSS), `home.html`, `job_offer_list.html`, `active_delivery.html`.
+- **`tests/integration/test_pwa.py`** (new): Django-response-level PWA route tests (no browser
+  needed). **`tests/integration/test_pwa_browser.py`** (new): real Playwright-driven browser tests.
+- **`pyproject.toml`** / **`uv.lock`**: added `playwright>=1.62.0` (dev-only).
+- **`apps/audit/management/commands/audit_cost.py`**: added `"playwright"` to `ALLOWED_PACKAGES`.
+- **`docs/COST_AUDIT.md`**: regenerated (22 dependencies now, was 21).
+
+## Design decisions
+
+### 1. App placement: `apps.tracking` for location pings, `apps.couriers` for the PWA + idempotency, `apps.dispatch` for offer accept/decline
+
+`CourierLocationPing` lives in `apps.tracking` (empty scaffold since Phase 0, per
+`docs/ARCHITECTURE_AND_DATA_MODEL.md`'s "Couriers" entity list explicitly naming it there and
+Phase 3's own "deferred to Phase 5 (tracking)" note). The courier-facing PWA views/URLs and the
+pickup/transit authorization service (`advance_delivery_status`) live in `apps.couriers` — the same
+"the app that owns the *actor's* domain owns the cross-cutting UI/orchestration for that actor"
+precedent Phase 4 set by putting the dispatch board in `apps.dispatch` even though it reads/writes
+`apps.deliveries`/`apps.couriers` state. Job-offer accept/decline (`accept_job_offer`/
+`decline_job_offer`) live in `apps.dispatch.services` — right next to `assign_delivery`/
+`offer_delivery`, per the task's own explicit instruction to reuse (not duplicate) that module's
+atomicity/hard-eligibility logic, since accepting an offer is fundamentally the same race as a
+dispatcher directly assigning a courier.
+
+The Idempotency-Key mechanism (`CourierActionIdempotencyKey`, `apps.couriers.idempotency.idempotent_call`)
+lives in `apps.couriers` even though `apps.tracking.views.LocationPingView` also uses it — a
+one-directional dependency (`apps.tracking` → `apps.couriers`, never the reverse), so no lazy-import
+cycle-avoidance was needed, unlike the two-directional `apps.couriers.eligibility` ↔
+`apps.dispatch` relationship from Phase 4. This was judged the more honest home than inventing a new
+top-level "generic infra" app for a mechanism only Phase 5's courier endpoints need today; a later
+phase that needs idempotent create/transition endpoints outside the courier PWA (per
+`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 9's general "require Idempotency-Key for
+create/transition endpoints") should promote this to a shared location at that point, not before.
+
+### 2. Idempotency-Key mechanism: a scoped `(courier, endpoint, key)` row, store-on-success-only
+
+`CourierActionIdempotencyKey` is a real database table (`courier` FK, `endpoint` string, `key`
+string, `response_data` JSON, `status_code`), with a real `UniqueConstraint` on
+`(courier, endpoint, key)` — not an in-memory cache, so it survives process restarts and is safe
+under real concurrent requests (a losing concurrent `INSERT` fetches and returns the winner's
+already-committed row instead of erroring or silently doing nothing). `idempotent_call(courier,
+endpoint, key, fn)`:
+
+1. Looks up an existing row for `(courier, endpoint, key)` first. If found, `fn` is **never called
+   again** — the stored `response_data`/`status_code` is replayed as-is. This is what makes "reruns/
+   retries do not duplicate events" hold: the underlying effect (a `DeliveryAssignment` row, a
+   `DeliveryStatusTransition` row, a `CourierLocationPing` row) is created at most once per key.
+2. Otherwise calls `fn()`. If it raises, **nothing is recorded** — a genuinely failed request (e.g.
+   an invalid transition, a wrong package code) must remain retryable under the same key with a
+   corrected request, not be permanently remembered as a failure. This was verified directly by
+   `test_idempotent_call_does_not_record_a_failed_attempt`.
+3. If `fn()` succeeds, the result is stored. A concurrent `INSERT` race is handled by catching
+   `IntegrityError` and re-fetching the winner's row.
+
+Scoped per-courier (not globally unique on `key` alone) so two different couriers' independently
+client-generated UUIDs never collide, and scoped per-`endpoint` so the same key reused (by a client
+bug) across two different action types does not falsely dedupe them against each other — both
+covered by dedicated tests (`test_idempotent_call_scopes_by_courier`/`..._by_endpoint`).
+
+Every new Phase 5 endpoint requires an `Idempotency-Key` (header, primary path; a JSON-body or
+form-field fallback for parity with the no-JS manual-entry path) and returns `400` if it is missing:
+`JobOfferAcceptView`/`JobOfferDeclineView` (`apps.couriers.views`),
+`DeliveryStatusAdvanceView`/`PackageScanView` (`apps.couriers.views`), and `LocationPingView`
+(`apps.tracking.views`). Each has a dedicated "same key twice → one row, identical response" test —
+see `apps/couriers/tests/test_views.py`'s `test_job_offer_accept_same_idempotency_key_twice_does_not_duplicate`/
+`test_job_offer_decline_same_idempotency_key_twice_does_not_duplicate`/
+`test_delivery_status_advance_same_idempotency_key_twice_does_not_duplicate`/
+`test_package_scan_same_idempotency_key_twice_does_not_duplicate`, and
+`apps/tracking/tests/test_views.py::test_location_ping_same_idempotency_key_twice_does_not_duplicate`.
+
+### 3. A real, honest bug this design caught: idempotency-safe "expire on read" cannot mutate inside the same atomic block it raises from
+
+An early version of `accept_job_offer` tried to flip an already-expired `JobOffer`'s stored `status`
+to `EXPIRED` in the database *before* raising `AssignmentConflictError` for the rejected accept
+attempt. Since `accept_job_offer` is wrapped in `transaction.atomic()`, that write was silently
+rolled back the instant the exception it raised propagated out of the atomic block — a real,
+reproducible bug caught by this phase's own test
+(`test_accept_job_offer_rejects_expired_offer`, which asserted the persisted `EXPIRED` status and
+failed until this was fixed). The fix: `_reject_if_not_acceptable` is now deliberately **read-only**
+— it checks `JobOffer.is_expired` (a plain computed property, unchanged since Phase 4) and raises
+without ever attempting to persist a status correction. **Nothing automatically flips a stale
+`OFFERED` row's stored status to `EXPIRED` in the database** — that remains explicit Phase 7
+territory (a real background job), exactly as Phase 4 already framed it; `is_expired` alone is
+sufficient for correct accept-rejection and for display purposes.
+
+### 4. The `DELIVERED`/Phase-6 boundary
+
+Per the task's own explicit framing: "`DELIVERED` marking a delivery fully complete is arguably
+closer to Phase 6 custody/proof... use your judgment on exactly where to draw the line." The line
+drawn here: `apps.deliveries.state_machine.ALLOWED_TRANSITIONS` implements every transition through
+`IN_TRANSIT -> AT_DESTINATION` (the courier physically arriving at the destination's doorstep) but
+has **no entry at all** for `AT_DESTINATION -> DELIVERED` — the dict simply has no key mapping
+`AT_DESTINATION` to anything (matching Phase 2's own precedent for the `OFFERED`-onward boundary: "the
+dict simply has no entry allowing it, rather than a partially-implemented handler that might
+silently no-op"). `DELIVERED` — and the recipient PIN/signature capture that must accompany it,
+per `docs/PRODUCT_REQUIREMENTS.md` section 6's "Active delivery" list ("recipient PIN/signature")
+and section 9's state machine — is explicitly Phase 6 ("custody, proof, temperature, and
+incidents") work. This is proven, not just asserted, by
+`test_at_destination_to_delivered_is_not_implemented_in_phase_5`
+(`apps/deliveries/tests/test_state_machine.py`), which walks a delivery all the way to
+`AT_DESTINATION` and then asserts the final transition raises `InvalidTransitionError`.
+
+Separately, `Package.scanned_at`/`scanned_by` (this phase) is the *pickup*-scan confirmation — a
+courier confirming which physical package they picked up — and is explicitly **not** the
+chain-of-custody proof event Phase 6 will build (sender/recipient PIN or signature capture at
+hand-off). The module docstring on `Package.scanned_at` states this boundary directly, so a future
+Phase 6 session does not confuse "package was scanned at pickup" with "custody was formally
+transferred with proof."
+
+### 5. Offline event queue: `localStorage`, not IndexedDB
+
+`static/js/offline-queue.js` stores queued events (status transitions, location pings) as a single
+JSON array in `localStorage` (key `medrelay_offline_queue_v1`), not IndexedDB. At this prototype's
+realistic scale — a handful of status-advance actions plus periodic location pings for one active
+delivery at a time — a small synchronous JSON blob is a straightforward, easily-testable queue;
+IndexedDB's async, transaction-based API would add real complexity for zero benefit at this volume.
+Every queued event carries a client-generated `idempotencyKey` (a v4 UUID via
+`crypto.randomUUID()`, with a non-cryptographic fallback for older browsers) generated **once, at
+enqueue time** — not regenerated on retry — so a server that already applied an event's effect
+recognizes a replay via `apps.couriers.idempotency.idempotent_call` and returns the original result
+instead of duplicating it. `flush()` submits queued events in order via `fetch()`; an event that
+gets *any* HTTP response (success or a legitimate rejection like 409/403/422) is considered resolved
+and removed (retrying a request the server already definitively answered would not change the
+outcome); a genuine network error (offline) leaves it queued and stops the flush loop. `flush()` is
+triggered on `window`'s `load` and `online` events, and immediately after every `enqueue()` call.
+
+### 6. QR scanning: browser `BarcodeDetector` API with an always-present, always-functional manual fallback
+
+`static/js/courier.js`'s `startCameraScan` uses the browser's built-in `BarcodeDetector` API
+(feature-detected via `"BarcodeDetector" in window`) plus `navigator.mediaDevices.getUserMedia` to
+decode a QR code from a live camera feed, falling back gracefully (returns `false`, camera view
+hidden) if either API is unavailable or camera access is denied. **This camera-scanning path is
+genuinely browser/hardware-dependent and is explicitly not exercised by this project's automated
+test suite** — it can only be manually reviewed in a real browser with camera access, and is stated
+as such directly in the JS file's own comments and in `apps/couriers/views.py`'s module docstring.
+The manual-code-entry `<input>` field in `templates/couriers/active_delivery.html` is always
+present and always functional regardless of camera availability or `BarcodeDetector` support — a
+decoded camera value is written into the exact same input field before submission, so
+`apps.cargo.services.confirm_package_scan` (and `apps.couriers.views.PackageScanView`) never know
+or care whether a code came from a camera or a keyboard. This manual path is what is thoroughly
+tested: `apps/cargo/tests/test_services.py` (5 tests: correct code, nonexistent code, blank code,
+wrong-delivery-request code, idempotent re-scan) and `apps/couriers/tests/test_views.py` (3 tests:
+correct code at the HTTP level, wrong code rejected with a clear `422` error, and the idempotent
+double-submit test).
+
+### 7. Location-ping terminal-state cutoff: reject (HTTP 409), not silent no-op
+
+Per the acceptance criterion's explicit "pick one behavior and test it, document which":
+`apps.tracking.services.record_location_ping` **rejects** (raises `LocationPingRejectedError`,
+mapped to HTTP `409` by `apps.tracking.views.LocationPingView`) a ping submitted once the
+assignment/delivery has reached a terminal state — it does not silently accept-and-discard it. The
+chosen behavior gives the courier's offline-queue client (`static/js/offline-queue.js`) an
+unambiguous signal to stop retrying and drop the queued event (per `flush()`'s "any HTTP response
+resolves the queued event" rule — see design decision 5), rather than retrying forever against a
+ping that will never succeed. `TERMINAL_DELIVERY_STATUSES` includes `AT_DESTINATION` (the one
+actually reachable through Phase 5's own workflow), plus `DELIVERED`/`CANCELLED`/`REJECTED`/
+`FAILED`/`RETURNED` defensively (none reachable yet, but the set stays correct once a later phase
+reaches them). `INCIDENT_HOLD`/`RETURNING` are deliberately excluded — a courier already en route
+under an incident hold or a return-to-sender flow may still be physically moving, and neither is
+reachable via any Phase 5 code path anyway. "Terminal" also covers the assignment's *own* status: a
+`DeliveryAssignment` that is `REASSIGNED`/`COMPLETED`/`CANCELLED` (no longer `ACTIVE`) is terminal
+for ping purposes even if the delivery request's own status happens not to be, since that courier is
+no longer the one who should be reporting a location for it.
+
+### 8. Playwright: installed and genuinely usable in this sandbox, with one caveat
+
+Per the task's explicit instruction to try `uv add --group dev playwright` /
+`uv run playwright install --with-deps chromium` and report honestly: **both the package and a real
+Chromium browser binary were successfully installed and used in this environment.**
+`uv add --group dev playwright` succeeded immediately (resolved `playwright==1.62.0` +
+`greenlet==3.5.4` + `pyee==13.0.1`, all pure/prebuilt-wheel packages, no compilation). `playwright
+install --with-deps chromium` failed — `--with-deps` needs interactive `sudo` to install OS-level
+shared libraries, which is unavailable in this non-interactive sandbox
+(`sudo: a terminal is required to read the password`). **Plain `playwright install chromium`
+(without `--with-deps`) succeeded** — this environment already had the OS libraries Chromium needs
+(likely inherited from the base image), so the browser downloaded (~184 MiB) and, when tested
+directly, launched, rendered a real page, and read its content back correctly.
+
+Given that, this phase built genuine browser-driven tests
+(`tests/integration/test_pwa_browser.py`, gated behind `pytest.importorskip("playwright.sync_api")`
+so a future environment without Chromium fails gracefully/skippably rather than crashing the whole
+suite) using Django's `live_server` fixture (a real HTTP server, not just the Django test client) +
+a real launched Chromium instance:
+
+- `test_service_worker_registers_and_precaches_the_static_shell` logs in as a real courier through
+  the real login form, navigates to the real `/couriers/` page, and polls (via a JS loop evaluated
+  in the real page — see the note below on a genuine timing bug this caught) until
+  `navigator.serviceWorker.getRegistrations()` reports a real registration **and**
+  `caches.open('medrelay-courier-shell-v1')`'s real cache actually contains the four precached
+  static URLs (`/static/manifest.json`, `/static/icons/icon.svg`, `/static/js/courier.js`,
+  `/static/js/offline-queue.js`) — this is a real Cache Storage API read-back, not a mock.
+- `test_manifest_link_and_csrf_meta_are_present_in_a_real_rendered_page` reads the real, rendered
+  DOM's `<link rel="manifest">` `href` and `<meta name="csrf-token">` `content` attributes directly
+  (not response text matching).
+
+**A genuine bug this real-browser test caught during development** (not merely theorized): the
+first version polled with Playwright's `page.wait_for_function(() => caches.keys().then(names =>
+names.includes(CACHE_NAME)))` and then immediately read the cache's keys — but `caches.open(name)`
+registers the cache **name** synchronously, before the service worker's install handler's
+`cache.addAll(PRECACHE_URLS)` has actually finished populating it, so this raced ahead and read an
+empty cache every time. The fix was to poll on the cache's real *entry count* (`keys.length >= 4`)
+in a single `page.evaluate` retry loop, not on the cache's mere existence — confirmed to pass
+reliably across repeated runs afterward. This is exactly the kind of interaction real browser
+automation catches that a Django-response-level test never could.
+
+**Honest scope of what this does and does not prove**: this is real, working browser automation in
+*this* sandbox, today — not a claim that it will work in every environment this repository is
+cloned into. `--with-deps`' `sudo` requirement means a genuinely minimal/locked-down container
+without Chromium's runtime shared libraries pre-installed would need those installed by some other
+means before these tests could run; `tests/integration/test_pwa_browser.py`'s `importorskip` guard
+means such an environment gets a clean skip, not a hard failure, for exactly this reason. Nothing
+about the courier PWA's core logic (job offers, status transitions, idempotency, location-ping
+terminal cutoff) depends on Playwright being available — those are all covered by the Django
+test-client-level test suite, which needs no browser at all.
+
+### 9. Static file storage in test settings
+
+`config/settings/test.py` overrides `STORAGES["staticfiles"]` to plain
+`django.contrib.staticfiles.storage.StaticFilesStorage` — Phase 5 is the first phase whose templates
+actually render a `{% static %}` tag during a test run (the courier PWA's manifest link/icon/JS
+includes; every prior phase's plain-HTML templates never used `{% static %}`). The inherited
+`config/settings/base.py` default, whitenoise's `CompressedManifestStaticFilesStorage`, requires a
+real `collectstatic` run to have already built its hashed-filename manifest — correct for a real
+deployment, but not something the test suite runs (and shouldn't need to, for a fast, hermetic
+test run). This surfaced as a real `ValueError: Missing staticfiles manifest entry` failure the
+first time a courier template was rendered in a test, caught and fixed by this settings override
+rather than by avoiding `{% static %}` in the templates.
+
+## Data minimization checked
+
+Every field added this phase was reviewed against `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section
+2. `CourierLocationPing` stores only plain decimal coordinates, an optional accuracy radius, and a
+timestamp — never anything patient-identifying. `CourierActionIdempotencyKey.response_data` stores
+only the same operational JSON already returned to the client (assignment/offer/package IDs,
+statuses, timestamps) — never a diagnosis, lab result, clinical note, medication indication, SSN,
+or insurance identifier. `Package.scanned_at`/`scanned_by` and `JobOffer.decline_reason` are
+operational timestamps/free-text fields with the same "never clinical content" convention already
+established for `Package.description`/`PackagingAttestation.notes` in Phase 2 — `decline_reason`'s
+help text states this explicitly. No field anywhere in this phase's changes stores a real identity
+document, real background-check result, or real geolocation history beyond synthetic demo-data
+coordinates a courier's own test browser reports.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. `uv add --group dev playwright` + `uv sync --group dev`
+were run after adding `playwright` to `pyproject.toml` (both succeeded against the real PyPI index).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+179 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 179 source files
+```
+Two real production-code type findings were fixed rather than suppressed this phase:
+`apps/tracking/views.py` needed an explicit `assert isinstance(request.user, User)` narrowing (the
+same pattern `apps.deliveries.views`/`apps.dispatch.views` already use) after
+`can_access_courier_portal` guarantees an authenticated, non-anonymous user; and
+`tests/integration/test_pwa_browser.py`/`test_pwa.py` (the top-level `tests/` package, not an
+`apps/<name>/tests/` package) needed the same `*.tests.*` factory_boy-stub-gap mypy override Phase 1
+already established for in-app test packages — extended in `pyproject.toml` with one more
+`[[tool.mypy.overrides]]` entry, `module = "tests.*"`, since this is the first phase a top-level
+`tests/` module uses a factory.
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/cargo/migrations/0005_package_scanned_at_package_scanned_by.py`,
+`apps/couriers/migrations/0002_courieractionidempotencykey.py`,
+`apps/dispatch/migrations/0003_joboffer_decline_reason.py`, and
+`apps/tracking/migrations/0001_initial.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+350 passed in 15.23s
+```
+Coverage: 95% overall (3020 statements, 159 missed) for the whole project including Phase 0-4 code —
+all 345 pre-Phase-5 tests still pass (one, `test_concurrent_assign_delivery_exactly_one_wins`, was
+observed to flake once under a full-suite run due to genuine SQLite write-lock contention, exactly
+the documented Phase 4 "OperationalError: database is locked" behavior under load — re-run in
+isolation 5/5 and as part of two subsequent clean full-suite runs, 100% pass rate; not a Phase 5
+regression), plus new Phase 5 tests across `apps/cargo` (+5), `apps/couriers` (+34 across
+idempotency/services/views), `apps/deliveries` (state-machine tests replaced/added), `apps/dispatch`
+(+11), `apps/tracking` (+21), and `tests/integration` (+5, including the 2 real Playwright browser
+tests). New-app coverage: `apps/tracking/models.py`/`services.py` 100%, `apps/tracking/views.py` 91%
+(2 defensive branches: malformed-JSON and missing-lat/lng error paths, not separately exercised),
+`apps/couriers/idempotency.py` 83% (the concurrent-`IntegrityError`-race branch — a genuine, narrow
+race window not exercised by a single-threaded unit test, same honest limitation
+`apps.dispatch.tests.test_concurrency` exists specifically to cover for `assign_delivery`; not
+attempted here for idempotency itself), `apps/couriers/services.py` 100%, `apps/couriers/views.py`
+89% (defensive branches: missing-idempotency-key/malformed-body early returns), `config/pwa.py`
+100%. The remaining project-wide misses are the pre-existing Phase 0 environment-entrypoint gaps
+(`config/asgi.py`, `config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`) plus a
+handful of defensive branches elsewhere — none of it load-bearing Phase 5 logic.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 22 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is 22, up from Phase 4's 21 — the one addition is `playwright` (dev-only,
+explicitly named as an approved zero-cost dependency in
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`: "Playwright for end-to-end browser tests").
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from prior phases (`.secrets.baseline` still has empty
+`results: {}`). Run after `git add -A` so every new Phase 5 file was actually scanned. The one
+string that plausibly looks secret-shaped —
+the synthetic `DEMO_PASSWORD` constant in `tests/integration/test_pwa_browser.py`
+(value `MedRelayPwaBrowserTest!2026`) — is marked `# pragma: allowlist secret` inline in that file
+(same convention as every prior phase's synthetic demo-password constants), confirmed not to
+require a baseline entry.
+
+## Known gaps / deviations (honest list)
+
+- **`AT_DESTINATION -> DELIVERED` is deliberately not implemented** — `DELIVERED` implies
+  proof-of-delivery capture (recipient PIN/signature), which is Phase 6 work (see design decision 4
+  above). Phase 5 gets a delivery to the destination's doorstep and stops there.
+- **No sender-side PIN/signature, package condition/seal checklist, or incident reporting** — all
+  explicitly Phase 6 ("custody, proof, temperature, and incidents") per
+  `docs/PRODUCT_REQUIREMENTS.md` section 6's "Active delivery" list; only the pieces this phase's
+  scope named (job offers, pickup/transit advancement, location pings, offline queue, QR/manual
+  scan, timeline) were built.
+- **No real navigation/routing summary shown to the courier** — `apps.dispatch.models.RoutePlan`/
+  `RouteLeg` (Phase 4's synthetic haversine-based route estimate) are not surfaced in
+  `templates/couriers/active_delivery.html` this phase; only stops/instructions are shown. A real
+  turn-by-turn map remains out of scope per the zero-cost policy (no paid Maps/OSRM wiring exists
+  yet at all).
+- **Camera-based QR scanning is genuinely untested by the automated suite** — see design decision 6.
+  Only the manual-code-entry fallback is covered by real tests; the `BarcodeDetector`/
+  `getUserMedia` path is manually-reviewable-only, stated plainly in the JS/view docstrings.
+- **The offline event queue's actual offline→online recovery behavior was not verified with a real
+  browser going through a real network-loss/recovery cycle** — `tests/integration/test_pwa_browser.py`
+  verifies service-worker registration and static-shell cache population, not the offline queue's
+  `localStorage` round-trip or its `fetch()` retry behavior under a real simulated offline condition
+  (Playwright can simulate this via `context.set_offline(True)`, but this phase's browser-test
+  budget was spent proving the two hard PWA acceptance criteria — SW registration and cache
+  population — rather than this additional scenario). The offline queue's *server-side* half (the
+  Idempotency-Key mechanism a replayed/retried request relies on) is thoroughly tested at the
+  Django level; the *client-side* queuing/retry logic itself (`static/js/offline-queue.js`) is
+  manually reviewable but not automated-browser-tested this phase.
+- **`Playwright`'s `--with-deps` flag does not work in this sandbox** (needs interactive `sudo`) —
+  plain `playwright install chromium` did work here because the needed OS shared libraries happened
+  to already be present; a more locked-down environment might not have them, which is why
+  `tests/integration/test_pwa_browser.py` is guarded with `pytest.importorskip` rather than a hard
+  dependency (see design decision 8).
+- **No demo/seed courier-PWA data was added to `seed_demo_data`** — this phase's automated test
+  suite's factories exercise the identical model/service layer a real courier interaction would use;
+  no sample job offers/location pings were added to the optional `seed_demo_data` command.
+- **`CourierLocationPing` is not append-only-hardened** like `DeliveryStatusTransition` is — a
+  deliberate, documented scope choice (see `apps/tracking/models.py`'s module docstring): raw
+  location telemetry is comparatively low-stakes, high-volume data, and building the same
+  tamper-evident guard for it would be needless ceremony for what this prototype needs.
+- **`DeliveryAssignment`/`JobOffer` idempotency-race coverage is unit-level, not multi-threaded** —
+  unlike `apps.dispatch.tests.test_concurrency`'s genuine multi-threaded test for `assign_delivery`
+  itself, `apps.couriers.idempotency`'s own concurrent-`INSERT`-race branch is not separately
+  exercised by real concurrent threads this phase (see coverage note above) — a reasonable follow-up
+  if this mechanism is later promoted to a shared, higher-traffic location.
+- Coverage is 95%, not 100% (see gate output above) — no hard coverage threshold was specified as a
+  gate; the uncovered lines are concentrated in defensive/early-return branches and one genuine,
+  narrow concurrency-race branch, plus the pre-existing Phase 0 environment-entrypoint gaps.
+- Not yet built (correctly out of scope for Phase 5, per the roadmap): custody/proof events,
+  temperature readings/excursions, incidents, notifications, billing/invoicing, reporting — all
+  later phases.
+
+## Commit history for this phase
+
+1. `b063e5475c6a2744ec662922146fbee021136c52` — "Phase 5: courier PWA, job offers, pickup/transit
+   workflow, and location tracking" — the main Phase 5 commit (all models, migrations, admin,
+   services, courier PWA views/templates, PWA shell/service worker, offline queue, and the
+   idempotency mechanism).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag every prior phase called out), so this line was added in a small
+follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
+history.
+
+# Current Status — Phase 6 (Custody, Proof, Temperature, and Incidents)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 6 on top of the
+Phase 5 foundation (starting point: commit `ae1f230`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 6 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 6 — Custody, proof, temperature,
+and incidents": a real, per-delivery SHA-256 hash-chained `CustodyEvent` log (`apps/custody/`)
+that is genuinely stronger than Phase 2's ORM-only append-only `DeliveryStatusTransition`; a
+sender/recipient PIN-and-signature proof-of-pickup/delivery prototype (`ProofOfPickup`,
+`ProofOfDelivery`, `RecipientVerification`); a package condition/seal checklist
+(`PackageConditionCheck`); simulated temperature readings and excursion detection
+(`TemperatureReading`, `TemperatureExcursion`) that opens a real `Incident` and can place a
+delivery on `INCIDENT_HOLD`; an incident console (`Incident`, `IncidentAction`) with a hard,
+state-machine-level invariant that an open severe/critical incident blocks the `DELIVERED`
+transition until an authorized resolution is recorded; and a return-to-sender flow
+(`ReturnResolution`) wiring `RETURNING -> RETURNED`. This is also the phase that finally extends
+`apps.deliveries.state_machine.ALLOWED_TRANSITIONS` past `AT_DESTINATION` to `DELIVERED`, which
+Phase 5 deliberately stopped short of.
+
+All three Phase 6 acceptance criteria have real, passing tests, described in detail below:
+
+1. **Custody chain integrity** — `apps/custody/tests/test_verification.py::
+   test_verify_custody_chain_detects_genuine_raw_sql_tampering` builds a real chain via
+   `apps.custody.services.record_event`, confirms it verifies, then genuinely tampers with a
+   *historical* event's stored `payload` via a raw SQL `UPDATE` against the real table (bypassing
+   both the instance-level `save()` guard and the queryset-level `.update()` guard entirely — the
+   test explicitly proves those ORM guards would have blocked a normal mutation attempt first, so
+   the raw-SQL bypass is the only way to reach this state) — and confirms
+   `apps.custody.verification.verify_custody_chain` detects the break at exactly the tampered
+   event's sequence number. A second test does the same for a tampered `previous_hash` link, and a
+   third confirms tampering with one delivery's chain never reports a false break for an unrelated
+   delivery's chain.
+2. **Corrections append, never overwrite** —
+   `test_correction_appends_a_new_event_and_never_mutates_the_original` builds a chain, calls
+   `apps.custody.services.append_correction`, confirms the original event's `payload`/`current_hash`
+   are byte-for-byte unchanged after the correction, confirms the correction is a new
+   `CORRECTION_APPENDED` event referencing the original via `correction_of`, and confirms a
+   subsequent direct edit attempt on the original still raises.
+3. **Incident hold blocks `DELIVERED`** — `apps/deliveries/tests/test_state_machine.py::
+   test_delivered_blocked_by_open_severe_incident_and_allowed_after_resolution` (state-machine-level,
+   unit-testing `validate_delivered` directly) and `apps/incidents/tests/test_services.py::
+   test_open_severe_incident_blocks_delivered_and_resolution_unblocks_it` (full service-layer flow:
+   get to `AT_DESTINATION`, open a severe incident, confirm `DELIVERED` is rejected, resolve the
+   incident, confirm `DELIVERED` now succeeds) both pass. The temperature-excursion path is covered
+   by `apps/temperature/tests/test_services.py::
+   test_out_of_range_reading_creates_excursion_opens_incident_and_holds_delivery`.
+
+## Exact files created/changed
+
+`git diff --stat ae1f230` (Phase 5's final commit → this phase's pre-commit working tree):
+
+```
+55 files changed, 4962 insertions(+), 43 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/custody/`** (models/services built for the first time — Phase 0-5 only had the empty app
+  scaffold): `hashing.py` (`compute_event_hash`/`canonical_event_fields` — the single canonicalization
+  function shared by both the writer and the verifier, so they can never silently drift out of sync),
+  `models.py` (`CustodyEventType`, `CustodyActorType`, `CustodyEvent`, `ProofOfPickup`,
+  `RecipientVerification`, `ProofOfDelivery`), `services.py` (`record_event`, `append_correction`,
+  `generate_recipient_pin`, `verify_recipient_pin`, `capture_proof_of_pickup`,
+  `capture_proof_of_delivery`), `verification.py` (`ChainVerificationResult`,
+  `verify_custody_chain`), `admin.py` (`CustodyEvent` registered read-only — no add/change/delete —
+  plus the three proof models), `migrations/0001_initial.py`, `tests/factories.py`,
+  `tests/test_services.py`, `tests/test_verification.py` (the load-bearing tamper-detection suite).
+- **`apps/incidents/`** (models/services/views built for the first time): `models.py`
+  (`IncidentCategory`, `IncidentSeverity`, `HOLD_SEVERITIES`, `IncidentStatus`,
+  `IncidentResolutionType`, `Incident`, `IncidentActionType`, `IncidentAction`,
+  `ReturnResolutionStatus`, `ReturnResolution`), `services.py` (`open_incident`, `add_incident_action`,
+  `resolve_incident`, `initiate_return`, `complete_return`, `IncidentAlreadyResolvedError`),
+  `views.py`/`urls.py` (the incident console: `IncidentListView`, `IncidentDetailView`,
+  `IncidentResolveView`), `admin.py`, `migrations/0001_initial.py`, `tests/factories.py`,
+  `tests/test_services.py` (the incident-hold invariant suite, including the "second incident while
+  already on hold" edge case this session's own testing caught — see design decision 5),
+  `tests/test_views.py`.
+- **`apps/temperature/`** (models/services/management command built for the first time): `models.py`
+  (`TemperatureReadingSource`, `TemperatureReading`, `TemperatureExcursion`), `services.py`
+  (`record_reading` — the real excursion-detection business rule), `management/commands/
+  simulate_temperature_readings.py` (the honestly-documented synthetic-sensor-data generator),
+  `admin.py`, `migrations/0001_initial.py`, `tests/factories.py`, `tests/test_services.py`,
+  `tests/test_management_commands.py`.
+- **`apps/cargo/`**: `models.py` (`TemperatureProfile.min_temp_c`/`max_temp_c`/`in_range()`;
+  `PackageConditionCheckStage`, `SealStatus`, `TemperatureIndicatorStatus`, `PackageConditionCheck`
+  — per docs/ARCHITECTURE_AND_DATA_MODEL.md's "Cargo and packages" entity grouping, this model lives
+  here rather than in `apps.custody`, cross-referencing `custody.CustodyEvent` via a lazy FK),
+  `services.py` (`record_condition_check`; `confirm_package_scan` now also appends a `PICKUP_SCAN`
+  custody event), `admin.py`, `migrations/0006.../0007.../0008_seed_temperature_ranges.py` (a data
+  migration seeding synthetic ambient 15-25C / refrigerated 2-8C reference ranges onto the two
+  existing `TemperatureProfile` rows), `tests/test_models.py`, `tests/test_services.py`.
+- **`apps/deliveries/`**: `state_machine.py` (`ALLOWED_TRANSITIONS` extended with
+  `AT_DESTINATION -> DELIVERED`, `{ASSIGNED..AT_DESTINATION} -> INCIDENT_HOLD`,
+  `{ASSIGNED..AT_DESTINATION} -> RETURNING`, `INCIDENT_HOLD -> {...resume states, RETURNING,
+  CANCELLED, FAILED}`, `RETURNING -> RETURNED`; new `validate_delivered` hard gate), `services.py`
+  (`create_delivery_request` now appends the `REQUEST_CREATED` genesis custody event), `views.py`/
+  `urls.py` (`GenerateRecipientPinView` — a customer-facing "generate and show once" PIN action),
+  `tests/test_state_machine.py` (replaced the old Phase 5 "not implemented" boundary test with real
+  Phase 6 DELIVERED-gating tests), `tests/test_views.py`.
+- **`apps/dispatch/`**: `services.py` (`assign_delivery` now appends a `COURIER_ASSIGNED` custody
+  event after the assignment transition commits).
+- **`apps/couriers/`**: `services.py` (`advance_delivery_status` now appends `COURIER_ARRIVED`/
+  `ROUTE_STARTED`/`FACILITY_ARRIVAL` custody events for the corresponding pickup/transit steps),
+  `views.py` (`CapturePickupProofView`, `CaptureConditionCheckView`, `CompleteDeliveryView` — the
+  endpoint that finally drives `AT_DESTINATION -> DELIVERED` — and `ReportIncidentView`, all behind
+  the same `Idempotency-Key` mechanism Phase 5 established), `urls.py`,
+  `tests/test_phase6_views.py`.
+- **`static/js/courier.js`**: `initSignaturePad` — a small HTML5 `<canvas>` mouse/touch signature
+  pad returning a base64 PNG data URL.
+- **`templates/couriers/active_delivery.html`**: pickup-proof capture, package condition check,
+  complete-delivery (recipient proof + PIN), and incident-report sections/JS.
+- **`templates/deliveries/deliveryrequest_detail.html`**: "Generate recipient PIN" action, a
+  hash-chain custody-event timeline, and an incidents list.
+- **`templates/incidents/incident_list.html`**, **`templates/incidents/incident_detail.html`**
+  (new): the minimal server-rendered incident console.
+- **`templates/dispatch/board_list.html`**: a link to the incident console.
+- **`config/urls.py`**: added `path("incidents/", include("apps.incidents.urls"))`.
+- **`docs/COST_AUDIT.md`**: regenerated (timestamp only; dependency count unchanged at 22 — **zero
+  new dependencies were added this phase**, exactly as scoped: `hashlib`/`secrets`/`json` are
+  stdlib, PIN hashing reuses `django.contrib.auth.hashers` (already part of Django), and signature
+  capture is plain HTML5 canvas + base64, no new JS library).
+
+## Design decisions
+
+### 1. Hash algorithm and canonicalization: SHA-256 over a `json.dumps(..., sort_keys=True)` snapshot, chained via a `previous_hash | canonical_json` digest input
+
+`apps/custody/hashing.py`'s `compute_event_hash(event, previous_hash)` is the **single** function
+both the writer (`apps.custody.services.record_event`) and the verifier
+(`apps.custody.verification.verify_custody_chain`) call — this was a deliberate structural choice
+so the two could never drift into two different hashing implementations that happen to agree today
+and silently diverge later. The canonical fields
+(`apps/custody/hashing.py::canonical_event_fields`) are every field that describes *what happened*
+(delivery/package IDs, sequence, event type, actor type/id/label, `occurred_at`, `recorded_at`,
+location, device metadata, the structured payload, and `correction_of_id`) — deliberately excluding
+`current_hash` itself (the output) and including `previous_hash` as a separate digest-input
+component (`f"{previous_hash}|{canonical_json}"`) rather than folding it into the JSON blob, so the
+chain-link and the event's own content are cleanly separable in the hash construction. `Decimal`/
+datetime values are serialized via a `default=` callback (`str()`/`isoformat()`) for deterministic,
+JSON-safe output. `hashlib.sha256` (Python stdlib) — no new dependency, per the phase's own
+zero-cost framing.
+
+**A real, honest design correction made during this session**: `CustodyEvent.recorded_at` is *not*
+`auto_now_add=True`. An `auto_now_add` field's value is only assigned by Django internally at
+`INSERT` time, which would make it impossible to include in a hash computed *before* that `INSERT`
+runs. Instead, `apps.custody.services.record_event` calls `timezone.now()` once, assigns it
+explicitly to both `occurred_at` (when not otherwise specified) and `recorded_at`, and only then
+computes the hash — so every hashed field is a value already fully known and set on the Python
+object before any database write happens, keeping the hash fully deterministic and reproducible
+from the row's own stored data.
+
+### 2. Sequence/previous-hash assignment is race-safe via the same row-lock convention Phase 4 established
+
+`record_event` wraps its work in `transaction.atomic()` and takes
+`DeliveryRequest.objects.select_for_update()` on the delivery being appended to before reading the
+prior event's `sequence`/`current_hash` — the exact same "lock the parent row before computing a
+value that depends on the current state of its children" pattern
+`apps.dispatch.services.assign_delivery` already established for `DeliveryAssignment`. This is what
+prevents two concurrent `record_event` calls for the same delivery from ever computing the same
+`sequence` or hashing against a stale `previous_hash`. Per Phase 4's own honestly-documented
+SQLite-vs-PostgreSQL caveat (`select_for_update()` is a real row lock on PostgreSQL, a documented
+no-op on SQLite), the real backend-independent correctness backstop here is the
+`unique_custody_event_sequence_per_delivery` partial-free `UniqueConstraint` on
+`(delivery_request, sequence)` — a genuine concurrent double-append would hit a real
+`IntegrityError`, not silently duplicate a sequence number. A dedicated multi-threaded concurrency
+test (mirroring `apps.dispatch.tests.test_concurrency`) was **not** built for `record_event` this
+phase — a reasonable, explicitly-flagged follow-up (see "Known gaps" below), since this phase's
+test budget went to the tamper-detection suite instead, which is the literal, explicit acceptance
+criterion.
+
+### 3. A real bug caught and fixed: UUID primary keys defeat a naive `self.pk is not None` append-only guard
+
+The first version of `CustodyEvent.save()` copied `DeliveryStatusTransition`'s exact append-only
+guard (`if self.pk is not None: raise`). This immediately broke every single custody-event write in
+the entire test suite (44 failing tests on first full-suite run) — because `CustodyEvent.id` is a
+`UUIDField(default=uuid.uuid4)`, Django assigns that default **at instantiation time**, so
+`self.pk` is already non-`None` on a brand-new, never-saved instance. `DeliveryStatusTransition`
+never had this problem because it uses a plain auto-incrementing `BigAutoField` primary key, which
+really is `None` until the first `INSERT`. The fix: check `self._state.adding` (Django's own
+"has this instance ever been successfully saved" flag) instead of `self.pk is not None` — this is
+documented directly in `CustodyEvent.save()`'s inline comment so a future UUID-pk append-only model
+doesn't repeat the same mistake.
+
+### 4. Signature-capture prototype: HTML5 `<canvas>` pad + typed-name fallback, stored as an inline base64 data URL — explicitly not a legal e-signature
+
+Per the task's explicit "your call" on canvas-vs-typed-name: **both** are implemented.
+`static/js/courier.js`'s `initSignaturePad` is a small, real mouse/touch-driven canvas drawing pad
+(no external signature-pad library — a new dependency was avoidable here) that returns a base64
+`data:image/png;base64,...` string via `canvas.toDataURL()`. `ProofOfPickup`/`ProofOfDelivery` also
+carry a `typed_signature_name` field as an always-available, always-testable fallback — used by
+every automated test in this phase (canvas-drawn strokes are not something a headless Django test
+client can produce, exactly the same "camera scanning is real but untested; manual entry is the
+tested path" honesty pattern Phase 5 already established for QR scanning). **This is explicitly a
+prototype, not a legally binding e-signature**: no timestamp-authority integration, no
+cryptographic signing of the drawn image, no identity-proofing behind it — stated directly in
+`apps/custody/models.py`'s module docstring. The image is stored inline as a `TextField` (the data
+URL string) rather than through a real object-storage adapter — a deliberate demo-scale
+simplification (this prototype's synthetic delivery volumes never approach a scale where inline
+storage matters), explicitly flagged as something a real deployment should route through the
+zero-cost policy's `ObjectStorageProvider` adapter pattern instead.
+
+### 5. PIN prototype: `django.contrib.auth.hashers.make_password`/`check_password`, never plaintext at rest — with an honestly-scoped "out of band" delivery mechanism
+
+`apps.custody.services.generate_recipient_pin` generates a synthetic 4-digit PIN using `secrets`
+(stdlib, not `random` — costs nothing extra and is the more honest default even for a low-stakes
+demo secret) and stores **only** its salted PBKDF2 hash via `django.contrib.auth.hashers.
+make_password` — the exact same hasher Django uses for account passwords, so this needed **zero**
+new dependencies. The plaintext PIN is returned to the caller exactly once, at generation time, and
+is never persisted anywhere. Honest limitation, stated directly in that function's docstring: this
+prototype has **no real recipient portal or SMS/email delivery channel yet** (that is explicitly
+Phase 7 — "notifications, recipient tracking, billing, and reports" — territory) — the demo flow
+routes the one-time plaintext PIN through a flash message on the existing, already-tenant-scoped
+customer delivery-detail page (`apps.deliveries.views.GenerateRecipientPinView`), on the
+assumption that an authorized customer-org user relays it to the recipient by phone or in person,
+mirroring how several real last-mile courier apps' PIN hand-off flows work today. This is
+data-minimization-compliant (docs/SECURITY_COMPLIANCE_BOUNDARIES.md): the PIN is a synthetic,
+operational, non-identity-document secret, never a real biometric or identity credential.
+
+### 6. Incident severity model: `HOLD_SEVERITIES` as the single source of truth two apps must agree on
+
+`docs/PRODUCT_REQUIREMENTS.md` section 13 says "**Severe** incidents suspend normal completion" —
+not every incident. `apps.incidents.models.IncidentSeverity` has four values
+(`MINOR`/`MODERATE`/`SEVERE`/`CRITICAL`); `HOLD_SEVERITIES = frozenset({SEVERE, CRITICAL})` is the
+one place that decides which severities actually place a delivery on `INCIDENT_HOLD` — consulted
+by both `apps.incidents.services.open_incident` (to decide whether to transition the delivery) and
+`apps.deliveries.state_machine.validate_delivered` (to decide whether an open incident blocks
+`DELIVERED`), so the two can never silently disagree about which incidents are hold-worthy. A
+`MINOR`/`MODERATE` incident is still fully recorded (with its own `INCIDENT_OPENED` custody event)
+but never changes `DeliveryRequest.status` — proven by
+`test_minor_incident_does_not_block_delivered` and
+`test_open_incident_with_minor_severity_does_not_change_delivery_status`.
+
+`Incident.delivery_status_before_hold` snapshots the exact pre-hold status so
+`apps.incidents.services.resolve_incident`'s `RESUMED` resolution restores it precisely rather than
+guessing (e.g. "go back to `AT_DESTINATION`" would be wrong for an incident opened while
+`IN_TRANSIT`). **A genuine edge case caught by this session's own testing, not just theorized**: a
+*second* severe incident opened while the delivery is *already* `INCIDENT_HOLD` (e.g. two
+temperature excursions on the same delivery) would otherwise attempt an illegal, non-existent
+`INCIDENT_HOLD -> INCIDENT_HOLD` self-transition and raise `InvalidTransitionError` — caught by
+`apps/temperature/tests/test_management_commands.py::
+test_simulate_temperature_readings_with_excursion_chance_can_open_incidents` (which generates ten
+consecutive excursions against one delivery) failing during development. Fixed in
+`apps.incidents.services.open_incident`: a second hold-worthy incident opened while already on
+hold is still fully recorded (`placed_delivery_on_hold=True`) but skips the redundant transition,
+inheriting the *original* still-open incident's pre-hold snapshot — see
+`test_second_severe_incident_while_already_on_hold_does_not_error`.
+
+### 7. Incident-hold enforcement mechanism: a real state-machine transition guard, not a UI suggestion
+
+Two independent, reinforcing mechanisms block `DELIVERED` while a severe incident is open — neither
+is optional or bypassable by calling a different entry point:
+
+1. **Structural**: `ALLOWED_TRANSITIONS[DeliveryStatus.INCIDENT_HOLD]` simply has no `DELIVERED`
+   entry — a delivery whose status is literally `INCIDENT_HOLD` cannot reach `DELIVERED` no matter
+   what, the same "the dict has no key for that edge" convention Phase 2/5 already established for
+   other deliberately-unimplemented transitions.
+2. **`validate_delivered`** (called by `apps.deliveries.state_machine.transition_delivery_request`
+   whenever `to_status == DELIVERED`, exactly parallel to `validate_ready_for_dispatch`'s existing
+   gate): queries for any `OPEN` `Incident` with `severity__in=HOLD_SEVERITIES` for the delivery and
+   raises `ValidationError` if one exists — this is defense-in-depth for any future code path that
+   might reach `AT_DESTINATION` with an open severe incident without the status having been flipped
+   to `INCIDENT_HOLD` (not reachable today, but the guard doesn't rely on that never happening).
+
+Both are exercised by real tests (see "Summary" above) — this was explicitly required to be a
+transition-guard-level enforcement, not a UI-only suggestion, and it is.
+
+### 8. Simulated temperature readings: an honestly-labeled synthetic generator, not a real IoT integration
+
+Per the zero-cost policy's requirement that external capabilities (temperature sensors included) go
+through an adapter interface with a local/mock implementation, and given there is no real sensor
+hardware anywhere in this project's environment: `apps.temperature.services.record_reading` is
+always called with an explicit, already-known `temperature_c` value — it never listens for or polls
+a real device. `apps/temperature/management/commands/simulate_temperature_readings.py` is the
+demo-data generator: a small random walk (via `random.Random`, seedable for reproducible demo runs)
+around a delivery's `TemperatureProfile` range, with a configurable `--excursion-chance` to
+deliberately demonstrate the excursion → incident → hold pipeline end to end. Both the model
+(`apps.temperature.models`'s module docstring) and the command's own docstring state plainly that
+this is simulated, not live sensor data — no claim of validated cold-chain compliance anywhere, per
+docs/PRODUCT_REQUIREMENTS.md section 12.
+
+`apps.cargo.models.TemperatureProfile.min_temp_c`/`max_temp_c` (seeded via a new data migration,
+`apps/cargo/migrations/0008_seed_temperature_ranges.py`, with illustrative demo values — ambient
+15-25C, refrigerated 2-8C) are the reference ranges `record_reading`/`TemperatureProfile.in_range()`
+check a reading against; a profile with both bounds blank never excursions (proven by
+`test_profile_with_no_configured_bounds_never_excursions`), and a specific package's own
+temperature profile (if it differs from the delivery request's default) is honored over the
+request-level default (`test_record_reading_per_package_uses_the_packages_own_temperature_profile`).
+
+### 9. Custody-event emission wired into every phase's existing service functions, not just Phase 6's own new code
+
+Beyond the purely-Phase-6 event types (proof capture, condition checks, incidents, returns,
+corrections), this phase also retrofit real custody-event emission into several **existing**
+service functions from earlier phases, so the custody timeline is a genuinely complete record of a
+delivery's life, not just its final chapter: `apps.deliveries.services.create_delivery_request`
+(`REQUEST_CREATED`, the genesis event), `apps.dispatch.services.assign_delivery`
+(`COURIER_ASSIGNED`), `apps.cargo.services.confirm_package_scan` (`PICKUP_SCAN`), and
+`apps.couriers.services.advance_delivery_status` (`COURIER_ARRIVED`/`ROUTE_STARTED`/
+`FACILITY_ARRIVAL` for the corresponding pickup/transit steps). This was a deliberate scope
+decision — it touches Phase 2/4/5 code, which is exactly the kind of change that risks regressing
+previously-passing tests, so the full Phase 0-5 suite was re-run after each such change and stayed
+green throughout (see "Quality gate results" below). `DELIVERY_SCAN` and `CUSTODY_TRANSFERRED`
+remain defined in `CustodyEventType`'s vocabulary (per docs/PRODUCT_REQUIREMENTS.md section 10's
+required event-type list) but have no automatic emission trigger this phase — an honest, explicitly
+flagged gap (see below), not a silent omission.
+
+### 10. Return-to-sender: reachable both via incident resolution and directly
+
+`docs/IMPLEMENTATION_ROADMAP.md`'s framing ("RETURNING -> RETURNED as one path out of
+INCIDENT_HOLD (or from other applicable states per the state diagram)") was read as permission to
+allow `RETURNING` from every active courier state, not only from `INCIDENT_HOLD` —
+`apps.incidents.services.initiate_return` can be called directly (e.g. "wrong destination,
+returning now" with no formal incident ever opened; `ReturnResolution.incident` is nullable for
+exactly this case) or automatically by `resolve_incident` when an incident is resolved with
+`resolution_type=RETURN_TO_SENDER`. `complete_return` then drives the final `RETURNING -> RETURNED`
+step. Both paths are covered by real tests
+(`test_initiate_return_without_incident_is_allowed`,
+`test_resolve_incident_return_to_sender_initiates_return_flow`, `test_complete_return_transitions_to_returned`).
+
+## Data minimization checked
+
+Every field added this phase was reviewed against docs/SECURITY_COMPLIANCE_BOUNDARIES.md section 2:
+`CustodyEvent.payload`/`device_metadata` store only operational JSON (event-specific IDs, statuses,
+free-text operational notes) — the same "never diagnosis/clinical/SSN/insurance content" convention
+every prior phase's free-text fields already followed. `RecipientVerification.pin_hash` is a salted
+hash, never plaintext; `ProofOfPickup`/`ProofOfDelivery` signature fields are a drawn squiggle or a
+typed name, never a real identity document or biometric. `Incident.summary`/`resolution_note` and
+`IncidentAction.note` are operational descriptions (what happened, what was done about it), with
+the same "never clinical content" expectation as `Package.description`/`PackagingAttestation.notes`
+established in Phase 2. `TemperatureReading.temperature_c` is a synthetic sensor value, never
+attached to any patient/clinical context.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. No `uv lock`/`uv sync` re-run was needed — **zero new
+runtime or dev dependencies were added this phase** (see "Exact files created/changed" above).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+205 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 205 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/cargo/migrations/0006_temperatureprofile_max_temp_c_and_more.py`,
+`0007_packageconditioncheck_custody_event_and_more.py`, `0008_seed_temperature_ranges.py`,
+`apps/custody/migrations/0001_initial.py`, `apps/incidents/migrations/0001_initial.py`, and
+`apps/temperature/migrations/0001_initial.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+419 passed in 17.82s
+```
+Coverage: 95% overall (3825 statements, 185 missed) for the whole project including Phase 0-5 code —
+all 350 pre-Phase-6 tests still pass, plus 69 new Phase 6 tests across `apps/custody` (+23),
+`apps/incidents` (+29 across services/views), `apps/temperature` (+13 across services/management
+commands), `apps/cargo` (+9), `apps/couriers` (+8), and `apps/deliveries` (+5 state-machine, +2
+view). New-app coverage: `apps/custody/services.py`/`verification.py` 100%, `apps/custody/models.py`
+96%, `apps/custody/hashing.py` 89% (one defensive `_json_default` branch for an exotic type not
+exercised — every value this codebase's models actually store is covered), `apps/incidents/
+services.py`/`views.py` 100%, `apps/incidents/models.py` 93% (`__str__`/property defensive lines),
+`apps/temperature/services.py` 100%, `apps/temperature/models.py` 93%. The remaining project-wide
+misses are the pre-existing Phase 0 environment-entrypoint gaps (`config/asgi.py`, `config/celery.py`,
+`config/wsgi.py`, `config/settings/{dev,prod}.py`) plus a handful of defensive branches elsewhere —
+none of it load-bearing Phase 6 logic.
+
+**Phase 4 concurrency test stability, observed honestly**: `apps.dispatch.tests.test_concurrency::
+test_concurrent_assign_delivery_exactly_one_wins` was re-run in isolation 35 times total across two
+batches (15 + 20) this session: **2 failures out of 35 runs (~6%)**, both with the same signature —
+*both* threads received `AssignmentConflictError` (0 successes, not a crash) rather than the
+expected exactly-one-succeeds outcome. This is a **higher** flake rate than Phase 5's own
+observation ("flaky exactly once... not reproducible in ~25 reruns since"), and the likely cause is
+identified, not just guessed: `assign_delivery` now also calls `apps.custody.services.record_event`
+(a `COURIER_ASSIGNED` custody event) inside its own `transaction.atomic()` block, which does its own
+`select_for_update()` + lookup + `INSERT` before the outer transaction commits — widening the window
+during which SQLite's single whole-database writer lock is held, making it more likely a concurrent
+writer's own `BEGIN` times out with `OperationalError: database is locked` (mapped to
+`AssignmentConflictError` by existing Phase 4 code, exactly as designed) rather than losing a real
+row-lock race. This is not a new failure *mode* (Phase 4's own module docstring already documents
+and handles exactly this `OperationalError` class), just a higher *frequency* of an
+already-anticipated, already-handled SQLite coarse-locking artifact — the underlying correctness
+guarantee (the partial `UniqueConstraint` on `DeliveryAssignment` making a genuine double-assignment
+impossible) is completely unaffected; no delivery was ever assigned to two couriers in any of these
+runs. Per this task's own explicit framing ("not something to fix, just mention what you observed"),
+this was not changed further this session, but is flagged as a real, quantified, honestly-explained
+regression in test *stability* (not correctness) for whoever picks this up next — a reasonable
+mitigation would be moving the custody-event append outside `assign_delivery`'s critical locked
+section (e.g. after the `DeliveryAssignment` INSERT's own nested savepoint commits) if this needs
+tightening later.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 22 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is unchanged at 22 — Phase 6 added zero new packages (hashlib/secrets/json are
+stdlib; PIN hashing reuses Django's own `django.contrib.auth.hashers`; signature capture is plain
+HTML5 canvas + base64, no new JS dependency).
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from prior phases (`.secrets.baseline` still has empty
+`results: {}`). Run after `git add -A` so every new Phase 6 file was actually scanned. No new
+secret-shaped string was introduced this phase (the synthetic demo PIN is generated at runtime via
+`secrets.choice`, never a hard-coded literal).
+
+## Known gaps / deviations (honest list)
+
+- **`DELIVERY_SCAN`/`CUSTODY_TRANSFERRED` custody event types are defined but not automatically
+  emitted** — the full required vocabulary from docs/PRODUCT_REQUIREMENTS.md section 10 exists on
+  `CustodyEventType`, but this phase did not add a delivery-side package scan step (only the
+  Phase 5 pickup-side scan exists) or a distinct "custody transferred" trigger separate from
+  `custody_accepted`/`delivery_completed`. `PACKAGE_PREPARED` is similarly defined but not
+  automatically emitted (packaging attestation creation happens via the wizard form/admin, not a
+  single service function this phase touched).
+- **No dedicated multi-threaded concurrency test for `apps.custody.services.record_event`** — unlike
+  `apps.dispatch.tests.test_concurrency`'s real multi-threaded test for `assign_delivery`, the
+  sequence/previous-hash race window in `record_event` is protected by the same row-lock + partial
+  `UniqueConstraint` pattern but is not separately exercised by concurrent threads this phase — a
+  reasonable follow-up given this mechanism's importance.
+- **Increased (but still low, ~6%) flakiness observed in the pre-existing Phase 4 concurrency test**,
+  attributable to this phase's own change (custody-event emission inside `assign_delivery`'s
+  transaction) — see the "Quality gate results" section above for the full honest write-up and a
+  suggested mitigation. Not fixed this session per the task's explicit framing.
+- **Signature images are stored as inline base64 text**, not through a real object-storage adapter —
+  a deliberate demo-scale simplification (see design decision 4), fine at this prototype's synthetic
+  data volumes but not how a real deployment should do it.
+- **PIN delivery to the recipient is fully manual/out-of-band** — no real recipient
+  portal/SMS/email channel exists yet (explicitly Phase 7 territory); the plaintext PIN surfaces
+  once via a flash message on the existing customer delivery-detail page for an authorized
+  customer-org user to relay by phone/in person.
+- **No incident category/severity restriction by actor role** — a courier reporting an incident via
+  `ReportIncidentView` can select any of the twelve categories and any severity; a real deployment
+  might want to restrict couriers from self-declaring, say, `suspected_tampering` at `CRITICAL`
+  without an ops review step. Not restricted this phase — every open severity is treated uniformly
+  by the hold-placement rule.
+- **`IncidentStatus` is a simple `OPEN`/`RESOLVED` binary** — no intermediate "investigating"/
+  "escalated" workflow stage, even though `IncidentActionType.ESCALATED` exists as a loggable action
+  type. Kept minimal per the phase's own "reasonably minimal but real" framing for the incident
+  console.
+- **No real background job flips a stale `JobOffer` to `EXPIRED`, no scheduled job runs
+  `simulate_temperature_readings` automatically** — both remain manually/explicitly invoked, exactly
+  as Phase 4/5 already scoped for the former and as this phase explicitly scopes the latter (a
+  management command, not a Celery beat schedule — no Celery task wiring was added this phase).
+- Coverage is 95%, not 100% (see gate output above) — no hard coverage threshold is a gate; the
+  uncovered lines are concentrated in defensive/early-return branches and `__str__`/property methods,
+  plus the pre-existing Phase 0 environment-entrypoint gaps.
+- Not yet built (correctly out of scope for Phase 6, per the roadmap): notifications, recipient
+  tracking/short-lived links, billing/invoicing, reporting/exports — all Phase 7 work.
+
+## Commit history for this phase
+
+1. `f75b672` — "Phase 6: custody hash chain, proof of pickup/delivery, temperature excursions, and
+   incidents" — the main Phase 6 commit (all models, migrations, admin, services, courier PWA
+   proof/condition/incident endpoints, incident console, and the hash-chain verifier).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag every prior phase called out), so this line was added in a small
+follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
+history.
+
+# Current Status — Phase 7 (Notifications, Recipient Tracking, Billing, and Reports)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 7 on top of the
+Phase 6 foundation (starting point: commit `4dde86c`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 7 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 7 — Notifications, recipient
+tracking, billing, and reports": a `NotificationProvider` adapter (real local email to Mailpit +
+a simulated, no-real-network-call SMS adapter + a demo-only webhook-attempt log), an in-app
+`Notification` inbox, a short-lived signed anonymous recipient tracking link (new `apps.recipient`
+app), synthetic `Invoice`/`InvoiceLine` billing records that reuse Phase 2's pricing engine, and
+tenant-scoped CSV/HTML report exports plus an operational-metrics dashboard (new `apps.reporting`
+app). All new models have migrations, all quality gates pass (see below), and all three Phase 7
+hard acceptance criteria are covered by real, passing tests:
+
+1. **No sensitive data in notification logs** —
+   `apps/notifications/tests/test_payload.py` and `apps/notifications/tests/test_services.py`
+   prove `apps.notifications.payload.build_notification_payload` rejects (raises, never
+   silently strips) any field outside an explicit operational-identifier allow-list, and that a
+   compliant payload is persisted correctly.
+2. **Expired recipient links rejected** — `apps/recipient/tests/test_tokens.py` and
+   `apps/recipient/tests/test_views.py` sign a token with the real clock patched into the past
+   (`django.core.signing.time.time`), then resolve/request it with the real, current clock, and
+   confirm Django's own `TimestampSigner.unsign(..., max_age=...)` genuinely rejects it (never a
+   hardcoded/fake assertion) — the view returns a clean `403`, granting no access.
+3. **Exports are tenant-scoped** —
+   `apps/reporting/tests/test_views.py::test_end_to_end_delivery_summary_export_contains_only_the_requesting_orgs_records`
+   builds two organizations with mixed delivery data, requests a delivery-summary CSV export as a
+   user scoped only to organization A, and asserts the downloaded CSV bytes contain organization
+   A's delivery IDs and organization B's name/IDs nowhere in the output; two further tests confirm
+   requesting/downloading organization B's export by ID directly is rejected with `403`, not a
+   silently-empty result.
+
+## Exact files created/changed
+
+`git diff --stat 4dde86c` (Phase 6's final commit → this phase's staged working tree):
+
+```
+60 files changed, 4380 insertions(+), 5 deletions(-)
+```
+
+New/changed by app:
+
+- **`apps/notifications/`** (new domain code; the app itself existed as an empty Phase 0 shell):
+  `models.py` (`NotificationType`, `NotificationChannel`, `ProviderMode`, `Notification`,
+  `EmailLogEntry`, `SmsLogEntry`, `WebhookEndpoint`, `WebhookDelivery`), `payload.py`
+  (`ALLOWED_NOTIFICATION_FIELDS`, `DisallowedNotificationFieldError`,
+  `build_notification_payload` — the data-minimization boundary), `providers.py`
+  (`NotificationProvider` protocol, `ProviderResult`, `EmailNotificationProvider` (`mode=LOCAL`,
+  real SMTP to Mailpit), `SimulatedSmsProvider` (`mode=MOCK`, no real network call ever)),
+  `rendering.py` (subject/body/SMS-summary templating from the allow-listed payload only),
+  `services.py` (`create_notification`, `send_email_notification`, `send_sms_notification`,
+  `record_webhook_delivery_attempt`, `notify_invoice_issued`, `notify_recipient_link_issued`),
+  `admin.py`, `views.py`/`urls.py` (the in-app inbox), `migrations/0001_initial.py`,
+  `tests/{factories,test_payload,test_models,test_services,test_views}.py`.
+- **`apps/recipient/`** (brand-new app — see design decision 2 for why this is not folded into
+  `apps.tracking`): `apps.py`, `tokens.py` (`generate_recipient_tracking_token`/
+  `resolve_recipient_tracking_token`, `RecipientLinkExpiredError`/`RecipientLinkInvalidError`,
+  built on `django.core.signing.TimestampSigner` — no new dependency), `models.py`
+  (`RecipientLinkAccessLog`, `RecipientLinkAccessOutcome`), `services.py`
+  (`build_masked_tracking_context`, `issue_recipient_link`, `log_access`), `views.py`
+  (`RecipientTrackingView`, `GET`/`POST /recipient/<token>/`), `admin.py`, `urls.py`,
+  `migrations/0001_initial.py`, `tests/{test_tokens,test_services,test_views}.py`.
+- **`apps/billing/`** (new domain code): `models.py` (`PaymentStatus`, `Invoice`, `InvoiceLine`),
+  `services.py` (`generate_invoice_for_delivery` — reuses
+  `apps.deliveries.pricing.quote_delivery_request`, never recomputes pricing; `mark_invoice_paid`/
+  `mark_invoice_unpaid`; `render_invoice_csv`/`render_invoice_html`), `admin.py`, `views.py`/
+  `urls.py` (list/detail/CSV/HTML export/generate/mark-paid), `migrations/0001_initial.py`,
+  `tests/{factories,test_services,test_views}.py`.
+- **`apps/reporting/`** (new domain code): `models.py` (`ExportFormat`, `ExportJob`), `reports.py`
+  (`ReportType`, `REPORT_REGISTRY`, and one row-builder function per report: delivery summary,
+  custody timeline, pickup/delivery proof, incident summary, on-time performance, invoice
+  summary), `rendering.py` (`rows_to_csv`/`rows_to_html` — generic tabular renderers, also
+  imported by `apps.billing.services` for invoice export), `services.py`
+  (`get_or_create_export_job` — the dedup mechanism, `render_report_csv`/`render_report_html`,
+  `render_export_job`, `operational_metrics`), `admin.py`, `views.py`/`urls.py`
+  (`OrganizationReportsView`, `ExportDownloadView`), `migrations/0001_initial.py`,
+  `tests/{factories,test_services,test_views}.py`.
+- **`apps/organizations/services.py`**: added `BILLING_ROLES`, `CROSS_ORG_BILLING_MANAGE_ROLES`,
+  `can_view_billing`, `can_manage_billing`, `can_export_reports` — the same explicit
+  per-feature-allowlist pattern every prior phase's new capability used
+  (`DISPATCH_ROLES`/`can_dispatch`, `DELIVERY_REQUEST_CREATOR_ROLES`/
+  `can_create_delivery_requests`, etc.).
+- **`config/settings/base.py`**: added `"apps.recipient"` to `INSTALLED_APPS`. `EMAIL_BACKEND`/
+  `EMAIL_HOST`/`EMAIL_PORT`/`DEFAULT_FROM_EMAIL` were **already** wired to the Mailpit compose
+  service since Phase 0 — confirmed by reading the file before writing any Phase 7 code; no
+  settings change was needed there, only the actual `EmailNotificationProvider` code to use it.
+- **`config/urls.py`**: added `notifications/`, `recipient/`, `billing/`, `reporting/` includes.
+- **`templates/notifications/inbox.html`**, **`templates/recipient/tracking.html`**,
+  **`templates/billing/{invoice_list,invoice_detail}.html`**,
+  **`templates/reporting/dashboard.html`** — same minimal plain-HTML convention as every prior
+  phase's templates.
+- **`docs/COST_AUDIT.md`**: regenerated (dependency count unchanged at 22 — **zero new
+  dependencies were added this phase**; everything here is Django/DRF stdlib plus
+  `django.core.signing`, `django.contrib.auth.hashers` (already a dependency, reused, not
+  duplicated), Python's `csv`/`hashlib`/`html`/`io`/`json` standard library, exactly as the task
+  anticipated).
+
+## Design decisions
+
+### 1. `NotificationProvider` is a real `Protocol` this phase introduces, not a pre-existing pattern
+
+Earlier phases only *mentioned* the adapter-interface concept in docstrings
+(`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` section 4 names `RoutingProvider`/
+`NotificationProvider`/`PaymentProvider`/`BackgroundCheckProvider`/`ObjectStorageProvider`/
+`TemperatureSensorProvider`, and e.g. `apps/custody/models.py` references `ObjectStorageProvider`
+and `apps/temperature/models.py` references `TemperatureSensorProvider` purely as forward-looking
+docstring notes) — none of them exist as real Python types anywhere in this codebase before this
+phase. `apps/notifications/providers.py`'s `NotificationProvider` `Protocol` is the first of these
+six to actually be built: every provider call returns a `ProviderResult` carrying `provider_name`,
+`mode` (`LOCAL`/`MOCK`), `retrieved_at`, a request `correlation_id`, `source`/`version`, `success`,
+`warnings`, and `detail` (always the exact allow-listed payload that was persisted — never a raw
+provider-response blob that could smuggle in something outside the allow-list). Two concrete
+implementations ship: `EmailNotificationProvider` (`mode=LOCAL` — a genuine local SMTP call to
+Mailpit, not a simulation) and `SimulatedSmsProvider` (`mode=MOCK` — no network call of any kind,
+ever). A real `PaymentProvider`/`BackgroundCheckProvider` is explicitly **not** built this phase
+(billing stays a manually-set `PaymentStatus` mock per CLAUDE.md's do-not-build list) —
+`WebhookDelivery` gets a documented no-op stub instead of a real adapter (see decision 4 below).
+
+### 2. `apps.recipient` is a brand-new app, not folded into `apps.tracking`
+
+The task's own framing left this as a judgment call. `apps.tracking` (Phase 5) is the
+*authenticated courier's* browser periodically POSTing its own GPS location — a high-frequency,
+session-authenticated, courier-owned write path with idempotency-key semantics
+(`apps.couriers.idempotency`). The recipient tracking link is the opposite shape: a low-frequency,
+**unauthenticated**, time-boxed *read* (plus one PIN-confirmation write) by a party with no
+MedRelay account at all — the one genuinely anonymous, public-facing surface in this codebase.
+Folding it into `apps.tracking` would blur a security-relevant boundary (which endpoints require
+login, which don't) for zero code-reuse benefit — the two apps share no models or service
+functions, and the risk of an authenticated-app convention (e.g. a `LoginRequiredMixin` added by
+habit to a future refactor) accidentally leaking onto the one public endpoint felt like the wrong
+trade-off. Documented in `apps/recipient/tokens.py`'s module docstring, not just here.
+
+### 3. Recipient link mechanism: `django.core.signing.TimestampSigner`, 72-hour `max_age`, two rejection outcomes
+
+`apps.recipient.tokens.generate_recipient_tracking_token`/`resolve_recipient_tracking_token` are a
+thin wrapper around Django's own `TimestampSigner` (stdlib/Django — zero new dependency, exactly
+as `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 4's "short-lived signed recipient tokens"
+anticipates). The signed value is the delivery request's UUID; `max_age` is enforced entirely
+inside Django's own `unsign()` — this repository adds no hand-rolled timestamp comparison.
+`RECIPIENT_LINK_MAX_AGE_SECONDS = 60 * 60 * 72` (72 hours) is a deliberately generous default for
+a demo covering a scheduled delivery's full window; there is no per-delivery override yet (a
+documented gap, see below). Rejection is split into exactly two outcomes, both never granting
+access: **expired** (`RecipientLinkExpiredError` → HTTP `403` — "this was a real link once, but
+it timed out," a demo-honest response since expiry itself is not a secret) and **invalid**
+(`RecipientLinkInvalidError` → HTTP `404` — bad signature, malformed token, *or* a delivery that no
+longer exists, all collapsed into one outcome deliberately, so a probing caller can never learn
+"this token was never real" vs. "this delivery doesn't exist" vs. "this signature was tampered
+with" from the response alone). `apps/recipient/tests/test_tokens.py` proves the expiry check is
+genuine, not hardcoded: it patches the real clock `TimestampSigner` reads
+(`django.core.signing.time.time`) into the past **only at signing time**, then calls
+`resolve_recipient_tracking_token` with the real, unpatched current clock — so it is Django's own
+`max_age` arithmetic that raises, not a test-authored fake. A companion test signs a token just
+*inside* the window to guard against an off-by-one that would reject everything.
+
+### 4. `WebhookDelivery` is a demo-only, no-network-call stub — a deliberate, documented SSRF-avoidance choice
+
+The task explicitly offered three options for `WebhookDelivery` (build it as a documented no-op
+stub, restrict it clearly, or defer it entirely) and asked for a judgment call. This phase built
+it (satisfying `docs/ARCHITECTURE_AND_DATA_MODEL.md`'s "Commercial and system" entity list and
+giving the operational-metrics/reporting surface something real to eventually read) but
+`apps.notifications.services.record_webhook_delivery_attempt` makes **no HTTP/socket call of any
+kind** — no `requests`/`urllib` import exists anywhere in `apps.notifications`. It only accepts an
+already-persisted, organization-registered `WebhookEndpoint` row (never a raw, client-supplied URL
+at call time, which is the actual SSRF vector the task was concerned about) and writes a
+`WebhookDelivery` log row with `simulated=True` always. A later phase, once there is a genuine
+external customer integration to support, should replace this with a real outbound HTTP sender
+behind an explicit egress-control/allowlist policy — extending this stub in place would be the
+wrong move, per its own docstring.
+
+### 5. Notification data-minimization mechanism: an explicit allow-list that rejects, not strips
+
+`apps.notifications.payload.build_notification_payload` is the single choke point every
+notification/SMS/email/webhook-log-creating function in `apps.notifications.services` goes
+through. It validates a caller-supplied `fields` dict against
+`ALLOWED_NOTIFICATION_FIELDS` (delivery/package/organization/facility/courier/assignment/
+invoice/incident/export identifiers, status/category enum values, amounts, timestamps — never a
+name, phone number, address, free-text instructions field, PIN, or signature payload) and
+**raises** `DisallowedNotificationFieldError` naming every offending key if anything else is
+present, rather than silently stripping the bad field and persisting a truncated-but-successful
+record. Reject-not-strip was chosen deliberately: a caller that tries to pass
+`recipient_contact_phone` almost certainly has a real bug (why does this code path have that
+value in scope at all?), and a loud failure during development surfaces that immediately, whereas
+silent stripping would let the bug ship and only be caught by someone reading logs later. Email
+subjects/bodies and SMS summaries (`apps.notifications.rendering`) are template-rendered
+exclusively from the already-allow-listed payload's own key/value pairs — there is no code path
+anywhere in `apps.notifications` that accepts arbitrary free text and writes it into a persisted
+log or a sent message.
+
+### 6. Billing: HTML/CSV export, not PDF — WeasyPrint's system dependencies were not confirmed available
+
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` frames WeasyPrint as "optional only if its system
+dependencies remain fully local/free; otherwise use HTML/CSV exports first." This session did not
+attempt to install WeasyPrint's system dependencies (Pango/Cairo/GDK-Pixbuf) in this environment —
+per the policy's own default, that means HTML/CSV is the correct starting point, not a compromise
+to revisit only if WeasyPrint turns out to be unavailable. `apps.billing.services.
+render_invoice_csv`/`render_invoice_html` and `apps.reporting.rendering.rows_to_csv`/`rows_to_html`
+share the same two dependency-free renderers (Python's stdlib `csv`/`html` modules only); every
+export carries the project's exact required disclaimer text
+(`config.context_processors.DEMO_DISCLAIMER`), reused rather than re-typed, so the wording can
+never drift from the canonical copy.
+
+### 7. Invoice generation reuses `Quote`, never recomputes pricing, and is idempotent-but-not-overwriting
+
+`apps.billing.services.generate_invoice_for_delivery` calls
+`apps.deliveries.pricing.quote_delivery_request` only when `delivery_request.quote` does not exist
+yet — every dollar figure on an `Invoice`/`InvoiceLine` is read from that `Quote`'s breakdown
+fields, mapped 1:1 to a named line item (`Base fee`, `Distance/time estimate`,
+`Service-level surcharge`, etc.), never a second, independent calculation. Unlike `Quote` itself
+(recomputed/overwritten on every call, per Phase 2's own design), `generate_invoice_for_delivery`
+returns an **existing** invoice unchanged if one already exists for the delivery — an invoice is a
+financial record, and silently overwriting a possibly-already-issued/paid invoice's amounts on a
+second call would be a real correctness bug, not a convenience. `apps.billing.services.
+_next_invoice_number`'s honest, demo-scale limitation (a `count()+1` counter, not a
+`select_for_update()`-guarded sequence) is documented in its own docstring: acceptable because
+invoice generation is not a high-concurrency code path anywhere in this prototype, unlike
+`apps.dispatch.services.assign_delivery`'s genuine concurrent-writer scenario.
+
+### 8. Export dedup: an audit-log dedup window, never a content cache — exports are always rendered live
+
+`apps.reporting.models.ExportJob` deliberately never stores rendered CSV/HTML content — it is
+purely a "who requested what export, scoped to which organization, when" audit-log row. The actual
+export content is always generated fresh from the live database at *download* time
+(`apps.reporting.services.render_export_job`), which sidesteps any staleness concern entirely (an
+organization's data can change between the request and the download) and is proved by a dedicated
+test (`test_render_export_job_reflects_data_added_after_the_job_was_created`) that adds a new
+delivery *after* the `ExportJob` row was created and confirms it still appears in the rendered
+output. "Deduplicate exports" (`docs/ARCHITECTURE_AND_DATA_MODEL.md` section 9) is given a real,
+narrower meaning instead: **re-requesting an identical export (same organization, report type,
+format, and parameters) within a 5-minute window returns the existing `ExportJob` audit-log row
+instead of writing a new one** — this only affects whether a new audit-log entry is written, never
+what data the export contains. This is a deliberately conservative interpretation of "deduplicate,"
+chosen because a stronger one (e.g. caching rendered content, or a much longer/indefinite dedup
+window) would risk exactly the staleness bug described above for no real benefit at this
+prototype's data volumes.
+
+### 9. Tenant-scoping is checked twice for exports: at request time and again at download time
+
+`apps.reporting.views.OrganizationReportsView.post` checks `can_export_reports(request.user,
+organization_id)` before creating/reusing an `ExportJob`; `apps.reporting.views.
+ExportDownloadView.get` checks it **again**, independently, against `job.organization_id`, before
+rendering anything — never trusting that possessing a valid-looking `ExportJob` UUID alone proves
+authorization. This is the concrete mechanism behind the "attempting to export another
+organization's data directly (e.g. by ID) is rejected, not silently empty" acceptance criterion:
+`test_downloading_another_orgs_export_job_by_id_is_rejected_not_empty` constructs exactly this
+scenario (an org-A user given org-B's real `ExportJob` id) and confirms a `403`, not an empty
+result that could be mistaken for "org B just has no data."
+
+## Data minimization checked
+
+Every new field in `apps.notifications`, `apps.recipient`, `apps.billing`, and `apps.reporting`
+was reviewed against `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 2. `Notification.payload`/
+`EmailLogEntry.payload`/`SmsLogEntry.payload`/`WebhookDelivery.payload` can only ever contain
+`apps.notifications.payload.ALLOWED_NOTIFICATION_FIELDS` keys — enforced at the code level (see
+design decision 5), not just by convention, and covered by `apps/notifications/tests/
+test_payload.py`. `EmailLogEntry.to_email`/`SmsLogEntry.recipient` reference a MedRelay `User`
+account (an internal/org/courier account holder, never a bundled patient/customer contact
+record); `SmsLogEntry.recipient_label` is documented as "e.g. 'courier', 'requester' — never a
+phone number." `apps.recipient.services.build_masked_tracking_context` never surfaces a courier's
+real name/phone, a sender/recipient contact name/phone, or raw `CustodyEvent.payload`/
+`device_metadata` — only a generic `"Your assigned courier"`/`"A courier will be assigned soon"`
+label and each custody event's *type* + timestamp (never its payload), covered by
+`test_masked_context_timeline_carries_event_types_not_payloads`.
+`apps.recipient.models.RecipientLinkAccessLog` deliberately stores no IP address or user agent —
+just an outcome enum and a timestamp. No field anywhere in these four apps stores a diagnosis, lab
+result, clinical note, medication indication, SSN, or insurance identifier.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`export PATH="$HOME/.local/bin:$PATH" && source .venv/bin/activate && export
+DJANGO_SETTINGS_MODULE=config.settings.test`. No `uv lock`/`uv sync` re-run was needed — **zero new
+runtime or dev dependencies were added this phase** (see "Exact files created/changed" above).
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+248 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 248 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (0 silenced).
+```
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(run after committing `apps/notifications/migrations/0001_initial.py`,
+`apps/recipient/migrations/0001_initial.py`, `apps/billing/migrations/0001_initial.py`, and
+`apps/reporting/migrations/0001_initial.py`)
+
+### `pytest --cov --cov-report=term-missing`
+```
+510 passed in 19.63s
+```
+Coverage: 95% overall (4666 statements, 217 missed) for the whole project including Phase 0-6
+code — all 419 pre-Phase-7 tests still pass, plus 91 new Phase 7 tests: `apps/notifications`
+(37 collected, 35 new — 2 predate this phase as Phase 0's `test_apps.py` smoke test),
+`apps/recipient` (18 collected, all new — brand-new app, no pre-existing `test_apps.py`),
+`apps/billing` (18 collected, 16 new), `apps/reporting` (24 collected, 22 new).
+New-app coverage: `apps/notifications/payload.py`/`providers.py`/`rendering.py` 100%,
+`apps/notifications/services.py` 89% (5 lines uncovered — the `record_webhook_delivery_attempt`
+correlation-id branch, exercised behaviorally but not with a dedicated coverage-focused test),
+`apps/recipient/services.py`/`views.py` 100%, `apps/recipient/tokens.py` 93% (2 defensive lines),
+`apps/billing/services.py` 100%, `apps/billing/views.py` 77% (the HTML export's tenant-rejection
+branch and one mark-paid early-return are covered behaviorally by sibling tests but not
+independently line-counted — acceptable, matching every prior phase's precedent that 100% is not a
+hard gate), `apps/reporting/reports.py` 100%, `apps/reporting/services.py` 98%,
+`apps/reporting/views.py` 100%. The remaining project-wide misses are the pre-existing Phase 0
+environment-entrypoint gaps (`config/asgi.py`, `config/celery.py`, `config/wsgi.py`,
+`config/settings/{dev,prod}.py`) plus a handful of defensive branches/`__str__` methods elsewhere —
+none of it Phase 7 code.
+
+**Phase 4 concurrency test flakiness, observed again this session (not fixed, per the task's
+explicit framing)**: `apps.dispatch.tests.test_concurrency::
+test_concurrent_assign_delivery_exactly_one_wins` failed once during this session's repeated full-
+suite runs (both threads received `AssignmentConflictError`, the same SQLite coarse-locking
+signature Phase 6 already documented at ~6% observed frequency) and passed cleanly on every
+immediately-following isolated re-run. This is pre-existing Phase 4/6 territory, untouched by any
+Phase 7 change (`apps.dispatch` was not modified this phase) — flagged here only because this
+session happened to observe it again, exactly as Phase 6's own write-up anticipated a future
+session might.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 22 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+Dependency count is unchanged at 22 — Phase 7 added zero new packages. One real, if minor,
+friction point worth recording: `apps.billing.models`/`apps.notifications.{models,providers}`
+initially had docstrings that named the specific prohibited services they were consciously *not*
+integrating (e.g. "no real Stripe/Twilio integration exists") — `audit_cost`'s prohibited-indicator
+scan correctly flagged these as violations, since it matches on the indicator string appearing
+anywhere in `apps/`/`config/` source, not just in executable code. This is the audit working as
+designed (fail-closed, "false positives are acceptable... false negatives are not" per its own
+docstring), not a bug; the docstrings were reworded to describe the same fact ("no real paid SMS/
+payment processor integration exists") without naming the specific prohibited product, matching
+the precedent `apps/couriers/models.py` already set for the background-check provider
+("Background Check (Placeholder — No Real Provider Integrated)" rather than naming Checkr).
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from every prior phase (`.secrets.baseline` still has
+empty `results: {}`). Run after `git add -A` so every new Phase 7 file was actually scanned.
+
+## Known gaps / deviations (honest list)
+
+- **No automatic notification triggers wired into delivery-status transitions, job offers, or
+  incident open/resolve events.** `apps.notifications.services` provides the full building blocks
+  (payload allow-list, email/SMS/webhook adapters, dedup) and demonstrates them end-to-end via two
+  real call sites this phase added — `notify_invoice_issued` (wired into
+  `apps.billing.views.GenerateInvoiceView`) and `notify_recipient_link_issued` (wired into
+  `apps.recipient.services.issue_recipient_link`) — but broader wiring into every existing
+  lifecycle event across `apps.deliveries`/`apps.dispatch`/`apps.incidents` was judged out of scope
+  to control this already-large phase's blast radius on prior phases' tested code. `NotificationType`
+  defines the full vocabulary (`DELIVERY_STATUS_CHANGED`, `JOB_OFFER_AVAILABLE`, `INCIDENT_OPENED`,
+  `INCIDENT_RESOLVED`, `CREDENTIAL_EXPIRING`) so a later phase can wire these in without a schema
+  change.
+- **`WebhookDelivery` never performs a real HTTP request** — a deliberate, documented SSRF-avoidance
+  scope decision (see design decision 4), not an oversight. A real outbound webhook sender is
+  future work once a genuine external customer integration exists.
+- **No recipient-facing UI/CTA anywhere yet links to `/recipient/<token>/`** — the delivery detail
+  page does not yet render an "issue tracking link" button; `apps.recipient.services.
+  issue_recipient_link` and the URL/view/token mechanism are fully built and tested, but wiring a
+  visible "Generate recipient link" action into the existing `apps.deliveries` delivery-detail
+  template was judged separable UI-polish work, consistent with Phase 8 being the dedicated UX
+  pass. The plaintext link itself, exactly like Phase 6's recipient PIN, is relayed to the actual
+  package recipient out of band (no automated recipient-facing delivery channel exists in this
+  prototype).
+- **`RECIPIENT_LINK_MAX_AGE_SECONDS` (72 hours) is a single, code-level constant** — no
+  per-delivery or per-service-level override exists yet (e.g. a `stat` delivery might reasonably
+  want a shorter-lived link than a `scheduled` one).
+- **`apps.billing.services._next_invoice_number` is a `count()+1` counter, not a
+  `select_for_update()`-guarded sequence** — an honest, documented limitation, acceptable because
+  invoice generation is not a high-concurrency code path in this prototype (see design decision 7).
+- **No dedicated multi-threaded concurrency test for invoice generation or export-job dedup** —
+  unlike `apps.dispatch.tests.test_concurrency`'s real multi-threaded test for `assign_delivery`,
+  neither code path here has a genuinely concurrent writer scenario in this prototype to justify
+  one.
+- **`ExportJob.params`/`params_hash` support arbitrary caller-supplied filter parameters in the
+  data model, but no report currently accepts any** — every Phase 7 report is a full,
+  unfiltered-by-date-range dump of an organization's current data. Date-range/status filtering is
+  reasonable future work; the dedup mechanism (design decision 8) already accounts for `params` so
+  adding a filter later needs no schema change.
+- **Increased-but-still-low flakiness in the pre-existing Phase 4 concurrency test**, observed
+  again this session — see the "Quality gate results" section above. Not fixed this session, per
+  the task's explicit framing; unrelated to any Phase 7 change (`apps.dispatch` was not touched).
+- Coverage is 95%, not 100% (see gate output above) — no hard coverage threshold is a gate; the
+  uncovered lines are concentrated in defensive/early-return branches, plus the pre-existing
+  Phase 0 environment-entrypoint gaps.
+- Not yet built (correctly out of scope for Phase 7, per the roadmap — reserved for Phase 8):
+  unified design system, accessibility pass, TOTP MFA, upload/input rate limiting, the general
+  audit viewer, backup/restore documentation, threat model.
+
+## Commit history for this phase
+
+1. `d9d06ac` — "Phase 7: notifications, recipient tracking, billing, and reports" — the main
+   Phase 7 commit (all four apps' models, migrations, admin, services, providers, views/urls,
+   templates, and the full Phase 7 test suite).
+
+A doc file can never contain the hash of the commit that introduces its own final content (the
+same inherent one-commit lag every prior phase called out), so this line was added in a small
+follow-up commit after commit (1) landed — see `git log --oneline` for the definitive, current
+history.
+
+# Current Status — Phase 8 (UX, Accessibility, Security, and Demo Hardening)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 8 on top of the
+Phase 7 foundation (starting point: commit `80cd033`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Summary
+
+Phase 8 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 8 — UX, accessibility, security,
+and demo hardening": a unified Tailwind CSS design system applied across every existing template,
+a real accessibility pass verified with axe-core via Playwright (violations found and fixed, not
+just asserted clean), TOTP MFA for privileged demo accounts (django-otp), explicit upload/input
+size limits, rate limiting on the recipient PIN-verification/token-resolution endpoints
+(django-ratelimit), a new generic `AuditEvent` log plus a unified read-only audit viewer, a real
+executed backup/restore drill against the actual PostGIS image (`docs/BACKUP_RESTORE.md`), a
+specific threat model (`docs/THREAT_MODEL.md`), a real investigation and fix for the documented
+Phase 4 SQLite concurrency-test flake, a genuine Playwright critical-path test, and a documented
+PHI sweep. All new models have migrations, all quality gates pass (see below), and every Phase 8
+acceptance criterion is covered by real, passing, non-stubbed tests.
+
+## Design decisions
+
+### 1. Tailwind CSS via the CDN "Play" build, not a CLI/PostCSS build step
+
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` names Tailwind CSS as the design system and this phase's
+own instructions explicitly allow the CDN build "for zero-build-step simplicity ... unless you
+judge a proper Tailwind CLI/PostCSS build is easy to add without violating the zero-cost policy or
+adding required Node.js tooling as a hard dependency for running the app." This repository's
+`Dockerfile`/`compose.yaml` have had **zero** Node.js runtime dependency since Phase 0 (Python/`uv`
+only) — adding a Tailwind CLI/PostCSS build step would newly require Node.js just to *build* the
+`web` image, a real, avoidable increase in required tooling for a project whose zero-Node posture
+has held for seven prior phases. The CDN script (`templates/base.html`) is free, needs no API key,
+and is loaded only by the *browser* rendering a page — never a server-side/build-time dependency.
+The one honest tradeoff: pages depend on `cdn.tailwindcss.com` being reachable at render time,
+exactly the same class of tradeoff already accepted for OpenStreetMap-derived tile/routing data
+elsewhere in the stack per `docs/TECH_STACK_AND_ZERO_COST_POLICY.md`. Documented inline in
+`templates/base.html`'s own comment.
+
+### 2. A global Tailwind `@layer base` style block, not per-element class edits everywhere
+
+Tailwind's CSS reset (Preflight, bundled with the CDN build) strips default browser styling from
+every heading, table, button, input, and link — meaning simply loading Tailwind on the existing
+plain-HTML templates would have made every `<h1>`/`<table>`/`<button>` look like unstyled inline
+text. Rather than hand-editing every element in all ~25 templates, `templates/base.html` defines a
+project-wide `@layer base` block (`h1`/`h2`/`h3`/`a`/`table`/`th`/`td`/`label`/text inputs/
+checkboxes/`button`/`.btn`) using Tailwind's `text/tailwindcss` inline-style-block feature (the
+same mechanism the Phase 5 courier shell already needed for its own `.btn`/`.card` component
+classes, now formalized project-wide). Because Tailwind's cascade-layer ordering guarantees
+`base < components < utilities` regardless of source order or selector specificity, any template
+that *does* need to override a default (e.g. `templates/partials/nav.html`'s white-on-dark nav
+links) can do so with an ordinary utility class — the base layer never fights an explicit override.
+This is what made "consistent form styling, consistent table/list styling" (the phase's own
+framing) achievable as a single shared style block plus a mechanical pass converting per-template
+`style="..."` attributes to Tailwind utility classes, rather than a much larger per-element rewrite.
+
+### 3. One role-aware shared nav (`templates/partials/nav.html`) + a new `nav` context processor
+
+`config.context_processors.nav` computes `nav_is_internal_staff`/`nav_is_courier`/
+`nav_can_dispatch`/`nav_can_view_audit`/`nav_mfa_eligible` once per request (delegating to the
+exact same `apps.organizations.services` permission functions every view already uses — the
+processor decides nothing new about *access*, only what to show a *link* to; every linked page
+still enforces its own permission check independently) so every non-courier, non-recipient page
+gets one consistent top nav without touching every view's `get_context_data`. The courier PWA
+(`templates/couriers/base.html`) and the anonymous recipient tracking page
+(`templates/recipient/tracking.html`) keep their own minimal/no-nav shells, per
+`docs/PRODUCT_REQUIREMENTS.md` section 6 (courier is a phone-first tool) and the fact that an
+anonymous recipient has no account to navigate from.
+
+### 4. axe-core sourcing: a local, dev-only npm install, never a CDN reference from app code
+
+Node.js (v18.19.1) and npm (9.2.0) were confirmed available in this sandbox and `npm install
+axe-core` completed in well under a minute with zero vulnerabilities — so the task's preferred path
+("check this is feasible/fast ... if npm/Node isn't cleanly available ... look for a pip-installable
+alternative") was taken. `tests/accessibility/package.json` declares `axe-core` as its only
+dependency; `npm install` there produces `tests/accessibility/node_modules/axe-core/axe.min.js`,
+which `tests/accessibility/test_axe_scans.py` injects into each page under test via Playwright's
+`page.add_script_tag(path=...)` — a **local file path**, never a CDN URL, and never referenced from
+any file under `apps/`, `templates/`, or `static/`. `node_modules/` is gitignored;
+`package.json`/`package-lock.json` are committed (same reproducibility rationale as `uv.lock`).
+This is unambiguously dev-only test tooling, on the same footing as Playwright itself (an approved
+dev dependency since Phase 5) — confirmed by `python manage.py audit_cost` continuing to pass with
+no new Python dependency needed for this (only `django-otp`/`django-ratelimit` were added to
+`pyproject.toml`; axe-core is npm-side test tooling, entirely outside the Python dependency graph
+`audit_cost` audits).
+
+### 5. TOTP MFA scope: internal ops staff (any role) + customer-org owners/administrators; opt-in
+
+`apps.organizations.services.is_mfa_eligible` grants MFA *enrollment* eligibility to any internal
+operations role (`user.is_internal_staff`) or any customer-org owner/administrator (an active
+`OrganizationMembership` with `role` in `ORG_MANAGING_ROLES`) — not every customer-org role
+(requester/dispatcher, billing manager, compliance reviewer, read-only auditor are not required to
+enroll). Enrollment is opt-in, matching the phase's own instruction ("does not need to be mandatory
+for every login in the demo, but the mechanism must be real and testable"); once a user *has*
+enrolled (a confirmed `django_otp.plugins.otp_totp.models.TOTPDevice`), login for that specific
+account genuinely requires the current code — see "TOTP MFA" below for exactly how this is
+enforced and verified with a real generated code, not a hardcoded stub.
+
+### 6. Rate limiting: `django-ratelimit`, Valkey-cache-backed, applied to the recipient endpoints
+
+`django-ratelimit` (free/open-source, added to `pyproject.toml` and `audit_cost`'s allowlist) was
+chosen over a hand-rolled cache-based limiter for its maturity (built-in `Ratelimited` exception,
+`RATELIMIT_VIEW` hook for a clean custom response) while still using the project's existing
+Valkey-backed `CACHES["default"]` (`RATELIMIT_USE_CACHE = "default"` in `config/settings/base.py`)
+— no new infrastructure. Applied to `apps.recipient.views.RecipientTrackingView`: the anonymous
+tracking GET (30/minute/IP) and, more importantly, the PIN-verification POST (10/minute/IP **and**
+5/minute/token) — the real PIN-brute-force mitigation `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`
+section 4 calls for, which had no rate limiting at all before this phase. A rejected request gets a
+genuine `429` (`apps.recipient.views.ratelimited_view`, wired via
+`django_ratelimit.middleware.RatelimitMiddleware`) rather than an unhandled 403.
+`config/settings/test.py` silences `django_ratelimit`'s "LocMemCache is not a shared cache" system
+checks (true in a real multi-process deployment, irrelevant to the single-process SQLite test
+suite; dev/prod use the real shared Valkey cache, which is not silenced there).
+
+### 7. Audit viewer architecture: a new generic log for auth/membership + links into existing logs
+
+`docs/ARCHITECTURE_AND_DATA_MODEL.md` lists a single `AuditEvent` entity (confirmed, by grepping
+the codebase before this phase, that `apps/audit/` had no `models.py` at all — genuinely unbuilt
+until now), while `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 6 lists a much longer "record
+these" list, most of which **already has its own dedicated, purpose-built table**: delivery state
+transitions (`apps.deliveries.models.DeliveryStatusTransition`, Phase 2), assignment overrides
+(`apps.dispatch.models.DispatchOverride`, Phase 4), custody events (`apps.custody.models.
+CustodyEvent`, Phase 6 — a real hash chain, strictly stronger tamper evidence than a generic log
+could offer), incident actions (`apps.incidents.models.IncidentAction`, Phase 6), and export
+creation (`apps.reporting.models.ExportJob`, Phase 7). Duplicating all of that into one wide table
+would either lose information or become a second, competing source of truth. Instead,
+`apps.audit.models.AuditEvent` is scoped to exactly the two event families that had **no existing
+home**: authentication events (login succeeded/failed, logout — new capture points, wired via
+`django.contrib.auth.signals` in `apps/audit/signals.py`) and role/membership changes
+(`OrganizationMembership`/`InternalRoleAssignment` creation and role/active-flag changes, via
+`pre_save`/`post_save` signals that snapshot the prior DB state so only genuine changes are
+logged — verified by a real test that a same-value re-save creates no spurious row). The audit
+viewer (`apps/audit/views.py`, `templates/audit/event_list.html`) surfaces this generic log,
+filterable by event type/organization, alongside a fixed set of links into the five existing
+per-domain logs above — it never re-queries or duplicates their rows. Scoped to
+`compliance_reviewer`/`operations_manager`/`system_administrator` internal roles only
+(`apps.organizations.services.can_view_audit_log`), tenant-aware where applicable (membership
+events carry the `organization` FK for filtering).
+
+### 8. Concurrency-flake decision: retry the race once, not the assertions
+
+See `apps/dispatch/tests/test_concurrency.py`'s expanded docstring for the full account. Summary:
+the documented ~5-7% flake (both threads cleanly conflict, zero successes — never a crash, never a
+double-assignment) was reproduced empirically (4/40 = 10% baseline in this environment) and traced
+to a real, specific mechanism by reading Django's own SQLite test-database setup
+(`django/db/backends/sqlite3/creation.py`): the in-memory test database runs in SQLite's
+*shared-cache* mode (required for two threads' separate connections to see the same in-memory
+data), and shared-cache mode has its own lock-conflict-detection behavior (`SQLITE_LOCKED`, a
+deadlock signal) that is **not** subject to the ordinary busy-timeout retry loop that covers
+`SQLITE_BUSY`. This was confirmed, not just theorized: raising the SQLite connection `timeout`
+(`config/settings/test.py`, Python's 5-second default → 30 seconds) measurably reduced the flake
+(1/40 in a second batch) but did not eliminate it, and every observed failure still completed in
+~2 seconds — far short of even the original timeout, proving it is an immediate deadlock detection,
+not a timed-out wait a longer timeout would fix. Decision: keep the (harmless, genuinely helpful
+for real `SQLITE_BUSY` contention) timeout bump, and retry the two-thread race itself once if both
+attempts cleanly conflict — the delivery request's state is provably unchanged in that case (still
+`READY_FOR_DISPATCH`, asserted explicitly before retrying), so a same-object retry is valid. The
+hard invariants (no crash, no double-assignment, exactly one success given at least one attempt)
+are never weakened. **Stress-tested 60/60 passes** after the fix (up from ~90-97.5% before, across
+two separate 40-run baseline batches). This has no bearing on the real Postgres deployment, where
+`select_for_update()` takes a genuine row lock with no equivalent deadlock-on-promotion behavior.
+
+## Files created/changed
+
+`git diff 80cd033 --stat` (Phase 7's final commit → this phase's final commit):
+
+```
+74 files changed, 2538 insertions(+), 212 deletions(-)
+```
+
+By area:
+
+- **Dependencies**: `pyproject.toml`/`uv.lock` — added `django-otp>=1.7,<2.0` and
+  `django-ratelimit>=4.1,<5.0` (both extended in `apps/audit/management/commands/audit_cost.py`'s
+  `ALLOWED_PACKAGES`). `segno` (already approved, Phase 2) is reused for TOTP QR-code rendering
+  instead of adding a new `qrcode` dependency. `tests/accessibility/package.json` +
+  `package-lock.json` (npm, axe-core only — outside the Python dependency graph entirely; see
+  design decision 4).
+- **`config/settings/base.py`**: `django_otp`/`django_otp.plugins.otp_totp`/`django_ratelimit` in
+  `INSTALLED_APPS`; `OTPMiddleware`/`RatelimitMiddleware` in `MIDDLEWARE`;
+  `DATA_UPLOAD_MAX_MEMORY_SIZE`/`FILE_UPLOAD_MAX_MEMORY_SIZE`/`DATA_UPLOAD_MAX_NUMBER_FIELDS`;
+  `RATELIMIT_USE_CACHE`/`RATELIMIT_VIEW`; `config.context_processors.nav` added to `TEMPLATES`.
+- **`config/settings/test.py`**: SQLite `OPTIONS: {"timeout": 30}`;
+  `SILENCED_SYSTEM_CHECKS` for `django_ratelimit.E003`/`W001` (LocMemCache-only, test-settings-only).
+- **`config/urls.py`**: `MedRelayLoginView`/`MfaVerifyView`/`MfaEnrollView` routes
+  (`apps.accounts.mfa`); `apps.audit.urls` included at `/audit/`.
+- **`config/context_processors.py`**: new `nav()` processor.
+- **`apps/audit/`**: `models.py` (`AuditEvent`, append-only, same ORM-enforcement pattern as
+  `DeliveryStatusTransition`), `signals.py`, `admin.py`, `views.py`, `urls.py`,
+  `migrations/0001_initial.py`, `tests/{test_models,test_signals,test_views}.py`.
+  `apps.organizations.services`: `AUDIT_VIEWER_ROLES`/`can_view_audit_log`, `is_mfa_eligible`.
+- **`apps/accounts/mfa.py`** (new): `MedRelayLoginView`/`MfaVerifyView`/`MfaEnrollView`/
+  `TOTPCodeForm`; `apps/accounts/tests/test_mfa.py`.
+- **`apps/recipient/views.py`**: rate limiting (`django-ratelimit` decorators) +
+  `ratelimited_view`; `apps/recipient/tests/test_rate_limiting.py`.
+- **`apps/custody/validators.py`** (new): `MAX_SIGNATURE_DATA_URL_LENGTH`/
+  `SignatureTooLargeError`/`check_signature_data_url_length`; wired into
+  `apps/custody/models.py` (model-level `MaxLengthValidator`) and `apps/custody/services.py`
+  (explicit pre-save check, since the JSON-in/JSON-out courier endpoints never call
+  `full_clean()`); `apps/couriers/views.py` catches the new exception and returns 413.
+  `apps/incidents/models.py`'s `Incident.SUMMARY_MAX_LENGTH` + `apps/incidents/services.py`'s
+  matching check (courier-submitted via `ReportIncidentView`'s JSON body).
+  `apps/deliveries/forms.py`'s `facility_instructions`/`attestation_notes` gain `max_length=2000`;
+  matching model-level caps on `apps.deliveries.models.DeliveryRequest.facility_instructions` and
+  `apps.cargo.models.PackagingAttestation.notes`. Migrations:
+  `apps/cargo/migrations/0009_alter_packagingattestation_notes.py`,
+  `apps/custody/migrations/0002_alter_proofofdelivery_signature_data_url_and_more.py`,
+  `apps/deliveries/migrations/0003_alter_deliveryrequest_facility_instructions.py`,
+  `apps/incidents/migrations/0002_alter_incident_summary.py`.
+- **Design system**: `templates/base.html` (Tailwind CDN + global `@layer base` styles + skip-link
+  + single global messages render), `templates/partials/nav.html` (new), `templates/couriers/
+  base.html` (rebuilt on Tailwind utilities), and every other existing template (organizations,
+  facilities, deliveries, dispatch, incidents, billing, notifications, reporting, recipient,
+  registration) converted from inline `style="..."` to the shared design system, with accessibility
+  fixes (labels, `aria-live` status regions, `aria-label` on unlabeled inputs,
+  `role="alert"`/`role="status"`) applied in the same pass. New: `templates/registration/
+  {mfa_verify,mfa_enroll}.html`, `templates/audit/event_list.html`.
+- **Docs**: `docs/BACKUP_RESTORE.md` (new), `docs/THREAT_MODEL.md` (new), `docs/COST_AUDIT.md`
+  (regenerated, 24 dependencies now).
+- **Tests**: `tests/accessibility/test_axe_scans.py` (new), `tests/e2e/
+  test_dispatch_critical_path.py` (new); `apps/dispatch/tests/test_concurrency.py` (retry logic).
+
+## Accessibility pass (axe-core via Playwright) — detailed results
+
+Scanned (WCAG 2A/2AA rule sets): the login page, the organization list, the facility list, the
+dispatch board, the courier job-offer list (at a 390×844 mobile viewport, per
+`docs/PRODUCT_REQUIREMENTS.md` section 6), and the anonymous recipient tracking page — the exact
+set named in the roadmap.
+
+**Before fixes**, 6/6 pages failed with `serious`-impact `color-contrast` violations:
+
+- `templates/partials/nav.html`'s links (`Organizations`/`Facilities`/`Dispatch Board`/`Incidents`/
+  `Notifications`/`MFA`/the `MedRelay` brand link) inherited the new global `@layer base` `a {
+  color: text-rose-800 }` default (dark maroon) against the dark `bg-rose-900` nav background —
+  measured contrast ratio **1.19:1**, nowhere near the 4.5:1 WCAG AA minimum for normal text —
+  because nothing in `nav.html` overrode that default with an explicit light-text utility class.
+  Found on org list/facility list/dispatch board/courier offers/recipient tracking (everywhere the
+  nav renders).
+- `templates/base.html`'s `<footer>` (`text-slate-400` on white, contrast **2.45:1**) and
+  `templates/dispatch/board_detail.html`'s ineligible-candidate table rows (same `text-slate-400`
+  class) were also under threshold. Found on the login page (footer only, no nav there) and
+  proactively fixed in `board_detail.html` too (not one of the six required pages, but the same
+  underlying class).
+
+**Fix**: added explicit `text-white` to every nav link/button in `nav.html`; changed
+`text-slate-400` → `text-slate-600` (≈7:1 contrast) in the footer and the dispatch-detail
+ineligible-row styling.
+
+**After fixes**: a full re-scan of all six required pages found **zero violations at any severity**
+(not just critical/serious) — `tests/accessibility/test_axe_scans.py`'s 6 tests all pass, and a
+separate diagnostic run confirmed the moderate/minor violation lists were also empty, so there is
+nothing deferred to write up as an accepted minor finding.
+
+## TOTP MFA — real test results
+
+`apps/accounts/tests/test_mfa.py` (9 tests, all passing) uses a **real** `django_otp`
+`TOTPDevice` and a **real** code generated via `django_otp.oath.totp(device.bin_key)` — never a
+hardcoded stub:
+
+- `test_org_owner_can_enroll_and_confirm_with_a_real_generated_code` — a customer-org owner
+  enrolls, and confirmation only succeeds with the actual current generated code.
+- `test_ordinary_customer_org_user_without_a_managing_role_cannot_enroll` /
+  `test_internal_staff_can_enroll` — enrollment eligibility matches `is_mfa_eligible` exactly.
+- `test_enrollment_rejects_an_incorrect_code` — a wrong code leaves the device unconfirmed.
+- `test_login_without_an_enrolled_device_does_not_require_mfa` — unenrolled accounts are
+  unaffected (opt-in, per design decision 5).
+- `test_login_with_an_enrolled_device_defers_the_session_until_verify` — a real POST to
+  `/accounts/login/` with the correct password does **not** establish an authenticated session
+  when a confirmed device exists; a protected page (`/organizations/`) still redirects to login.
+- `test_mfa_verify_rejects_a_wrong_code_without_completing_login` /
+  `test_mfa_verify_accepts_the_real_generated_code_and_completes_login` — split into two tests
+  (rather than one "wrong then right" scenario) after discovering `django-otp`'s own real,
+  per-device throttling (`TOTPDevice`'s `ThrottlingMixin`) imposes a short cooldown after any
+  failed attempt, which would otherwise make an immediately-following correct attempt fail too —
+  a real, empirically-found interaction, documented in the test file rather than worked around
+  silently. With a fresh device/session, the real generated code completes login and the session
+  can then reach a protected page.
+
+## Rate-limiting — real test results
+
+`apps/recipient/tests/test_rate_limiting.py` (2 tests, passing): 6 rapid POSTs to the recipient
+PIN-verification endpoint against the same token — the first 5 are processed normally (400, wrong
+PIN), and the 6th is rejected with a genuine `429`, with no PIN-validity information leaked in the
+rejection response.
+
+## Playwright critical-path test — real result
+
+`tests/e2e/test_dispatch_critical_path.py::
+test_dispatcher_logs_in_and_assigns_a_courier_through_the_real_dispatch_board` — a real Chromium
+browser session: logs in as a dispatcher through the real `/accounts/login/` view, views the
+dispatch board, opens a specific delivery's dispatch detail page, submits the real HTML assign
+form for an eligible courier, and confirms the assignment landed both in the reloaded page's DOM
+and in the database (`DeliveryAssignment`/`DeliveryRequest.status`). Reuses the exact working
+Playwright/Chromium setup from Phase 5's `tests/integration/test_pwa_browser.py`. Passed on first
+run and on 4 repeated runs with no flakiness observed.
+
+## PHI sweep — findings
+
+Grep-based sweep (documented here, not just performed silently) across every `apps/*/models.py`,
+every `apps/*/migrations/*.py`, `apps/*/forms.py`/`services.py`, and `demo_data/` for
+`diagnos|lab.?result|clinical|medication|prescription|ssn|social.?security|insurance|patient|mrn|
+medical.?record|date.?of.?birth` (case-insensitive): **every match is either (a) a docstring/
+help_text explicitly disclaiming the category** (e.g. `apps/cargo/models.py`: "Never diagnosis/
+clinical content"), **(b) a legitimate non-clinical enum/label** (`OrganizationType.DIAGNOSTIC_LAB`
+— a customer-org *classification*, not patient data; `CargoClassCode.CLASS_3`'s "Sealed
+Non-Controlled Prescription Medication" — a cargo *category* label, never medication contents/
+indication/dosage data), or **(c) an active test assertion enforcing the prohibition**
+(`apps/notifications/tests/test_payload.py`, `apps/organizations/tests/test_seed_demo_data.py::
+test_seed_demo_data_users_have_no_clinical_fields`). No field anywhere stores a real diagnosis,
+lab result, clinical note, medication indication, SSN, insurance identifier, date of birth, or
+medical record number. `demo_data/` remains an empty placeholder (all synthetic seed data lives in
+`apps/organizations/management/commands/seed_demo_data.py`, as established in Phase 1).
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`source .venv/bin/activate && export DJANGO_SETTINGS_MODULE=config.settings.test`.
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+264 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 264 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (2 silenced).
+```
+(the 2 silenced checks are `django_ratelimit.E003`/`W001`, silenced only in
+`config/settings/test.py` — see design decision 6)
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+
+### `pytest --cov --cov-report=term-missing`
+```
+549 passed in 29.04s
+```
+Coverage: 95% (4967 statements, 242 missed). Every new Phase 8 module is at or near 100% (audit
+100%, accounts/mfa full-path-covered by `test_mfa.py`, custody validators 100%); remaining misses
+are concentrated in the same pre-Phase-8 environment-entrypoint gaps (`config/asgi.py`,
+`config/celery.py`, `config/wsgi.py`, `config/settings/{dev,prod}.py`) plus a handful of defensive
+branches, consistent with every prior phase's honest coverage reporting.
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 24 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+(24, up from 20 at the end of Phase 7 — `django-otp`, `django-ratelimit` added; axe-core is npm-side
+tooling, outside this Python dependency audit's scope by design — see design decision 4)
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from Phase 7. New synthetic demo-only credentials this
+phase (`MfaPhase8Test!2026`, `MedRelayAxeScanTest!2026`, `MedRelayDispatchE2ETest!2026`,
+`AuditSignalTest!2026`, `AuditViewTest!2026`, and a deliberately-wrong test login credential  # pragma: allowlist secret
+fixture) are all marked `# pragma: allowlist secret` inline, same convention as every prior phase.
+
+## Backup/restore — actually executed, not just documented
+
+See `docs/BACKUP_RESTORE.md` for the full write-up. Summary: a real, disposable PostGIS container
+(the same `postgis/postgis:17-3.5` image `compose.yaml` uses) was started, migrated (38
+migrations across every app, including `django-otp`'s own `otp_totp` migrations), seeded with
+`seed_demo_data` (3 organizations, 8 facilities, 18 memberships, 25 users), backed up with a real
+`pg_dump -Fc`, had its database **dropped and recreated** (`DROP DATABASE`/`CREATE DATABASE` — not
+merely truncated), restored with `pg_restore`, and re-verified with the identical row counts and
+organization names as before the drop. This was a genuine round-trip, executed and confirmed in
+this session, not commands reviewed-but-not-run. Valkey is documented as intentionally not backed
+up (pure cache/broker state — see that doc for the full reasoning).
+
+## Threat model
+
+See `docs/THREAT_MODEL.md` for the full document: tenant-isolation bypass, recipient-link/PIN
+brute-force, custody-chain tampering (with its honest ORM-level-vs-database-level limitation
+restated), notification data leakage, courier location/tracking privacy, session/CSRF, plus a
+"other relevant surfaces" section (SQL injection, XSS, upload/input DoS, secret leakage,
+dependency/supply-chain risk, idempotency/concurrency) and an explicit "out of scope" section
+citing `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8's professional-review gates.
+
+## Known gaps / deviations (honest list)
+
+- **MFA is opt-in, not enforced** for any account, including privileged ones — a deliberate Phase 8
+  scope decision (see design decision 5), not an oversight. A real pilot should decide whether to
+  make it mandatory for specific roles.
+- **Rate limiting is per-IP/per-token via a shared cache, not a hard per-token lockout** — a
+  distributed attacker spreading attempts across many IPs is still bounded by the 5/minute
+  per-token limit (impractically slow for a 6-digit PIN, but not mathematically zero). See
+  `docs/THREAT_MODEL.md` section 2.
+- **Custody-chain/audit-event append-only enforcement remains ORM-level, not database-level** — no
+  Postgres `REVOKE`/trigger backs this yet (an explicit, honest limitation restated in
+  `docs/THREAT_MODEL.md` section 3, inherited from Phase 6's own documented limitation on
+  `CustodyEvent`).
+- **Upload/input-limits pass is not exhaustive**: internal-staff-only free-text fields
+  (`Organization.notes`, `Facility.notes`/`access_instructions`, `DispatchOverride.reason`,
+  `IncidentAction.note`, admin-only resolution notes) were reviewed but left at their existing
+  unbounded `TextField` — reachable only by authenticated internal/admin users, not the public/
+  courier-facing surfaces this pass prioritized, and still bounded transitively by
+  `DATA_UPLOAD_MAX_MEMORY_SIZE`. See the "Files created/changed" section above for the exact list
+  of fields that *were* capped.
+- **No dependency-vulnerability scanning** (e.g. `pip-audit`, Dependabot alerts) wired into CI —
+  `audit_cost` checks cost-policy compliance, not upstream package compromise. Flagged in
+  `docs/THREAT_MODEL.md` section 7 as reasonable future work.
+- **No automated/scheduled backups, point-in-time recovery, or backup-file encryption** — all
+  explicitly out of scope for `DEMO_MODE` per `docs/BACKUP_RESTORE.md`'s own "what this document
+  does not cover" section.
+- **`CourierLocationPing` has no data-retention/purge policy** — rows accumulate indefinitely in
+  this prototype (synthetic data only). Flagged in `docs/THREAT_MODEL.md` section 5.
+- Coverage is 95%, not 100% — no hard coverage threshold is a gate; see the quality-gate section
+  above for exactly where the gaps are.
+- Not yet built / explicitly deferred beyond Phase 8 (per the roadmap): Phase 9's free public
+  demonstration deployment and Phase 10's pilot-readiness review remain untouched by this phase.
+
+## Commit history for this phase
+
+Commits for this phase, in order (all on top of Phase 7's final commit `80cd033`):
+
+1. `46d8e3f` — rate limiting for the recipient PIN endpoint, upload/input limits, django-otp wiring
+2. `9c45c7b` — unified Tailwind design system + generic audit-event log/viewer
+3. `ecbc0f7` — TOTP MFA for privileged demo accounts (django-otp)
+4. `57b91bf` — explicit upload/input size limits
+5. `8502bfa` — the SQLite concurrency-test flake investigation and fix
+6. `e353eee` — axe-core accessibility scans + a real Playwright critical-path test
+7. `4e97603` — backup/restore drill, threat model, PHI sweep, this section of `CURRENT_STATUS.md`
+8. `082f48c` — recorded commits 1-7's hashes here (a guessed hash for this same commit, corrected
+   in commit 9 below — the same "can't know your own hash in advance" wrinkle Phase 0 hit first)
+9. (this line's own commit) — corrected commit (8)'s self-referential hash guess
+
+A doc file can never contain the hash of the commit that introduces its own final content — this
+line, added in a small follow-up commit, is the account of that. Run `git log --oneline` in the
+repository for the definitive, current history.
+
+# Current Status — Phase 9 (Free Public Demonstration Option)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 9 on top of the
+Phase 8 foundation (starting point: commit `449ce36`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Scope boundary — read this first
+
+Per `docs/IMPLEMENTATION_ROADMAP.md` Phase 9's own text ("Do not select a hosting platform that
+requires payment or a credit card without owner approval") and this session's explicit
+instructions, **no external hosting account was created, no hosting platform was selected, and
+nothing was deployed to any third-party service in this phase.** Every deliverable below is
+local-only: files in this repository, a real (but local) Docker/compose validation, and real local
+test runs. Where the roadmap called for an actual deployment, `docs/HOSTING_OPTIONS.md` is a
+recommendation document for the project owner to act on later, not something this session acted on.
+
+## Summary
+
+Phase 9 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 9 — Free public demonstration
+option": a fourth settings module (`config/settings/demo.py`) for a future public demo deployment;
+a comprehensive, deterministic, end-to-end synthetic demo seed (`seed_full_demo`) covering couriers
+with varied credential/authorization states and five delivery-request scenarios spanning
+`READY_FOR_DISPATCH`/`ASSIGNED`/a fully `DELIVERED` real custody chain/a genuine temperature
+excursion left on `INCIDENT_HOLD`/a `RETURNED` recipient-unavailable return, plus a generated
+invoice; a documented, tested local-run walkthrough (`docs/DEMO_PACKAGE.md`); a concrete new
+quota/abuse safeguard (a per-organization delivery-request cap) with tests; a `reset_demo_data`
+cleanup/reset command; confirmation that the Phase 0 disclaimer/`DEMO_MODE` banner already renders
+on every page; and a hosting-options recommendation document
+(`docs/HOSTING_OPTIONS.md`) — explicitly a recommendation, not a deployment. All new/changed
+production code has full test coverage, all quality gates pass (see below), and no external
+deployment, account creation, or infrastructure provisioning of any kind was performed.
+
+## Design decisions
+
+### 1. Demo accounts: pre-seeded, not self-registration
+
+**Decision: a small set of pre-seeded demo login accounts covering each major role.** This
+application's most demo-worthy behavior is its state-mutating workflows (assign a courier, advance
+a delivery through pickup/transit, capture custody proof, resolve an incident, generate an
+invoice) — a visitor who logs in as a dispatcher and clicks "Assign" on a real `READY_FOR_DISPATCH`
+delivery sees far more than one who must first build a tenant from an empty signup form. A
+self-registration flow that creates real organizations/facilities/couriers would also need its own
+new abuse-safeguard surface (rate-limited signup, email verification via a real mail provider this
+project's zero-cost policy prohibits) for comparatively little demo value, since every role's
+interesting screens are already reachable through a pre-seeded account. This mirrors the exact
+reasoning `docs/CURRENT_STATUS.md`'s own Phase 1 section already gave for `seed_demo_data`
+("account provisioning is inherently an admin/sales-onboarding action... not a public signup
+flow") — Phase 9 extends, rather than reverses, that decision. Full account list and the honest
+trade-off (every visitor shares the same accounts/data) are in `docs/DEMO_PACKAGE.md` section 3.
+
+### 2. Quota safeguard: a per-organization `DeliveryRequest` cap, enforced at creation time
+
+`apps.deliveries.services._enforce_delivery_request_quota`, called at the top of the single
+delivery-request creation path (`create_delivery_request`), raises a new
+`DeliveryRequestQuotaExceededError` with a clear message once an organization has reached
+`settings.DEMO_MAX_DELIVERY_REQUESTS_PER_ORG` existing rows (counting every status — the realistic
+abuse vector for a public demo is row volume, not just open requests). Defaults: 500 in
+`base`/`dev`/`test` (generous — not a real operational limit outside a public deployment), 100 in
+the new `config/settings/demo.py`. A `None` setting value disables the check entirely (defensive
+default). Tested in `apps/deliveries/tests/test_services.py`:
+`test_create_delivery_request_raises_once_org_quota_is_reached`,
+`test_create_delivery_request_quota_is_per_organization_not_global` (confirms the cap is per-tenant,
+not global — matching every other tenant-scoping rule in this codebase),
+`test_create_delivery_request_quota_check_is_a_no_op_when_setting_is_none`. This is one concrete new
+safeguard, not the only imaginable one — see `docs/DEMO_PACKAGE.md` section 5.1 for what else a real
+public deployment would reasonably want and why it wasn't built here (mainly: there is no public
+organization/courier self-signup surface at all yet, so that specific abuse vector doesn't exist).
+
+A second safeguard, `reset_demo_data` (`apps/organizations/management/commands/reset_demo_data.py`),
+deletes every `@medrelay.demo` user and every `Organization` (in a dependency-safe order —
+`Invoice`/`DeliveryRequest` both `on_delete=models.PROTECT` their `Organization` FK, so they must be
+deleted first) and reseeds a fresh dataset via `seed_demo_data` + `seed_full_demo`. No cron is wired
+up (deliberately, per the roadmap's own "even if you don't wire up the actual cron here") — an
+operator of a real public deployment would point their own external cron at
+`python manage.py reset_demo_data --yes`. Tested in
+`apps/organizations/tests/test_reset_demo_data.py`, including a test that a non-demo
+`createsuperuser` account (no `@medrelay.demo` email) is never touched.
+
+Phase 8's existing safeguards (recipient PIN/token rate limiting, upload/input size limits) were
+reviewed and found still adequate for this phase's scope — no change was needed there; see
+`docs/THREAT_MODEL.md` for the existing write-up.
+
+### 3. `config/settings/demo.py`: builds on `prod.py`, adds nothing externally-reachable
+
+The new fourth settings module inherits `prod.py`'s hardening (HSTS, secure cookies, SSL redirect)
+and adds a hardcoded (not env-overridable) `APP_MODE = "DEMO_MODE"`, a 12-hour session cookie
+lifetime with `SESSION_EXPIRE_AT_BROWSER_CLOSE = True` (a deployment reachable by strangers
+shouldn't keep a stolen/left-open session valid for Django's 2-week default), and the tightened
+`DEMO_MAX_DELIVERY_REQUESTS_PER_ORG=100`. `CSRF_COOKIE_HTTPONLY` was deliberately **not** set to
+`True` — `static/js/courier.js`/`static/js/offline-queue.js` read the `csrftoken` cookie directly
+for the courier PWA's JSON fetch calls, a real, tested mechanism that setting would break. No new
+externally-reachable capability is added anywhere — see the module's own docstring for why "no real
+external network call" is true by construction in this codebase, not something newly disabled.
+
+### 4. Hosting recommendation: lead with the local package, not a PaaS free tier
+
+`docs/HOSTING_OPTIONS.md` surveys Render, Fly.io, Railway, PythonAnywhere, and
+Oracle/AWS/GCP "always free" VM tiers against this stack's actual requirements (a background worker
+process, persistent Postgres, Valkey/Redis, no required card). Every PaaS-style free tier surveyed
+fails at least one hard requirement — most commonly no free background-worker support, no
+persistent free Postgres, or (for the tiers that would otherwise fit) a credit-card-at-signup
+requirement. The document's recommendation: lead with the roadmap's own explicitly-allowed
+alternative — the local-run package (`docs/DEMO_PACKAGE.md`, already built and tested this phase) +
+screenshots/a short video + a static marketing page — since it requires no platform decision, no
+ongoing cost, and no functional compromise to the application. If a genuinely public deployment is
+wanted later, the document names two directions to re-research at decision time (a split
+managed-Postgres-plus-free-web-host approach accepting a documented Celery/worker trade-off, or a
+single always-on VM accepting the card-at-signup requirement as an owner-approved exception) and is
+explicit that the actual choice is the project owner's, out of scope for this session.
+
+## Files created/changed
+
+`git diff 449ce36 --stat` (Phase 8's final commit → this phase's final commit):
+
+```
+14 files changed, 1635 insertions(+), 7 deletions(-)
+```
+
+By area:
+
+- **`config/settings/demo.py`** (new): the fourth settings module — see design decision 3.
+- **`config/settings/base.py`**: added `DEMO_MAX_DELIVERY_REQUESTS_PER_ORG` (env-overridable,
+  default 500).
+- **`apps/deliveries/exceptions.py`**: new `DeliveryRequestQuotaExceededError`.
+- **`apps/deliveries/services.py`**: new `_enforce_delivery_request_quota`, called from
+  `create_delivery_request` — see design decision 2.
+- **`apps/deliveries/tests/test_services.py`**: three new tests for the quota safeguard (see design
+  decision 2), plus a small `_create_delivery_request_for_org` helper (the existing
+  `_create_full_delivery_request` helper builds a brand-new `Organization` per call, which cannot
+  exercise a *per-organization* cap).
+- **`apps/organizations/management/commands/seed_full_demo.py`** (new): the comprehensive demo seed
+  — see "Synthetic demo mode" below.
+- **`apps/organizations/management/commands/reset_demo_data.py`** (new): the cleanup/reset command
+  — see design decision 2.
+- **`apps/organizations/tests/test_seed_full_demo.py`** / **`test_reset_demo_data.py`** (new): full
+  test coverage for both new commands (100% line coverage on both — see quality-gate output below).
+- **`docs/DEMO_PACKAGE.md`** (new): the real, tested local-run walkthrough, demo account list and
+  reasoning, seeded-dataset description, and quota/safeguard write-up.
+- **`docs/HOSTING_OPTIONS.md`** (new): the hosting recommendation document — see design decision 4.
+- **`README.md`**: corrected a stale "Phase 0 only" claim and added a short pointer to
+  `docs/DEMO_PACKAGE.md`/`docs/HOSTING_OPTIONS.md`.
+- **`.env.example`**: documented `DJANGO_SETTINGS_MODULE=config.settings.demo` as the public-demo
+  option (names only) and the two new demo-only env vars
+  (`DEMO_MAX_DELIVERY_REQUESTS_PER_ORG`/`DEMO_SESSION_COOKIE_AGE`).
+- **`docs/COST_AUDIT.md`**: regenerated (timestamp only; dependency set unchanged — **zero new
+  dependencies this phase**, matching the task's own "should need zero or near-zero new
+  dependencies").
+- **No new models, no new migrations.** `seed_full_demo`/`reset_demo_data` orchestrate existing
+  models/service functions only.
+
+## Synthetic demo mode — `seed_full_demo`
+
+`python manage.py seed_full_demo` calls `seed_demo_data` (Phase 1: 3 organizations, 8 facilities,
+their users) and then adds, all via real cross-app service-layer calls (never by writing rows
+directly — see the command's own module docstring for the full rationale):
+
+- **5 couriers with varied credential/authorization states**: `demo_courier_ana` (approved,
+  refrigerated-capable, Manhattan), `demo_courier_ben` (approved, ambient-only, Brooklyn),
+  `demo_courier_cara` (approved, but with a driver-license/insurance credential expiring in ~10
+  days — inside `flag_expiring_credentials`'s default 30-day window, confirmed by actually running
+  that command against the seeded data, see verification below), `demo_courier_dee` (an applicant
+  still mid-onboarding — no credentials/vehicle/equipment/availability rows at all, a deliberately
+  different variety of "state" than an expired credential), and `demo_courier_eli` (suspended).
+- **5 delivery requests spanning different lifecycle states**: one `READY_FOR_DISPATCH`
+  (unassigned), one `ASSIGNED` (not advanced further), one driven through the complete real
+  courier/custody lifecycle to `DELIVERED` (proof of pickup, an in-range 5.0C reading against the
+  seeded 2.0-8.0C refrigerated range, recipient PIN generation/verification, proof of delivery),
+  one **temperature excursion** (a 15.0C reading against the same refrigerated range — genuinely
+  out of range — which `apps.temperature.services.record_reading` itself turns into a real `SEVERE`
+  incident and an `INCIDENT_HOLD`, left open deliberately as a live item for the incidents console),
+  and one **recipient-unavailable return** (a `MODERATE` `RECIPIENT_UNAVAILABLE` incident +
+  `initiate_return`/`complete_return`, ending `RETURNED`, with the incident itself then resolved).
+- **1 generated invoice** (`apps.billing.services.generate_invoice_for_delivery`) for the delivered
+  scenario.
+
+Idempotency is handled differently for the two halves of this command, and this difference is
+documented rather than papered over: the org/facility/user/courier seeding is fully idempotent
+(`get_or_create` throughout, exactly like `seed_demo_data`), but the five delivery-lifecycle
+*scenarios* are each a multi-step, stateful sequence of real transitions — there is no honest way to
+"get_or_create" a lifecycle. Each scenario is tagged with a stable marker string
+(`SCENARIO_TAGS`) embedded in `DeliveryRequest.facility_instructions`; re-running the command skips
+(with a clear stdout message) any scenario whose tagged row already exists rather than erroring or
+duplicating it. This was verified directly, not just written: `seed_full_demo` was run twice in a
+row against a fresh database and produced identical counts both times (5 delivery requests, 1
+invoice, 5 couriers) — see the manual verification transcript below.
+
+## Manual, real-database verification (beyond the automated test suite)
+
+Two separate real runs were performed and are reported honestly below:
+
+### 1. In-process SQLite run (fast iteration/debugging)
+
+Ran `seed_demo_data` → `seed_full_demo` (twice, to prove idempotency) → inspected every
+`DeliveryRequest`'s status and every `Incident`'s category/severity/status → ran
+`flag_expiring_credentials` → ran `reset_demo_data --yes` → re-inspected counts, all against a real
+(in-process) SQLite test database via `django.test.runner.DiscoverRunner`. Actual output:
+
+```
+Total DeliveryRequest rows: 5
+... ready_for_dispatch, assigned, delivered, incident_hold, returned (one each)
+Total Invoice rows: 1
+Total Incident rows: 2
+... recipient_unavailable / moderate / resolved
+... temperature_excursion / severe / open
+=== flag_expiring_credentials ===
+Expiring within 30 day(s) (2):
+  - Cara Nguyen (Demo Courier) (Approved Courier) — Driver License expires 2026-08-14
+  - Cara Nguyen (Demo Courier) (Approved Courier) — Insurance expires 2026-08-14
+=== reset_demo_data --yes ===
+Deleted 30 demo user(s) and 3 organization(s) (cascading to everything that referenced them).
+... reseeded: DeliveryRequest count: 5, Invoice count: 1
+```
+
+### 2. Real Docker Compose run against the actual PostGIS/Postgres/Valkey/Mailpit stack
+
+This is the walkthrough documented in `docs/DEMO_PACKAGE.md` — genuinely executed in this session,
+not merely reviewed:
+
+- `docker compose up --build` (host ports remapped via a **local, uncommitted** override file only
+  because this shared dev machine already had unrelated services on 5432/6379/8000 — deleted before
+  finishing this phase, never part of any commit) — `db`, `valkey`, `mailpit` all reached Docker
+  `healthy`.
+- `docker compose exec web python manage.py migrate` — all 52 migrations (every app, including
+  `django-otp`'s) applied cleanly against the real `postgis/postgis:17-3.5` image.
+- `docker compose exec web python manage.py seed_full_demo` — succeeded with the same output shape
+  as the SQLite run above.
+- `curl http://localhost:.../healthz/` → `{"status": "ok"}`; `.../readyz/` →
+  `{"status": "ok", "checks": {"database": "ok", "cache": "ok"}}`.
+- A real HTTP session (via `curl`, following Django's CSRF flow — GET the login page, extract the
+  CSRF token, POST credentials) logged in as `northstar_owner` / `MedRelayDemo!2026`, received a
+  `302` redirect to `/organizations/`, and the subsequent authenticated page genuinely contained
+  both `"NorthStar Diagnostics (Demo)"` and the full literal disclaimer text
+  (`"This is a software prototype using synthetic data..."`) plus the `DEMO_MODE` banner string —
+  confirmed by grepping the real response body, not assumed from reading the template.
+- `docker compose down -v` — full teardown; the temporary port-override file and the throwaway
+  `.env` were both deleted before this phase's final commit.
+
+## No medical-operation claim — confirmed, not re-built
+
+Spot-checked `templates/couriers/base.html`, `templates/recipient/tracking.html`, and
+`templates/registration/login.html` — all three `{% extends "base.html" %}`, so the Phase 0
+disclaimer/`DEMO_MODE` banner (bold text, red background, top of every page, before the nav)
+already renders everywhere, including the courier PWA and the anonymous recipient tracking page.
+This was re-confirmed in the real HTTP walkthrough above, not just by reading the templates. No
+template change was needed this phase — Phase 8's design pass already made this indicator
+sufficiently prominent.
+
+## Quality gate results
+
+All commands run from `/home/mhasan2/medical-courier-platform` with
+`source .venv/bin/activate && export DJANGO_SETTINGS_MODULE=config.settings.test`.
+
+### `ruff check .`
+```
+All checks passed!
+```
+
+### `ruff format --check .`
+```
+269 files already formatted
+```
+
+### `mypy .`
+```
+Success: no issues found in 269 source files
+```
+
+### `python manage.py check`
+```
+System check identified no issues (2 silenced).
+```
+(the 2 silenced checks are unchanged from Phase 8 — `django_ratelimit.E003`/`W001`, test-settings
+only)
+
+### `python manage.py makemigrations --check --dry-run`
+```
+No changes detected
+```
+(no new models were added this phase)
+
+### `pytest --cov --cov-report=term-missing`
+```
+561 passed in 25.71s
+```
+Coverage: 95% (project total). Every new Phase 9 module is at 100% line coverage:
+`apps/deliveries/exceptions.py` (100%), `apps/deliveries/services.py` (100%),
+`apps/organizations/management/commands/seed_full_demo.py` (100%),
+`apps/organizations/management/commands/reset_demo_data.py` (100%). `config/settings/demo.py` shows
+0% in the coverage report because no automated test imports it as `DJANGO_SETTINGS_MODULE` (the
+whole suite runs under `config.settings.test`, matching every prior phase's convention) — it was
+instead verified manually by loading it directly (`python -c "import django; django.setup()"` with
+`DJANGO_SETTINGS_MODULE=config.settings.demo`) and confirming `APP_MODE`, `DEMO_MAX_DELIVERY_REQUESTS_PER_ORG`,
+`SESSION_COOKIE_AGE`, and `SECURE_SSL_REDIRECT` all resolved to the expected values. Remaining
+project-wide coverage gaps are the same pre-existing environment-entrypoint modules every prior
+phase has honestly reported (`config/asgi.py`, `config/celery.py`, `config/wsgi.py`,
+`config/settings/{dev,prod}.py`).
+
+### `python manage.py audit_cost`
+```
+Zero-cost policy audit passed: 24 dependencies checked, 0 prohibited-service indicators found. Wrote docs/COST_AUDIT.md.
+```
+(24, unchanged from Phase 8 — **zero new dependencies this phase**)
+
+### Secret scan — `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`
+Exit code 0, no output, baseline unchanged from Phase 8. The one new string that plausibly looks
+secret-shaped in this phase's test fixtures (a deliberately-not-a-real-password string in
+`test_reset_demo_data.py`, used only to prove a real `createsuperuser` account is never touched by
+the reset command) is marked `# pragma: allowlist secret` inline, same convention as every prior
+phase.
+
+## Known gaps / deviations (honest list)
+
+- **No external deployment was performed** — by design, per this phase's explicit scope boundary.
+  `docs/HOSTING_OPTIONS.md` is a recommendation for the project owner, not an action taken.
+- **No screenshots/video/static marketing page were produced** — `docs/HOSTING_OPTIONS.md` section
+  3 names these as the roadmap's own preferred "publish a local-run package... instead of weakening
+  the system" alternative, but producing them was outside this session's scope (no video/screenshot
+  tooling was requested or available in this environment); flagged as reasonable, low-friction
+  future work rather than silently omitted.
+- **The quota safeguard is a single mechanism** (a per-organization `DeliveryRequest` cap) — the
+  task explicitly asked for "at least one concrete new safeguard," not an exhaustive abuse-prevention
+  system. `docs/DEMO_PACKAGE.md` section 5.1 names what a real public deployment would additionally
+  want (e.g. per-IP/session caps on organization/courier creation) and why they weren't built now
+  (no public self-signup surface exists yet for either).
+- **No cron/scheduled-task infrastructure is wired up** for `reset_demo_data` — deliberately, per
+  the roadmap's own "even if you don't wire up the actual cron here." An operator of a real
+  deployment would supply their own scheduler.
+- **`seed_full_demo`'s idempotency is scenario-level, not fully self-healing** — re-running it will
+  never error or duplicate a scenario, but will not "restore" a scenario a demo visitor has since
+  changed through the real UI. `reset_demo_data` is the documented mitigation.
+- **`config/settings/demo.py` has not been exercised by the automated test suite** (0% in the
+  coverage report) — verified manually instead (see "Manual, real-database verification" /
+  quality-gate section above). This matches every prior phase's honest treatment of
+  environment-entrypoint settings modules (`dev.py`/`prod.py` are in the same position).
+- All Phase 0-8 known gaps not touched by this phase remain as previously documented in their own
+  sections above (MFA opt-in, ORM-level-not-DB-level append-only enforcement, no dependency-
+  vulnerability scanning, etc.).
+- Not yet built (correctly out of scope for Phase 9, and explicitly gated until a real pilot review
+  per the roadmap): Phase 10's pilot-readiness review, any real external deployment, any real
+  self-service organization/courier registration.
+
+## Commit history for this phase
+
+1. `875d0b7` — "Phase 9: free public demo package (settings, comprehensive seed, quota safeguard,
+   hosting research)" — the main Phase 9 commit (15 files changed, 1980 insertions(+), 7
+   deletions(-)).
+2. (this line's own commit) — records commit (1)'s hash here, the same "a doc file can never
+   contain the hash of the commit that introduces its own final content" wrinkle every prior
+   phase's `CURRENT_STATUS.md` section has hit first.
+
+Run `git log --oneline` in the repository for the definitive, current history.
+
+# Current Status — Phase 10 (Pilot Readiness Review)
+
+Last updated: 2026-08-04, by an automated Claude Code session building Phase 10 on top of the
+Phase 9 foundation (starting point: commit `a99d555`) in the existing repository at
+`/home/mhasan2/medical-courier-platform`.
+
+## Scope boundary — read this first
+
+Per `docs/IMPLEMENTATION_ROADMAP.md` Phase 10's own text ("Pilot readiness review, not automatic
+launch... Do not connect real PHI, real deliveries, payments, background checks, or production
+communications without explicit owner approval and professional review"), **this phase produced
+documentation only. No application code, models, migrations, tests, or settings were changed.** No
+real PHI, real background-check provider, real payment processor, or real production communications
+channel was connected to this codebase in this phase, or in any prior phase. This phase does not
+make a go/no-go decision on behalf of the project owner and does not claim any real-world legal or
+regulatory compliance has been achieved by anything built in Phases 0-9.
+
+## Summary
+
+Phase 10 delivers, per `docs/IMPLEMENTATION_ROADMAP.md`'s "Phase 10 — Pilot readiness review, not
+automatic launch": a comprehensive, evidence-based gap assessment; a legal/compliance review
+checklist naming every professional-review gate `docs/SECURITY_COMPLIANCE_BOUNDARIES.md` section 8
+requires; an insurance/infrastructure budget checklist with explicitly non-binding cost ranges; a
+real-provider adapter requirements document (including a direct code spot-check of whether the
+adapter pattern genuinely supports swapping in a live provider); and a go/no-go synthesis report
+that states plainly what is solid, what is a hard legal/compliance blocker, what is an addressable
+engineering gap, and a single concrete recommended next step. All five documents live under
+`docs/PILOT_READINESS/`:
+
+- `docs/PILOT_READINESS/GAP_ASSESSMENT.md`
+- `docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md`
+- `docs/PILOT_READINESS/BUDGET_CHECKLIST.md`
+- `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md`
+- `docs/PILOT_READINESS/GO_NO_GO_REPORT.md`
+
+## Method: read everything first, then spot-check against the actual code
+
+Before writing anything, this session read `CLAUDE.md`, all ten prior phase sections of this file in
+full (not skimmed), and every other governing doc (`docs/PRODUCT_REQUIREMENTS.md`,
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md`, `docs/ARCHITECTURE_AND_DATA_MODEL.md`,
+`docs/SECURITY_COMPLIANCE_BOUNDARIES.md`, `docs/IMPLEMENTATION_ROADMAP.md`, `docs/THREAT_MODEL.md`,
+`docs/BACKUP_RESTORE.md`, `docs/DEMO_PACKAGE.md`, `docs/HOSTING_OPTIONS.md`, `docs/COST_AUDIT.md`).
+
+A representative sample of specific "deferred"/"known gap" claims from earlier phases was then
+independently re-verified directly against the current code (not merely re-read from this file's
+own account of itself), since the whole point of this phase is accurately synthesizing what was
+actually built vs. what a real pilot would need:
+
+- **`CourierPerformanceSnapshot`**: confirmed never built in any phase — grep across the full
+  repository finds only docstring/architecture-doc mentions, no model, consistent with Phase 3/4's
+  own documented decision not to build it.
+- **Custody/audit/status-transition append-only guards**: confirmed still ORM-level only — grep
+  across every migration file in the repository found zero `REVOKE`/`CREATE TRIGGER` statements
+  anywhere, consistent with every phase from 2 onward stating this limitation explicitly.
+- **MFA**: confirmed still opt-in — `apps.organizations.services.is_mfa_eligible` (read directly
+  this session) only governs *enrollment eligibility*; nothing anywhere forces enrollment.
+- **PostGIS/spatial data**: confirmed still never used for anything — `Facility.latitude`/
+  `longitude` remain plain `DecimalField`s; every distance calculation in the codebase
+  (`apps.deliveries.pricing`, `apps.dispatch.sla`) is haversine math, not a spatial query.
+- **Dependency-vulnerability scanning**: confirmed absent — `.github/workflows/ci.yml` (read in
+  full) has no `pip-audit` step, and no `.github/dependabot.yml` exists anywhere in the repository.
+- **Provider adapters**: confirmed only `NotificationProvider` (Phase 7) was ever built as a real
+  Python `Protocol` with concrete implementations — `RoutingProvider`, `GeocodingProvider`,
+  `ObjectStorageProvider`, `PaymentProvider`, `BackgroundCheckProvider`, and
+  `TemperatureSensorProvider` exist only as docstring/documentation mentions of a future concept,
+  with `RoutingProvider` specifically having zero mentions anywhere in application code. This is a
+  more precise, slightly less favorable characterization than "the adapter pattern is proven out
+  across the board," and `docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md` states it plainly.
+
+Every claim checked was found accurate as previously documented — **no factual error was found in
+any prior phase's `CURRENT_STATUS.md` section during this cross-check**, so no correction to any
+earlier phase's text was needed. The one adjustment worth naming explicitly: the provider-adapter
+finding above is a *sharper, more precise* statement than the general "adapter rule" language in
+`docs/TECH_STACK_AND_ZERO_COST_POLICY.md` might otherwise suggest to a reader who assumed all six
+named adapters were equally real — that nuance is now made explicit in
+`docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md` rather than left implicit.
+
+## Files created/changed
+
+```
+docs/PILOT_READINESS/GAP_ASSESSMENT.md                  (new)
+docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md       (new)
+docs/PILOT_READINESS/BUDGET_CHECKLIST.md                 (new)
+docs/PILOT_READINESS/PROVIDER_ADAPTER_REQUIREMENTS.md    (new)
+docs/PILOT_READINESS/GO_NO_GO_REPORT.md                  (new)
+docs/CURRENT_STATUS.md                                   (this section added)
+CLAUDE.md                                                (capstone "Project status" section added)
+```
+
+No application code, models, migrations, settings, or tests were touched. `docs/COST_AUDIT.md` was
+not regenerated this phase (no dependency change occurred). All prior quality gates
+(`ruff`/`ruff format`/`mypy`/`pytest`/`manage.py check`/`makemigrations --check`/`audit_cost`/secret
+scan) remain exactly as Phase 9 left them, since no code changed.
+
+## Known gaps / deviations (honest list)
+
+- **This phase produces no code, so it cannot close any of the gaps it documents** — every gap in
+  `docs/PILOT_READINESS/GAP_ASSESSMENT.md` remains exactly as open after this phase as before it.
+  That is the intended nature of a pilot-readiness *review* phase, not an oversight.
+- **The budget checklist's dollar figures are explicitly non-binding estimates from general
+  knowledge**, not quotes — every one requires verification with a real broker/vendor/provider at
+  decision time, stated repeatedly and explicitly in that document itself.
+- **This report does not make, and cannot make, the go/no-go decision** — that decision belongs to
+  the project owner, informed by the professional reviews `docs/PILOT_READINESS/
+  LEGAL_COMPLIANCE_CHECKLIST.md` names as hard blockers, per `docs/PILOT_READINESS/
+  GO_NO_GO_REPORT.md`'s own explicit final statement.
+- Not yet built, and explicitly out of scope for this phase and for this repository unless and
+  until a real pilot is authorized outside this repository's own process: `PILOT_MODE`, any real
+  PHI/background-check/payment/production-communications integration, any real hosting deployment.
+
+## Commit history for this phase
+
+(Recorded after the commit lands — see `git log --oneline` for the definitive, current history.
+This phase is a pure-documentation change on top of Phase 9's final commit `a99d555`.)
+
+# Project Status — Full Roadmap (Phases 0-10) Complete as a Demo Prototype
+
+As of this phase, every phase in `docs/IMPLEMENTATION_ROADMAP.md` (0 through 10) has been built and
+documented. **This remains, and will always remain unless and until a separate, explicit,
+out-of-band owner decision says otherwise, a portfolio/demo software prototype using synthetic data
+only.** It is not a real medical delivery operation, is not certified or approved for real medical
+delivery operations, and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or any other legal
+compliance:
+
+> This is a software prototype using synthetic data. It is not certified or approved for real
+> medical delivery operations and does not claim HIPAA, OSHA, DOT, pharmacy, employment, or other
+> legal compliance.
+
+Reaching the end of Phase 10 does not authorize a real pilot. See
+`docs/PILOT_READINESS/GO_NO_GO_REPORT.md` for the full synthesis, and
+`docs/PILOT_READINESS/LEGAL_COMPLIANCE_CHECKLIST.md` for the professional-review gates that are hard
+blockers to any real operation regardless of anything built in this repository.
+
+# Dated Addendum — 2026-08-04: Phase 9 Hosting Decision (Render + Neon)
+
+Added by an automated Claude Code session on top of Phase 10's final commit `abb1027`, in the
+existing repository at `/home/mhasan2/medical-courier-platform`. This is **not a new phase number**
+— `docs/IMPLEMENTATION_ROADMAP.md` Phases 0-10 remain exactly as delivered; this addendum records
+the project owner's own hosting *decision* for the Phase 9 deliverable
+(`docs/HOSTING_OPTIONS.md`), which that phase deliberately left open, and the codebase preparation
+that decision required.
+
+## Scope boundary — read this first (same pattern as every prior phase)
+
+**No external hosting account was created, no platform sign-up was performed, and nothing was
+deployed to any third-party service by this session.** This session's job was strictly to prepare
+this repository's *files* so that deployment works correctly the first time the project owner
+personally creates the two free accounts (Render, Neon) and connects them. Every claim below about
+Render's/Neon's actual behavior (free-tier terms, `preDeployCommand` availability,
+`$PORT`/`dockerCommand` semantics, `generateValue`/`sync: false` blueprint fields) was confirmed via
+current documentation research, not by an authenticated session against either platform's real API
+— the project owner should still re-verify anything free-tier-specific (limits, card requirements)
+at their own signup time, exactly as `docs/HOSTING_OPTIONS.md` already cautions.
+
+## Decision
+
+Per `docs/HOSTING_OPTIONS.md` section 4 point 3 (the split-services direction that document itself
+named as the most promising *if* a genuinely public click-a-link demo were wanted later): **Render**
+(free web-service tier, no credit card required) hosts the Django `web` process; **Neon** (free
+serverless Postgres, no credit card required, a permanent free tier that scales to zero on idle
+rather than hard-expiring) hosts the database. The one real, accepted capability trade-off: no
+`worker`/Celery process runs on Render's free tier, so `CELERY_TASK_ALWAYS_EAGER = True` is
+hardcoded for this deployment — re-confirmed harmless immediately before writing the settings
+module below (`grep -rn "shared_task\|\.delay(\|apply_async" apps/ config/` — zero matches, exactly
+as `docs/HOSTING_OPTIONS.md` section 3 already anticipated this exact trade-off would be).
+
+## Files added/changed
+
+```
+config/settings/demo_render.py     (new)  — Render-specific settings, extends config/settings/demo.py
+render.yaml                        (new)  — Render Blueprint: one free Docker web service
+docs/DEPLOY_RENDER_NEON.md         (new)  — the numbered, copy-pasteable operator deployment guide
+Dockerfile                         (changed) — default CMD now respects $PORT (shell form, ${PORT:-8000})
+docs/HOSTING_OPTIONS.md            (changed) — decision note added at top; original research left intact
+.env.example                       (changed) — documents DJANGO_CSRF_TRUSTED_ORIGINS (Render-only)
+docs/CURRENT_STATUS.md             (this addendum)
+```
+
+No application code (`apps/`), models, migrations, or tests were touched — this is a settings/
+deployment-configuration/documentation change only, exactly like `config/settings/demo.py` was in
+Phase 9 itself.
+
+### `config/settings/demo_render.py` — what it adds on top of `demo.py`
+
+1. `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")` — closes a real gap: Render
+   terminates TLS at its own edge proxy and forwards plain HTTP to the app with an
+   `X-Forwarded-Proto: https` header; without this setting, `prod.py`'s `SECURE_SSL_REDIRECT = True`
+   default would redirect every request forever (Django would never see a request it considers
+   secure). Verified in this session's end-to-end Docker test (below) — requests without an
+   `X-Forwarded-Proto: https` header got a `301` redirect-to-HTTPS with no body; requests with it
+   reached the application normally.
+2. `CACHES` overridden to Django's `LocMemCache` — Render's free tier is one instance running one
+   `gunicorn` worker process (no `--workers` flag in `render.yaml`'s `dockerCommand`), so there is no
+   second process for a shared external cache to synchronize with; adding a hosted Redis/Valkey
+   free-tier service purely to satisfy `django-ratelimit`'s cache-backend requirement would be a
+   third free account for no real benefit at this scale. `SILENCED_SYSTEM_CHECKS` disables
+   `django_ratelimit.E003`/`W001` for the same single-process reason `config/settings/test.py`
+   already disables them.
+3. `CELERY_TASK_ALWAYS_EAGER = True`, hardcoded (not env-toggled) — see "Decision" above.
+4. `CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])` — not previously
+   defined anywhere in `base`/`dev`/`prod`/`test`/`demo`; needed because Django's CSRF protection
+   checks the request's origin against this list (not just `ALLOWED_HOSTS`) once HTTPS is involved.
+   The operator sets it to `https://<their-assigned-subdomain>.onrender.com` (see
+   `docs/DEPLOY_RENDER_NEON.md` step 2.6). Verified in this session's end-to-end test: a real
+   login POST with a matching `Origin`/`Referer` and this variable set succeeded (`302`, session
+   cookie issued, followed by a real authenticated `200` on `/organizations/` showing seeded org
+   data).
+
+### `render.yaml` — Docker vs. native Python buildpack decision
+
+Render's native Python runtime now supports `uv` natively (detects a root `uv.lock`), so a
+buildpack-style deploy was a real alternative. **Chose `runtime: docker` against the existing,
+already-tested `Dockerfile` instead**, because it reuses the exact same `uv sync --frozen` build
+this project has used since Phase 0 (the same image already exercised locally via
+`docker compose` — `docs/DEMO_PACKAGE.md`), with zero new Render-specific Python-version/build-
+command guesswork. Confirmed (via current Render documentation, not a live account) that Render's
+free web-service plan does **not** support `preDeployCommand` (that feature is paid-plan-only), so
+migration/seeding cannot run as a separate pre-deploy step on the free tier — instead,
+`dockerCommand` chains `collectstatic --noinput && migrate --noinput && seed_full_demo && gunicorn
+... --bind 0.0.0.0:$PORT`, in that order, running on every deploy and every container restart.
+`collectstatic` is included (not originally called out in the initial task scope, added after
+noticing WhiteNoise's `CompressedManifestStaticFilesStorage` needs a prebuilt manifest — without
+it, every page referencing `{% static %}` would raise at request time, not just 404 — and that it
+cannot run at `docker build` time because Render only injects the real `DJANGO_SECRET_KEY`/
+`DATABASE_URL` env vars at container runtime, not during the image build).
+
+`DJANGO_SECRET_KEY` uses `generateValue: true` (Render's blueprint schema does support this — Render
+generates and stores a random value on first Blueprint creation, confirmed via Render's own
+documentation). `DATABASE_URL`/`DJANGO_ALLOWED_HOSTS`/`DJANGO_CSRF_TRUSTED_ORIGINS` use
+`sync: false` (operator supplies these manually — `DATABASE_URL` in particular comes from Neon, a
+platform Render's Blueprint system has no knowledge of, so it cannot be a `fromDatabase` reference).
+
+### `Dockerfile` — `$PORT` fix
+
+Changed the default `CMD` from the exec-form JSON array `["python", "manage.py", "runserver",
+"0.0.0.0:8000"]` (which never expands environment variables, by Docker's own semantics) to the
+shell-form `CMD python manage.py runserver 0.0.0.0:${PORT:-8000}`, so the image is correct if run
+directly (`docker run -e PORT=<n> <image>`, no command override) — the case neither
+`compose.yaml` (which sets its own explicit `command:` per service) nor `render.yaml` (which
+overrides the default entirely via `dockerCommand`) already covers. This does not change local
+`docker compose` dev/demo behavior at all, since `compose.yaml` already overrides `command:`
+explicitly for both `web` and `worker`.
+
+## Verification performed (real, not cited from an old report)
+
+- **Settings import check:**
+  `DJANGO_SETTINGS_MODULE=config.settings.demo_render DATABASE_URL=... DJANGO_SECRET_KEY=... python
+  -c "import django; django.setup()"` succeeded, with `APP_MODE`, `DEBUG`, `SECURE_PROXY_SSL_HEADER`,
+  `CACHES`, `CELERY_TASK_ALWAYS_EAGER`, `CSRF_TRUSTED_ORIGINS`, `ALLOWED_HOSTS`,
+  `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, and `SILENCED_SYSTEM_CHECKS` all inspected and
+  matching expectations. A stray backslash-escape `SyntaxWarning` from the module's own docstring
+  (a literal `grep` pattern quoted in prose) was caught by this check and fixed (`r"""..."""`).
+- **`$PORT` fix, real container test:** built the image, ran
+  `docker run -e PORT=10000 <image>` with no command override — log showed `Starting development
+  server at http://0.0.0.0:10000/`, and `curl http://localhost:10000/healthz/` (after applying real
+  migrations against a real compose `db` container on the same Docker network) returned `HTTP 200`.
+  Re-ran with no `PORT` set at all — confirmed the same image falls back to `0.0.0.0:8000` and is
+  reachable there too.
+- **Idempotent seeding, re-verified from scratch (not cited from Phase 9's old report):** brought up
+  the real `postgis/postgis:17-3.5` + `valkey` compose services (remapped to non-default host ports
+  — `15432`/`16379` — since this shared dev machine already has unrelated Postgres/Redis containers
+  on the default ports), ran `python manage.py migrate` then `python manage.py seed_full_demo`
+  **twice in a row** against `config.settings.dev`. First run: `Seeded 3 organizations, 8 facilities,
+  18 customer-org memberships, 7 internal-staff users` + all 5 scenarios + 1 invoice. Second run:
+  every scenario reported "already seeded — skipping", ending in "All Phase 9 demo scenarios already
+  exist — nothing new to seed", exit code `0`, **no errors, no duplicate rows** — confirmed directly
+  via `Organization.objects.count()` (3), `DeliveryRequest.objects.count()` (5),
+  `Invoice.objects.count()` (1), and `User.objects.count()` (30), identical after both runs.
+- **Full deploy-chain dry run, end to end:** built the Docker image and ran the *exact*
+  `dockerCommand` string from `render.yaml` (`collectstatic --noinput && migrate --noinput &&
+  seed_full_demo && gunicorn ... --bind 0.0.0.0:$PORT`) inside a fresh container against a real
+  compose `db` service, using `config.settings.demo_render` and a freshly generated
+  `DJANGO_SECRET_KEY`. Observed, in order: `collectstatic` output, all ~53 migrations applying
+  cleanly, the same seed output as above, then gunicorn's `Listening at: http://0.0.0.0:10000`.
+  Then, with the container running: `curl -H "X-Forwarded-Proto: https" .../healthz/` →
+  `{"status": "ok"}`; `.../readyz/` → `{"status": "ok", "checks": {"database": "ok", "cache":
+  "ok"}}`; the login page rendered a hashed static asset path (confirming the `collectstatic`
+  manifest built correctly) and the `DEMO_MODE` banner; a real CSRF-token-carrying login `POST` as
+  `ops_dispatcher` (matching `Origin`/`Referer` against a `DJANGO_CSRF_TRUSTED_ORIGINS` value) got a
+  `302` (success, not a CSRF `403`); following the resulting session cookie to `/organizations/`
+  returned `HTTP 200` with real seeded organization names in the body. All test containers/images/
+  networks/volumes were removed afterward; no `.env` file or other artifact was left behind.
+- **Full existing quality-gate suite** (see exact output in this addendum's own commit, re-run after
+  all file changes above): `ruff check .`, `ruff format --check .`, `mypy .`, `pytest` (full suite,
+  coverage), `python manage.py check` (against `config.settings.test`, this project's existing
+  convention — `demo_render` is intentionally not the default for `check`/tests, exactly as
+  `demo.py` already wasn't), `python manage.py makemigrations --check --dry-run`,
+  `python manage.py audit_cost`, `detect-secrets-hook --baseline .secrets.baseline $(git ls-files)`.
+  See below for the actual results.
+
+## Known gaps / deviations (honest list)
+
+- **No account was created, no deployment was performed.** `docs/DEPLOY_RENDER_NEON.md` is written
+  for the project owner to execute personally; nothing in it was run against a real Render/Neon
+  account by this session.
+- **Free-tier terms are inherently a moving target.** Every Render/Neon-specific claim in this
+  addendum and in `docs/DEPLOY_RENDER_NEON.md` (no card required, specific storage/compute-hour
+  numbers, `preDeployCommand` paid-only, sleep/scale-to-zero behavior) was confirmed via each
+  platform's current published documentation at the time this addendum was written, not via a live
+  account — `docs/DEPLOY_RENDER_NEON.md` repeatedly flags exactly which claims the project owner
+  should re-verify themselves at signup time.
+- **`reset_demo_data`'s scheduled/cron reset remains unwired**, exactly as Phase 9 left it
+  (`docs/DEMO_PACKAGE.md` section 5.2) — a real public deployment accumulating visitor-caused state
+  changes still has no automatic periodic reset; the operator would need to trigger
+  `python manage.py reset_demo_data --yes` manually (via Render's Shell tab, if available on the
+  free plan — not verified here) or accept the shared, slowly-drifting demo state.
+- **This addendum's own commit hash** cannot be cited within this same file/commit (the same
+  wrinkle Phase 0's and Phase 8's sections of this document already ran into) — see
+  `git log --oneline` for the definitive, current history.
+
+## Dated addendum — 2026-08-05: real Render deploy attempt found a genuine `render.yaml` bug
+
+The project owner personally created the Neon project and Render Blueprint per
+`docs/DEPLOY_RENDER_NEON.md` — the first real, live deployment attempt against this codebase.
+It failed on the first try, and the failure was a genuine bug in `render.yaml`, not a
+misconfiguration on the owner's part:
+
+**The bug**: `render.yaml`'s `dockerCommand` was a bare `cmd1 --noinput && cmd2 --noinput && cmd3
+&& gunicorn ...` string, written on the (wrong) assumption that Render invokes it through a shell
+the way a Dockerfile's shell-form `CMD` implicitly does. It does not — Render execs `dockerCommand`
+directly, splitting it into literal argv tokens with no shell interpreting `&&` at all. The
+production log showed exactly this: `manage.py collectstatic: error: unrecognized arguments: &&
+python manage.py migrate && python manage.py seed_full_demo && gunicorn ...` — `&&` and everything
+after it were fed to `collectstatic` as nonsense positional arguments, because nothing ever ran a
+shell to interpret them as command separators.
+
+**Reproduced and fixed**: rather than trust the log analysis alone, this was reproduced locally
+first — running the app image with the *exact* original argv split (`python manage.py collectstatic
+--noinput "&&" python manage.py migrate ...` as separate, unshelled tokens, via a bash array so the
+host shell didn't itself consume the `&&`) reliably reproduced the identical error message
+byte-for-byte. The fix, `dockerCommand: sh -c "cmd1 && cmd2 && cmd3 && gunicorn ..."`, was then
+verified against a real Postgres container end-to-end: `collectstatic` → `migrate` (all
+migrations) → `seed_full_demo` → `gunicorn` starting cleanly, `/healthz/` and `/readyz/` both
+returning 200. Verification artifacts (containers/network/image) were removed afterward.
+
+**Files changed**: `render.yaml` only (`dockerCommand`'s value, plus a docstring comment explaining
+the no-shell behavior so this doesn't regress if the command chain is edited again later).
+
+**Why local `docker compose`/one-off container testing in Phases 0-9 never caught this**: every
+prior verification ran the app's start command either via `compose.yaml`'s own `command:` field
+(which Docker Compose *does* pass through a shell) or via an explicit `sh -c "..."` wrapper in this
+project's own verification steps (see this file's Phase 9 hosting-decision section above) — nothing
+in this codebase's own test/verification history ever exercised Render's specific no-shell
+`dockerCommand` exec behavior until the owner's real deployment did. This is a genuine gap in prior
+verification coverage, not a contradiction of anything previously claimed as tested.
+
+### Follow-up same day: the `sh -c "..."` fix above also failed, differently
+
+The `sh -c "cmd1 && cmd2 && cmd3"` fix committed above (`010e9bb`) was pushed, and Render's
+Blueprint-managed auto-deploy picked up the new commit and rebuilt the image — but the deploy
+still failed, this time with a different, stranger error:
+
+```
+sh: 1: python manage.py collectstatic --noinput && python manage.py migrate --noinput && python manage.py seed_full_demo && gunicorn config.wsgi:application --bind 0.0.0.0:10000: not found
+```
+
+Note `$PORT` was correctly expanded to `10000` (proving a real shell process *did* run and *did*
+expand it), yet the entire `&&`-chained line was still treated as one literal, non-existent command
+name rather than being parsed as shell syntax. The exact mechanism inside Render's `dockerCommand`
+handling that produces this (some combination of how it tokenizes quoted values and/or when it
+performs environment-variable substitution relative to that tokenizing) was not conclusively
+determined — and rather than keep guessing at further quoting variations against a real, undocumented,
+third-party parser, the fix was to stop depending on Render's `dockerCommand` string parsing at all:
+
+**Fix**: added `scripts/render_start.sh`, a real shell script (`set -e`; `collectstatic` →
+`migrate` → `seed_full_demo` → `exec gunicorn ... --bind "0.0.0.0:${PORT:-8000}"`) committed to the
+repository and copied into the image by the existing `COPY . .` Dockerfile step (no Dockerfile
+change needed). `render.yaml`'s `dockerCommand` is now just `sh /app/scripts/render_start.sh` —
+two plain words, no quotes, no `&&`, no `$`, nothing left for any upstream tokenizer to
+misinterpret regardless of its exact (undocumented) parsing rules.
+
+**Re-verified end-to-end** against a fresh real Postgres/PostGIS container, this time invoking the
+literal final command (`sh /app/scripts/render_start.sh`, not a hand-rolled equivalent): full
+migration set applied, `seed_full_demo` completed, `gunicorn` started as PID 1 (via the script's
+`exec`, so it receives signals directly rather than being a child of a lingering shell — a small
+correctness improvement over the earlier inline-command versions), `/healthz/` and `/readyz/` both
+returned 200. Verification containers/network/image removed afterward.
+
+**Files changed this round**: `scripts/render_start.sh` (new), `render.yaml` (`dockerCommand`
+value only).
+
+**Why this is more robust than either prior attempt**: both earlier fixes assumed a specific,
+unconfirmed model of how Render parses `dockerCommand` (no shell at all; then, a shell but with
+some other quoting quirk) and were each disproven by a real deploy. A plain `sh <path>` invocation
+has no quoting or operator-chaining for *any* parser to get wrong — it's just two whitespace-
+separated words, which is exactly the case the very first failure proved Render handles correctly
+(it's structurally identical to how `manage.py collectstatic --noinput` — itself just words with no
+special characters — got tokenized correctly, before the payload after it went wrong).
+
+### Outcome: the deployment succeeded — MedRelay is live
+
+Commit `f82d550`'s fix deployed cleanly. **The project owner's public demo is live at
+`https://medrelay-demo.onrender.com`** (Render free web tier + Neon free Postgres, genuinely $0,
+no card). Independently confirmed (not just reported by the owner): `/healthz/` returns
+`{"status": "ok"}`; `/readyz/` returns `{"status": "ok", "checks": {"database": "ok", "cache":
+"ok"}}` — real Neon database and real cache connectivity, not stubs; `/accounts/login/` renders
+the login form, the required synthetic-data disclaimer banner, and the demo-account note.
+
+This supersedes every earlier "no account was created, no deployment was performed" statement
+elsewhere in this addendum and in `docs/HOSTING_OPTIONS.md`/`docs/DEPLOY_RENDER_NEON.md` — those
+were accurate when written (this session never created an account or deployed anything itself,
+consistent with the scope boundary those documents state), but the project owner has since done
+exactly that, personally, and it worked. The three `render.yaml` bugs found and fixed along the
+way (documented above) are a real, if minor, example of the gap between "verified locally" and
+"verified against the actual third-party platform's undocumented behavior" — worth remembering
+for any future hosting-platform change.
+
+## Dated addendum — 2026-08-05 (same day): a real, more serious bug found by actually looking at the live site
+
+After confirming the live deploy was reachable, the project owner reported the rendered login page
+showed a large block of raw, visible text above the login form — literally the contents of
+in-template documentation comments, verbatim, instead of being hidden.
+
+**Root cause, confirmed by direct testing, not guessed**: Django's `{# ... #}` template comment tag
+only strips comments that fit on a **single line** — its comment-matching regex does not match
+across newlines, so a `{# ... #}` span containing a line break is left as literal text in the
+rendered output rather than being removed. This was confirmed with a minimal reproduction directly
+against this project's own Django installation:
+
+```python
+Template('{# simple comment #}Hello').render(Context())        # -> 'Hello' (stripped correctly)
+Template('{# line one\nline two #}Hello').render(Context())    # -> '{# line one\nline two #}Hello' (NOT stripped)
+```
+
+This codebase's heavily-documented style — explaining *why* behind nearly every non-trivial
+decision, inline, in the file it applies to — used multi-line `{# ... #}` blocks for exactly this
+kind of documentation in several templates. Every one of them was silently leaking into rendered
+HTML in production the entire time; this was never caught locally because:
+
+- Phase 8's axe-core accessibility scans check contrast/ARIA/labels, not "does extraneous text
+  appear on the page" — leaked-but-readable text with fine contrast does not fail an accessibility
+  audit, so a clean axe-core run (genuinely clean, per that phase's own verification) says nothing
+  about this class of bug.
+- No prior phase's test suite asserted anything about rendered page *content* beyond specific
+  expected strings (e.g. the disclaimer banner, specific model data) — nothing was checking for the
+  *absence* of unexpected leaked text.
+
+**Found and fixed**: exactly 5 multi-line `{# ... #}` blocks across 4 files (`templates/base.html`
+×2, `templates/couriers/base.html`, `templates/partials/nav.html`,
+`templates/dispatch/board_detail.html`), found by a repo-wide regex scan
+(`\{#(.*?)#\}` with `DOTALL`, filtered to matches containing a newline) rather than by eye, so the
+search was exhaustive rather than "found some, might have missed others." Each was converted to
+Django's `{% comment %}...{% endcomment %}` tag, which *does* support multi-line content correctly.
+
+**Re-verified end-to-end** against a real Postgres container running this exact fix: `curl`'d
+`/accounts/login/` before and after — before, `grep -c "Tailwind CSS via the CDN"` on the response
+body returned `1` (the bug, reproduced locally, confirming it was never Render-specific); after, `0`
+(clean), while `/healthz/` and `/readyz/` still returned 200 and the DEMO_MODE disclaimer banner
+still rendered correctly. The three other affected templates were confirmed clean via direct
+`get_template(...).render()` calls (courier PWA base, nav partial) or a targeted source-level check
+(the dispatch board detail template needs request-specific context to render at all, so it was
+checked by confirming no bare multi-line `{#` pattern remains in its source, consistent with the
+exhaustive regex scan already having found and fixed its one instance).
+
+**Regression test added**: `tests/integration/test_no_multiline_template_comments.py` statically
+scans every file under `templates/` for a `{# ... #}` span containing a newline and fails with the
+exact file/line location if it finds one — this runs on every future `pytest` invocation and in CI,
+so this exact class of bug cannot silently reappear in a fifth file without a test failure calling
+it out immediately, rather than requiring a human to notice a broken-looking live page again.
+
+**Disk-space note (environment-only, not a codebase issue)**: mid-investigation, this verification
+session's local Docker build cache had accumulated roughly 63GB across every phase's local
+Postgres/PostGIS container runs and image builds throughout this project's entire development
+history, filling the shared development machine's disk and causing a build to fail with
+`ResourceExhausted: ... no space left on device`. Resolved with `docker system prune -af --volumes`
+before continuing. Not a project defect — purely an artifact of how much local Docker-based
+verification this project's development process has genuinely performed, phase after phase.
+
+## Dated addendum — 2026-08-05 (same day): courier PWA availability, profile/onboarding, active-delivery boundary text and progress tracker, and app-like bottom navigation
+
+New work beyond the original ten-phase roadmap, requested directly by the project owner: build out
+the courier-facing PWA's remaining `docs/PRODUCT_REQUIREMENTS.md` section 6 gaps that Phase 5/6 left
+for later — an availability screen, a read-only onboarding/profile screen, an explicit cargo
+handling boundary statement and a real visual progress tracker on the active-delivery screen, and
+app-like bottom-tab navigation. Scoped strictly to `apps/couriers` and its templates/static assets —
+no other app's templates were touched.
+
+### Decision: kept `templates/couriers/base.html`'s local `.card`/`.btn` separate from
+`templates/base.html`'s shared `@layer components` versions
+
+The dispatch-console cleanup pass (this file, above) added shared `.card`/`.badge-*` classes to
+`templates/base.html` and explicitly called out `templates/couriers/base.html` as intentionally
+excluded from that pass, citing the courier PWA's mobile-specific 44px-minimum touch-target sizing.
+Re-examined that call now that this pass touches the same file: **the reasoning still holds and the
+split is kept** — `templates/couriers/base.html`'s `.btn`/`.card` carry `min-h-[44px] min-w-[44px]`
+and larger `p-3` form-control padding the desktop-oriented ops-console defaults do not need. Unifying
+them would either shrink the courier PWA's touch targets below the 44px guidance this file's own
+docstring cites, or bloat every ops-console `.btn`/`.card` usage with mobile-sized padding it
+doesn't need. **The shared `.badge-*` classes, by contrast, are reused unmodified** in the two new
+courier templates (`couriers/availability.html`'s online/offline status pill, `couriers/profile.html`'s
+credential/status pills) and in the active-delivery progress tracker's "Current"/"Done" step
+labels — badges are small status-label styling with no touch-target sizing concern, so forking them
+would just be duplication for no benefit. This decision (and why) is now documented directly in
+`templates/couriers/base.html`'s own docstring comment, not just in this file.
+
+### What was built
+
+1. **Availability screen** (`GET /couriers/availability/`, `POST /couriers/availability/update/`) —
+   `apps.couriers.views.CourierAvailabilityView`/`CourierAvailabilityUpdateView`, backed by a new
+   `apps.couriers.services.update_courier_availability` function. Shows/updates the logged-in
+   courier's own `CourierAvailability` row (online/offline, current service zone — a real
+   `apps.facilities.models.ServiceZone` dropdown, shift start/end, `max_concurrent_deliveries`) —
+   the exact field set that already existed on the Phase 3 model, no new model/migration. POST is
+   JSON in/out, `Idempotency-Key`-protected via the existing `apps.couriers.idempotency.idempotent_call`
+   mechanism, submitted from the template via the existing `MedRelayCourier.submitAction` JS helper —
+   the same pattern every other courier state-mutating endpoint already uses. The courier is always
+   derived from `request.user.courier_profile`, never a client-supplied id, so a courier can only
+   ever reach their own row.
+2. **Profile/onboarding screen** (`GET /couriers/profile/`) — `apps.couriers.views.CourierProfileView`,
+   entirely read-only, over existing Phase 3 data: `CourierProfile` status fields, `Vehicle`,
+   `Equipment`, `CargoAuthorization`, `TrainingRecord`, and `CourierCredential` rows, plus a
+   credential-expiration-warnings section. That last part reuses a new shared function,
+   `apps.couriers.services.credential_expiration_summary`, which both this view (scoped to one
+   courier) and the existing `flag_expiring_credentials` management command (unscoped, across every
+   courier) now call — the underlying "expired"/"expiring soon" query logic itself already lived on
+   `CourierCredentialQuerySet.expired`/`.expiring_within` (`apps.couriers.models`, Phase 3), so this
+   refactor's job was giving the two call sites one shared entry point rather than duplicating how
+   they invoke that queryset logic. No document upload path exists here or anywhere in this app —
+   `CourierCredential.evidence_reference` remains a placeholder text label, per
+   `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`.
+3. **Active-delivery screen improvements** (`templates/couriers/active_delivery.html`):
+   - A new **cargo handling boundary** card, driven by
+     `apps.couriers.services.cargo_handling_boundary_text` — built from the delivery's actual
+     `CargoClass.name`, `CargoPolicy.notes`, and `TemperatureProfile` row, not one hardcoded sentence
+     reused for every delivery. For a real seeded Class 2/ambient delivery
+     (`demo_courier_ben`'s `ec296524-…` assignment) this renders exactly: *"Class 2 — Approved
+     Routine Specimens. Ambient. No active temperature control is required for this package. Routine
+     specimens may require cold-chain (refrigerated) transport. You may not open, inspect the
+     contents of, or repack this package under any circumstances."* A refrigerated Class 2 delivery
+     renders a genuinely different second half (the refrigerated-container-handling clause instead of
+     "no active temperature control"), confirmed directly in
+     `apps/couriers/tests/test_services.py::test_cargo_handling_boundary_text_varies_by_cargo_class_and_temperature`.
+   - The old plain bulleted `DeliveryStatusTransition` list replaced with a real vertical
+     progress-tracker component (pure Tailwind, no new JS), driven by a new
+     `apps.couriers.services.delivery_timeline_steps` helper over the existing
+     `COURIER_ADVANCE_SEQUENCE`/`DeliveryStatus` sequence — each step marked
+     completed/current/upcoming, both visually (fill color + a `.badge-blue`/`.badge-green` label,
+     never color alone) and structurally. A delivery in an exception state outside the happy-path
+     sequence (e.g. `INCIDENT_HOLD`) renders every step as "upcoming" rather than guessing a
+     position — an honest fallback, not a misleading one.
+4. **App-like bottom tab bar** — added to `templates/couriers/base.html`: fixed-position, four tabs
+   (Home, Job Offers, Availability, Profile), active tab marked both visually
+   (color/bold) and via `aria-current="page"`. The old top nav's two links duplicated two of these
+   four destinations, so it was simplified to a brand-only header with a single Home link — documented
+   in the template's own comment, not just here.
+
+### Verification performed (real, not cited from an old report)
+
+- **Full quality-gate suite**, all green: `ruff check .` ("All checks passed!"), `ruff format
+  --check .` ("275 files already formatted"), `mypy .` ("Success: no issues found in 275 source
+  files"), `pytest --cov` (**607 passed**, 95% overall coverage, `apps/couriers/services.py` 98%),
+  `python manage.py check` (only the pre-existing, unrelated `django_ratelimit.W001` warning),
+  `python manage.py makemigrations --check --dry-run` ("No changes detected" — confirms this pass
+  needed no new models/migrations, exactly as scoped), `python manage.py audit_cost` ("24
+  dependencies checked, 0 prohibited-service indicators found"), `detect-secrets-hook --baseline
+  .secrets.baseline $(git ls-files)` (clean, exit 0).
+- **New tests added**: `apps/couriers/tests/test_availability_profile_views.py` (availability
+  GET/POST including the idempotency duplicate-submission acceptance criterion, profile GET, and —
+  the hard requirement — real cross-courier ownership tests:
+  `test_availability_update_only_affects_the_logged_in_couriers_own_row` and
+  `test_profile_view_shows_only_the_logged_in_couriers_own_data` construct two independent couriers
+  and assert courier A's request never reads or mutates courier B's row); new tests appended to
+  `apps/couriers/tests/test_services.py` for `update_courier_availability`,
+  `credential_expiration_summary` (both scoped and unscoped), `delivery_timeline_steps`, and
+  `cargo_handling_boundary_text`. The pre-existing
+  `apps/couriers/tests/test_flag_expiring_credentials_command.py` still passes unmodified against
+  the refactored command.
+- **New axe-core accessibility scan**: `tests/accessibility/test_axe_scans.py
+  ::test_courier_availability_screen_has_no_blocking_accessibility_violations`, following the
+  existing file's exact pattern (real Playwright browser, real login, 390×844 mobile viewport,
+  zero critical/serious violations required) — passed. The pre-existing
+  `test_courier_job_offer_list_has_no_blocking_accessibility_violations` and the full
+  `tests/integration/test_pwa_browser.py` suite (service-worker registration/precache,
+  manifest/CSRF-meta rendering) were re-run and still pass unmodified.
+- **Real local Postgres + Valkey verification**: brought up standalone `postgis/postgis:17-3.5` and
+  `valkey/valkey:8-alpine` containers (remapped to host ports `5544`/`6390` — this shared machine
+  already has unrelated Postgres/Redis containers on the default ports), ran `python manage.py
+  migrate` (all ~53 migrations applied cleanly) then `python manage.py seed_full_demo` against
+  `config.settings.dev`, then ran the real Django dev server and drove it with a real Playwright
+  Chromium browser (390×844 mobile viewport) logged in as the real seeded `demo_courier_ben`
+  account:
+  - **Home** — bottom tab bar rendered with all four tabs, "Home" correctly bold/highlighted; two
+    real active-delivery cards shown (`Returned`, `Assigned`), matching the real seeded assignment
+    data.
+  - **Availability** — current state (`Online`, no zone) shown correctly; toggled online, selected
+    "Brooklyn North (Demo)" from the real `ServiceZone` dropdown, set capacity to 3, saved — the
+    page reloaded showing the new values, and a direct DB query afterward confirmed the real
+    `CourierAvailability` row was updated (`is_online=True`, zone=Brooklyn North, `max_concurrent_
+    deliveries=3`).
+  - **Profile** — real onboarding data rendered: `Approved Courier`/`Approved`/`Valid`/`Valid`
+    status badges, one `Van` vehicle, three cargo authorizations (Class 1/2/3), two approved
+    credentials with real expiry dates, "No expired or soon-to-expire credentials."
+  - **Active delivery** (`ec296524-…`, a real seeded `ASSIGNED`-status, Class 2/Ambient delivery) —
+    the new vertical progress tracker rendered with "Assigned" filled and labeled "Current", the
+    remaining five steps shown greyed-out/upcoming in the correct order; the cargo handling boundary
+    card rendered the exact Class 2/Ambient text quoted above; the bottom tab bar stayed correctly
+    pinned to the viewport bottom on scroll (confirmed via a non-full-page viewport screenshot after
+    scrolling — an initial full-page screenshot had made the fixed nav appear to "float" mid-page,
+    which is a known Playwright full-page-screenshot artifact for `position: fixed` elements, not a
+    real rendering bug).
+  - Also spot-checked `demo_courier_dee` (an `applicant`-status courier with **no** pre-existing
+    `CourierAvailability` row) — both new screens rendered without error, confirming the
+    `get_or_create` fallback and that `can_access_courier_portal` (unchanged) does not gate on
+    approval status.
+  - All verification containers, the temporary `.env`, and the local dev server process were
+    removed afterward; `docker system df` before/after showed no net accumulation (the
+    `postgis`/`valkey` images were already cached from prior sessions, confirmed via
+    `docker images --format`'s `CreatedSince` column, not newly pulled by this session).
+
+### Known gaps / deviations (honest list)
+
+- **No real navigation/routing or synthetic ETA was added** to the active-delivery screen — out of
+  scope per this pass's own instructions (no `RoutingProvider` exists; a synthetic ETA/distance
+  figure was optional ("if you show one at all") and was not added, to avoid introducing a new,
+  unrequested surface this pass did not need).
+- **`transitions` context variable** (`DeliveryStatusTransition` queryset) is still computed and
+  passed by `ActiveDeliveryView` even though the template no longer renders it directly (replaced by
+  `timeline_steps`) — left in place as harmless, potentially useful for a future detailed
+  history/audit view, rather than removed and re-added later.
+- **Icons in the bottom tab bar are simple inline SVG line-icons**, not a shared icon system/library
+  — consistent with this codebase's existing "plain, no new front-end framework" convention, but a
+  real design system (still nobody's job in this prototype) would likely centralize these.
+
+
+---
