@@ -47,3 +47,4 @@ coverage.xml
 # tree is ignored.
 tests/accessibility/node_modules/
 MEDRELAY_FULL_CONTEXT.md
+MEDRELAY_FULL_CONTEXT.pdf
