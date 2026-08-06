@@ -46,3 +46,4 @@ coverage.xml
 # reproducibility rationale as uv.lock) - only the regenerable node_modules/
 # tree is ignored.
 tests/accessibility/node_modules/
+MEDRELAY_FULL_CONTEXT.md
