@@ -158,12 +158,42 @@ means:
 - Django Channels is still deliberately not wired in (see `config/asgi.py`) — no phase ended up
   needing WebSocket push; polling/HTMX covers what was built instead. Revisit only if a real need
   appears.
-- A Render+Neon public demo deployment was prepared (not executed) as a dated addendum to Phase 9
-  — see `render.yaml`, `config/settings/demo_render.py`, and `docs/DEPLOY_RENDER_NEON.md` for the
-  operator walkthrough. Actual account creation/deployment is the project owner's own action.
+- A Render+Neon public demo deployment (Phase 9 addendum — see `render.yaml`,
+  `config/settings/demo_render.py`, `docs/DEPLOY_RENDER_NEON.md`) has been executed and **is live**
+  at `https://medrelay-demo.onrender.com` (Render free web tier + Neon free Postgres, genuinely $0,
+  no card). It auto-deploys on every push to `main` — this is unaffected by which machine/account
+  pushes, since it's wired to the GitHub repo (`mxhasan03/MedRelay`), not to any local checkout.
+  Login: any account in `docs/DEMO_PACKAGE.md` section 3 (e.g. `northstar_owner`, `ops_dispatcher`,
+  or a `demo_courier_*` account for the courier PWA) with password `MedRelayDemo!2026`. Free-tier
+  cold start after idle can take ~30-50s on the first request.
+- Since Phase 10, three post-roadmap work items shipped (new work requested directly by the
+  project owner, not from `docs/IMPLEMENTATION_ROADMAP.md`, each independently verified — full
+  detail in the dated addenda at the end of `docs/CURRENT_STATUS.md`):
+  1. Fixed a real production bug: Django's `{# ... #}` template comment tag doesn't strip
+     multi-line comments (only single-line ones), so 5 documentation-heavy `{# #}` blocks across
+     4 templates were leaking verbatim into rendered pages. Fixed by converting them to
+     `{% comment %}...{% endcomment %}`. A regression test
+     (`tests/integration/test_no_multiline_template_comments.py`) now statically scans every
+     template for this pattern so it can't silently reappear.
+  2. Cleaned up the internal ops dispatch console (`templates/dispatch/*`): card/badge-based
+     layout, a real (data-backed) AT RISK vs. INFEASIBLE SLA-risk distinction, previously-invisible
+     incident/temperature-alert/courier-location data now surfaced, and query-param-based
+     sort/filter on both delivery tables and the ranked-candidate list. Added shared
+     `.card`/`.badge-*` classes to `templates/base.html`'s `@layer components`. No live map — out
+     of scope for that pass.
+  3. Built out the courier PWA (`apps/couriers/*`, `templates/couriers/*`) beyond Phase 5/6: a new
+     Availability screen (online/offline, service zone, capacity — over the existing
+     `CourierAvailability` model), a new Profile/Onboarding screen (credentials, vehicle, cargo
+     authorizations, expiration warnings — read-only, no document upload, per
+     `docs/SECURITY_COMPLIANCE_BOUNDARIES.md`), a per-delivery-derived cargo handling boundary
+     statement on the active-delivery screen, a visual progress tracker replacing the old plain
+     transition list, and a bottom tab bar for app-like navigation. Deliberately kept the courier
+     PWA's own `.card`/`.btn` component classes separate from the shared ones added in item 2 above
+     (mobile touch-target sizing needs differ) — documented in `templates/couriers/base.html`.
 - Always check `docs/CURRENT_STATUS.md` for the exact, current state (file paths, gate output,
-  known gaps) before assuming what exists — it is updated at the end of each phase's work and is
-  more current than this file's phase description will remain over time.
+  known gaps) before assuming what exists — it is updated at the end of each phase's (and each
+  post-roadmap work item's) work and is more current than this file's phase description will
+  remain over time.
 
 ## Quality gates — must pass before any change is considered done
 
