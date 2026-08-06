@@ -1,5 +1,6 @@
 # MedRelay — full combined project context
-
+https://medrelay-demo.onrender.com/
+https://dashboard.render.com/
 > Generated snapshot combining every project document into one file, for portability when
 > moving to a different laptop/Claude Code or Codex account. **This file is not the canonical
 > source** — it will go stale the moment any of the source docs below change. The canonical,
